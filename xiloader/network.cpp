@@ -139,6 +139,15 @@ namespace xiloader
             return false;
         }
 
+        /* Set socket option on internal server to allow sharing the port for multibox users */
+        if (setsockopt(*sock, SOL_SOCKET, SO_REUSEADDR, (char*)(&[] { return TRUE; }), sizeof(BOOL)) == SOCKET_ERROR)
+        {
+            xiloader::console::output(xiloader::color::error, "Failed to set reusable address option on socket. %d", WSAGetLastError());
+
+            freeaddrinfo(addr);
+            return false;
+        }
+
         /* Bind to the local address.. */
         if (bind(*sock, addr->ai_addr, (int)addr->ai_addrlen) == SOCKET_ERROR)
         {
