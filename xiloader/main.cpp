@@ -29,6 +29,9 @@ This file is part of DarkStar-server source code.
 #include "functions.h"
 #include "network.h"
 
+// TODO: Fix relative paths
+#include "../ext/argparse/include/argparse/argparse.hpp"
+
 /* Global Variables */
 xiloader::Language g_Language = xiloader::Language::English; // The language of the loader to be used for polcore.
 std::string g_ServerAddress = "127.0.0.1"; // The server address to connect to.
@@ -196,6 +199,31 @@ inline LPVOID FindCharacters(void** commFuncs)
  */
 int __cdecl main(int argc, char* argv[])
 {
+    argparse::ArgumentParser args("xiloader");
+
+    args.add_argument( "--serv", "--server")
+        .default_value("127.0.0.1")
+        .help("address of the server to connect to");
+
+    args.add_argument("--port")
+        .default_value("51220")
+        .help("port of the server to connect to");
+
+    args.add_argument("--user", "--username");
+    args.add_argument("--pass", "--password");
+    args.add_argument("--lang");
+    args.add_argument("--hairpin");
+    args.add_argument("--hide");
+
+      try {
+            args.parse_args(argc, argv);
+        }
+        catch (const std::runtime_error& err) {
+            std::cerr << err.what() << std::endl;
+            std::cerr << args;
+            std::exit(1);
+        }
+
     bool bUseHairpinFix = false;
 
     /* Output the banner.. */

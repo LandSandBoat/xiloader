@@ -37,8 +37,8 @@ This file is part of DarkStar-server source code.
 #include <string>
 #include <time.h>
 
-#pragma comment(lib, "detours/detours.lib")
-#include "detours/detours.h"
+// TODO: Fix relative path
+#include "../ext/detours/detours/src/detours.h"
 
 #include "polcore.h"
 #include "FFXi.h"
