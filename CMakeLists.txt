@@ -19,6 +19,7 @@ endif()
 include(cmake/CPM.cmake)
 include(cmake/detours.cmake)
 include(cmake/argparse.cmake)
+include(cmake/wolfssl.cmake)
 
 # xiloader
 add_executable(xiloader
@@ -35,7 +36,7 @@ add_executable(xiloader
     src/polcore.h)
 
 target_include_directories(xiloader PUBLIC ${PROJECT_SOURCE_DIR}/xiloader)
-target_link_libraries(xiloader PUBLIC detours argparse PSapi WS2_32)
+target_link_libraries(xiloader PUBLIC detours argparse wolfssl psapi ws2_32)
 
 message(STATUS "CMAKE_VERSION: ${CMAKE_VERSION}")
 message(STATUS "CMAKE_BUILD_TYPE: ${CMAKE_BUILD_TYPE}")
