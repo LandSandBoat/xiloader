@@ -29,8 +29,7 @@ This file is part of DarkStar-server source code.
 #include "functions.h"
 #include "network.h"
 
-// TODO: Fix relative paths
-#include "../ext/argparse/include/argparse/argparse.hpp"
+#include "argparse/argparse.hpp"
 
 /* Global Variables */
 xiloader::Language g_Language = xiloader::Language::English; // The language of the loader to be used for polcore.

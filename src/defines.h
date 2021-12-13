@@ -28,21 +28,19 @@ This file is part of DarkStar-server source code.
 #pragma once
 #endif
 
-#pragma comment(lib, "WS2_32.lib")
-#include <WinSock2.h>
+#include <winsock2.h>
 
-#include <Windows.h>
+#include <windows.h>
 #include <process.h>
 #include <stdint.h>
 #include <string>
 #include <time.h>
 
-// TODO: Fix relative path
-#include "../ext/detours/detours/src/detours.h"
+#include "detours/detours.h"
 
 #include "polcore.h"
-#include "FFXi.h"
-#include "FFXiMain.h"
+#include "ffxi.h"
+#include "ffximain.h"
 
 /* Function Offset Definitions */
 #define POLFUNC_INET_MUTEX      0x032F
