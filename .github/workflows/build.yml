@@ -23,8 +23,17 @@ jobs:
       - name: Configure CMake
         shell: cmd
         run: |
-          cmake -A Win32 .
+          mkdir build
+          cd build
+          cmake -A Win32 ..
       - name: Build
         shell: cmd
+        working-directory: ./build
         run: |
           cmake --build .
+      - name: Get File Hashes
+        shell: pwsh
+        run: |
+          echo (Get-FileHash xiloader.exe -Algorithm SHA256).hash
+          echo (Get-FileHash xiloader.exe -Algorithm MD5).hash
+
