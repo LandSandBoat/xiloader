@@ -364,7 +364,6 @@ int __cdecl main(int argc, char* argv[])
                 std::string polcorecmd = " /game eAZcFcB -net 3 -port " + g_LoginViewPort;
                 //Cast to an LPSTR
                 LPSTR cmd = const_cast<char*>(polcorecmd.c_str());
-                xiloader::console::output(xiloader::color::warning, "Cmd: %s", cmd);
                 polcore->SetAreaCode(g_Language);
                 polcore->SetParamInit(GetModuleHandle(NULL), cmd);
 
