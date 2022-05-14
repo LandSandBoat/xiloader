@@ -33,6 +33,9 @@ This file is part of DarkStar-server source code.
 xiloader::Language g_Language = xiloader::Language::English; // The language of the loader to be used for polcore.
 std::string g_ServerAddress = "127.0.0.1"; // The server address to connect to.
 std::string g_ServerPort = "51220"; // The server lobby server port to connect to.
+std::string g_LoginDataPort = "54230"; // Login server data port to connect to
+std::string g_LoginViewPort = "54001"; // Login view port to connect to
+std::string g_LoginAuthPort = "54231"; // Login auth port to connect to
 std::string g_Username = ""; // The username being logged in with.
 std::string g_Password = ""; // The password being logged in with.
 char* g_CharacterList = NULL; // Pointer to the character list data being sent from the server.
@@ -250,9 +253,30 @@ int __cdecl main(int argc, char* argv[])
         }
 
         /* Server Port Argument */
-        if (!_strnicmp(argv[x], "--port", 6))
+        if (!_strnicmp(argv[x], "--serverport", 6))
         {
             g_ServerPort = argv[++x];
+            continue;
+        }
+
+        /* Login Data Port Argument */
+        if (!_strnicmp(argv[x], "--dataport", 6))
+        {
+            g_LoginDataPort = argv[++x];
+            continue;
+        }
+
+        /* Login View Port Argument */
+        if (!_strnicmp(argv[x], "--viewport", 6))
+        {
+            g_LoginViewPort = argv[++x];
+            continue;
+        }
+
+        /* Login Auth Port Argument */
+        if (!_strnicmp(argv[x], "--authport", 6))
+        {
+            g_LoginAuthPort = argv[++x];
             continue;
         }
 
@@ -310,7 +334,7 @@ int __cdecl main(int argc, char* argv[])
 
         /* Attempt to create socket to server..*/
         xiloader::datasocket sock;
-        if (xiloader::network::CreateConnection(&sock, "54231"))
+        if (xiloader::network::CreateConnection(&sock, g_LoginAuthPort.c_str()))
         {
             /* Attempt to verify the users account info.. */
             while (!xiloader::network::VerifyAccount(&sock))
@@ -336,8 +360,12 @@ int __cdecl main(int argc, char* argv[])
             else
             {
                 /* Invoke the setup functions for polcore.. */
+                //Create string for the login view port
+                std::string polcorecmd = " /game eAZcFcB -net 3 " + g_LoginViewPort;
+                //Cast to an LPSTR
+                LPSTR cmd = const_cast<char*>(polcorecmd.c_str());
                 polcore->SetAreaCode(g_Language);
-                polcore->SetParamInit(GetModuleHandle(NULL), " /game eAZcFcB -net 3");
+                polcore->SetParamInit(GetModuleHandle(NULL), cmd);
 
                 /* Obtain the common function table.. */
                 void * (**lpCommandTable)(...);

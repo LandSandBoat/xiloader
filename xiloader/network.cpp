@@ -28,6 +28,9 @@ extern std::string g_ServerAddress;
 extern std::string g_Username;
 extern std::string g_Password;
 extern std::string g_ServerPort;
+extern std::string g_LoginDataPort;
+extern std::string g_LoginViewPort;
+extern std::string g_LoginAuthPort;
 extern char* g_CharacterList;
 extern bool g_IsRunning;
 
@@ -221,7 +224,7 @@ namespace xiloader
         /* Create connection if required.. */
         if (sock->s == NULL || sock->s == INVALID_SOCKET)
         {
-            if (!xiloader::network::CreateConnection(sock, "54231"))
+            if (!xiloader::network::CreateConnection(sock, g_LoginAuthPort.c_str()))
                 return false;
         }
 
@@ -567,7 +570,7 @@ namespace xiloader
     DWORD __stdcall network::FFXiServer(LPVOID lpParam)
     {
         /* Attempt to create connection to the server.. */
-        if (!xiloader::network::CreateConnection((xiloader::datasocket*)lpParam, "54230"))
+        if (!xiloader::network::CreateConnection((xiloader::datasocket*)lpParam, g_LoginDataPort.c_str()))
             return 1;
 
         /* Attempt to start data communication with the server.. */
