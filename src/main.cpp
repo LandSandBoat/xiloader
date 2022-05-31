@@ -198,32 +198,72 @@ inline LPVOID FindCharacters(void** commFuncs)
  */
 int __cdecl main(int argc, char* argv[])
 {
-    argparse::ArgumentParser args("xiloader");
+    argparse::ArgumentParser args("xiloader", "0.0");
 
-    args.add_argument( "--serv", "--server")
-        .default_value("127.0.0.1")
-        .help("address of the server to connect to");
+    args.add_argument("--server").help("The server address to connect to.");
+    args.add_argument("--user", "--username").help("The username being logged in with.");
+    args.add_argument("--pass", "--password").help("The password being logged in with.");
 
-    args.add_argument("--port")
-        .default_value("51220")
-        .help("port of the server to connect to");
+    args.add_argument("--serverport").help("(optional) The server's lobby port to connect to.");
 
-    args.add_argument("--user", "--username");
-    args.add_argument("--pass", "--password");
-    args.add_argument("--lang");
-    args.add_argument("--hairpin");
-    args.add_argument("--hide");
+    args.add_argument("--dataport").help("(optional) The login server data port to connect to.");
 
-      try {
-            args.parse_args(argc, argv);
+    args.add_argument("--viewport").help("(optional) The login view port to connect to.");
+
+    args.add_argument("--authport").help("(optional) The login auth port to connect to.");
+
+    args.add_argument("--lang").help("(optional) The language of your FFXI install: JP/US/EU (0/1/2).");
+
+    args.add_argument("--hairpin")
+        .implicit_value(true)
+        .help("(optional) Use this if connecting to a local server which you have exposed publicly. This should not have to be used if you are connecting to a remote server.");
+
+    args.add_argument("--hide")
+        .implicit_value(true)
+        .help("(optional) Determines whether or not to hide the console window after FFXI starts.");
+
+    try
+    {
+        args.parse_args(argc, argv);
+    }
+    catch (const std::runtime_error& err)
+    {
+        std::cerr << err.what() << std::endl;
+        std::cerr << args;
+        std::exit(1);
+    }
+
+    g_ServerAddress = args.is_used("--server") ? args.get<std::string>("--server") : g_ServerAddress;
+    g_ServerPort    = args.is_used("--serverport") ? args.get<std::string>("--serverport") : g_ServerPort;
+
+    g_LoginDataPort = args.is_used("--dataport") ? args.get<std::string>("--dataport") : g_LoginDataPort;
+    g_LoginViewPort = args.is_used("--viewport") ? args.get<std::string>("--viewport") : g_LoginViewPort;
+    g_LoginAuthPort = args.is_used("--authport") ? args.get<std::string>("--authport") : g_LoginAuthPort;
+
+    g_Username = args.is_used("--user") ? args.get<std::string>("--user") : g_Username;
+    g_Password = args.is_used("--pass") ? args.get<std::string>("--pass") : g_Password;
+
+    if (args.is_used("--lang"))
+    {
+        std::string language = args.get<std::string>("--lang");
+
+        if (!_strnicmp(language.c_str(), "JP", 2) || !_strnicmp(language.c_str(), "0", 1))
+        {
+            g_Language = xiloader::Language::Japanese;
         }
-        catch (const std::runtime_error& err) {
-            std::cerr << err.what() << std::endl;
-            std::cerr << args;
-            std::exit(1);
+        if (!_strnicmp(language.c_str(), "US", 2) || !_strnicmp(language.c_str(), "1", 1))
+        {
+            g_Language = xiloader::Language::English;
         }
+        if (!_strnicmp(language.c_str(), "EU", 2) || !_strnicmp(language.c_str(), "2", 1))
+        {
+            g_Language = xiloader::Language::European;
+        }
+    }
 
-    bool bUseHairpinFix = false;
+    bool bUseHairpinFix = args.is_used("--hairpin") ? args.get<bool>("--hairpin") : false;
+
+    g_Hide = args.is_used("--hide") ? args.get<bool>("--hide") : g_Hide;
 
     /* Output the banner.. */
     time_t currentTime = time(NULL);

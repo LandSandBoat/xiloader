@@ -6,9 +6,8 @@ FFXI Server Emulator Boot Loader -- Launches client without PlayOnline.
 
 ```sh
 mkdir build
-cd build
-cmake .. -A Win32
-cmake --build .
+cmake -S . -B build -A Win32
+cmake --build build
 ```
 
 ## xi_checker
