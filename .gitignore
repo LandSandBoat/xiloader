@@ -3,5 +3,7 @@ Release/
 bin/
 build/
 .vs/
+.vscode/
 *.user
-
+xiloader.exe
+xiloader.pdb

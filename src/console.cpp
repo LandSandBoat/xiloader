@@ -23,7 +23,7 @@ This file is part of DarkStar-server source code.
 
 #include "console.h"
 
-#include <ShObjIdl.h>
+#include <shobjidl.h>
 
 /* Global Externs */
 extern bool g_Hide;

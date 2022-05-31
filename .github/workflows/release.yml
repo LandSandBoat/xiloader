@@ -1,0 +1,40 @@
+name: release
+
+on:
+  push:
+    tags:
+      - "v*.*.*"
+
+jobs:
+  Windows_2019_32bit:
+    runs-on: windows-2019
+    env:
+      MSBUILD_PATH: C:\Program Files (x86)\Microsoft Visual Studio\2019\Enterprise\MSBuild\Current\Bin\
+    steps:
+      - uses: actions/checkout@v1
+        with:
+          fetch-depth: 1
+      - name: Configure CMake
+        shell: cmd
+        run: |
+          mkdir build
+          cmake -DCMAKE_BUILD_TYPE=Release -S . -B build -A Win32
+      - name: Build
+        shell: cmd
+        run: |
+          cmake --build build
+      - name: Get Exe Hash
+        id: hashes
+        shell: pwsh
+        run: |
+          $exe_hash = $(Get-FileHash xiloader.exe -Algorithm MD5).hash
+          "::set-output name=exe_hash::$($exe_hash)"
+      - name: Release
+        uses: softprops/action-gh-release@v1
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }} # This token is provided by Actions, you do not need to create your own token
+          files: xiloader.exe
+          body: |
+            MD5: ${{ steps.hashes.outputs.exe_hash }}
+          draft: false
+          prerelease: false

@@ -29,6 +29,8 @@ This file is part of DarkStar-server source code.
 #include "functions.h"
 #include "network.h"
 
+#include "argparse/argparse.hpp"
+
 /* Global Variables */
 xiloader::Language g_Language = xiloader::Language::English; // The language of the loader to be used for polcore.
 std::string g_ServerAddress = "127.0.0.1"; // The server address to connect to.
@@ -196,7 +198,72 @@ inline LPVOID FindCharacters(void** commFuncs)
  */
 int __cdecl main(int argc, char* argv[])
 {
-    bool bUseHairpinFix = false;
+    argparse::ArgumentParser args("xiloader", "0.0");
+
+    args.add_argument("--server").help("The server address to connect to.");
+    args.add_argument("--user", "--username").help("The username being logged in with.");
+    args.add_argument("--pass", "--password").help("The password being logged in with.");
+
+    args.add_argument("--serverport").help("(optional) The server's lobby port to connect to.");
+
+    args.add_argument("--dataport").help("(optional) The login server data port to connect to.");
+
+    args.add_argument("--viewport").help("(optional) The login view port to connect to.");
+
+    args.add_argument("--authport").help("(optional) The login auth port to connect to.");
+
+    args.add_argument("--lang").help("(optional) The language of your FFXI install: JP/US/EU (0/1/2).");
+
+    args.add_argument("--hairpin")
+        .implicit_value(true)
+        .help("(optional) Use this if connecting to a local server which you have exposed publicly. This should not have to be used if you are connecting to a remote server.");
+
+    args.add_argument("--hide")
+        .implicit_value(true)
+        .help("(optional) Determines whether or not to hide the console window after FFXI starts.");
+
+    try
+    {
+        args.parse_args(argc, argv);
+    }
+    catch (const std::runtime_error& err)
+    {
+        std::cerr << err.what() << std::endl;
+        std::cerr << args;
+        std::exit(1);
+    }
+
+    g_ServerAddress = args.is_used("--server") ? args.get<std::string>("--server") : g_ServerAddress;
+    g_ServerPort    = args.is_used("--serverport") ? args.get<std::string>("--serverport") : g_ServerPort;
+
+    g_LoginDataPort = args.is_used("--dataport") ? args.get<std::string>("--dataport") : g_LoginDataPort;
+    g_LoginViewPort = args.is_used("--viewport") ? args.get<std::string>("--viewport") : g_LoginViewPort;
+    g_LoginAuthPort = args.is_used("--authport") ? args.get<std::string>("--authport") : g_LoginAuthPort;
+
+    g_Username = args.is_used("--user") ? args.get<std::string>("--user") : g_Username;
+    g_Password = args.is_used("--pass") ? args.get<std::string>("--pass") : g_Password;
+
+    if (args.is_used("--lang"))
+    {
+        std::string language = args.get<std::string>("--lang");
+
+        if (!_strnicmp(language.c_str(), "JP", 2) || !_strnicmp(language.c_str(), "0", 1))
+        {
+            g_Language = xiloader::Language::Japanese;
+        }
+        if (!_strnicmp(language.c_str(), "US", 2) || !_strnicmp(language.c_str(), "1", 1))
+        {
+            g_Language = xiloader::Language::English;
+        }
+        if (!_strnicmp(language.c_str(), "EU", 2) || !_strnicmp(language.c_str(), "2", 1))
+        {
+            g_Language = xiloader::Language::European;
+        }
+    }
+
+    bool bUseHairpinFix = args.is_used("--hairpin") ? args.get<bool>("--hairpin") : false;
+
+    g_Hide = args.is_used("--hide") ? args.get<bool>("--hide") : g_Hide;
 
     /* Output the banner.. */
     time_t currentTime = time(NULL);
@@ -240,90 +307,6 @@ int __cdecl main(int argc, char* argv[])
 
         xiloader::console::output(xiloader::color::error, "Failed to detour function 'gethostbyname'. Cannot continue!");
         return 1;
-    }
-
-    /* Read Command Arguments */
-    for (auto x = 1; x < argc; ++x)
-    {
-        /* Server Address Argument */
-        if (!_strnicmp(argv[x], "--server", 8))
-        {
-            g_ServerAddress = argv[++x];
-            continue;
-        }
-
-        /* Server Port Argument */
-        if (!_strnicmp(argv[x], "--serverport", 6))
-        {
-            g_ServerPort = argv[++x];
-            continue;
-        }
-
-        /* Login Data Port Argument */
-        if (!_strnicmp(argv[x], "--dataport", 6))
-        {
-            g_LoginDataPort = argv[++x];
-            continue;
-        }
-
-        /* Login View Port Argument */
-        if (!_strnicmp(argv[x], "--viewport", 6))
-        {
-            g_LoginViewPort = argv[++x];
-            continue;
-        }
-
-        /* Login Auth Port Argument */
-        if (!_strnicmp(argv[x], "--authport", 6))
-        {
-            g_LoginAuthPort = argv[++x];
-            continue;
-        }
-
-        /* Username Argument */
-        if (!_strnicmp(argv[x], "--user", 6))
-        {
-            g_Username = argv[++x];
-            continue;
-        }
-
-        /* Password Argument */
-        if (!_strnicmp(argv[x], "--pass", 6))
-        {
-            g_Password = argv[++x];
-            continue;
-        }
-
-        /* Language Argument */
-        if (!_strnicmp(argv[x], "--lang", 6))
-        {
-            std::string language = argv[++x];
-
-            if (!_strnicmp(language.c_str(), "JP", 2) || !_strnicmp(language.c_str(), "0", 1))
-                g_Language = xiloader::Language::Japanese;
-            if (!_strnicmp(language.c_str(), "US", 2) || !_strnicmp(language.c_str(), "1", 1))
-                g_Language = xiloader::Language::English;
-            if (!_strnicmp(language.c_str(), "EU", 2) || !_strnicmp(language.c_str(), "2", 1))
-                g_Language = xiloader::Language::European;
-
-            continue;
-        }
-
-        /* Hairpin Argument */
-        if (!_strnicmp(argv[x], "--hairpin", 9))
-        {
-            bUseHairpinFix = true;
-            continue;
-        }
-
-        /* Hide Argument */
-        if (!_strnicmp(argv[x], "--hide", 6))
-        {
-            g_Hide = true;
-            continue;
-        }
-
-        xiloader::console::output(xiloader::color::warning, "Found unknown command argument: %s", argv[x]);
     }
 
     /* Attempt to resolve the server address.. */
