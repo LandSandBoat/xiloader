@@ -1,0 +1,45 @@
+name: release
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  Windows_2019_32bit:
+    runs-on: windows-2019
+    env:
+      MSBUILD_PATH: C:\Program Files (x86)\Microsoft Visual Studio\2019\Enterprise\MSBuild\Current\Bin\
+    steps:
+      - uses: actions/checkout@v1
+        with:
+          fetch-depth: 1
+      - name: Configure CMake
+        shell: cmd
+        run: |
+          mkdir build
+          cmake -DCMAKE_BUILD_TYPE=Release -S . -B build -A Win32
+      - name: Build
+        shell: cmd
+        run: |
+          cmake --build build
+      - name: Get File Hashes
+        shell: pwsh
+        run: |
+          $EXE_MD5 = (Get-FileHash xiloader.exe -Algorithm MD5).hash
+          echo "EXE_MD5=$EXE_MD5" >> $GITHUB_ENV
+      - name:Get current date
+        id: date
+        run: echo "::set-output name=date::$(date +'%Y-%m-%d')"
+      - name: Create Release
+          id: create_release
+          uses: actions/create-release@v1
+          env:
+            GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }} # This token is provided by Actions, you do not need to create your own token
+          with:
+            tag_name: ${{ steps.date.outputs.date }}-${{ github.ref }}
+            release_name: Release ${{ steps.date.outputs.date }}-${{ github.ref }}
+            body: |
+              MD5: {{ env.environment }}
+            draft: false
+            prerelease: false
