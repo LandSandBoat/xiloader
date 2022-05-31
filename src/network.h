@@ -36,6 +36,8 @@ This file is part of DarkStar-server source code.
 
 #include "console.h"
 
+std::string WSAGetLastErrorStr(int code);
+
 namespace xiloader
 {
     /**
