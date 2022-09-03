@@ -18,7 +18,7 @@ if (detours_ADDED)
 
     add_library(detours STATIC ${detours_sources})
 
-    target_compile_options(detours PRIVATE /W4 /WX /Zi /MT /Gy /Gm- /Zl /Od)
+    target_compile_options(detours PRIVATE /W4 /WX /Zi /Gy /Gm- /Zl)
     target_include_directories(detours
       PUBLIC
         $<BUILD_INTERFACE:${detours_SOURCE_DIR}>
