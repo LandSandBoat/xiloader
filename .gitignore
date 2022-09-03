@@ -7,3 +7,5 @@ build/
 *.user
 xiloader.exe
 xiloader.pdb
+*.ilk
+*.exe.manifest

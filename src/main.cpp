@@ -1,7 +1,8 @@
 /*
 ===========================================================================
 
-Copyright (c) 2010-2014 Darkstar Dev Teams
+Copyright (c) 2010-2015 Darkstar Dev Teams
+Copyright (c) 2021-2022 LandSandBoat Dev Teams
 
 This program is free software: you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
@@ -271,8 +272,8 @@ int __cdecl main(int argc, char* argv[])
     xiloader::console::output(xiloader::color::lightred, "==========================================================");
     xiloader::console::output(xiloader::color::lightgreen, "DarkStar Boot Loader (c) 2015 DarkStar Team");
     xiloader::console::output(xiloader::color::lightgreen, "LandSandBoat Boot Loader (c) 2021-%d LandSandBoat Team", currentYear);
-    xiloader::console::output(xiloader::color::lightpurple, "Bug Reports: https://github.com/DarkstarProject/darkstar/issues");
-    xiloader::console::output(xiloader::color::lightpurple, "Git Repo   : https://github.com/DarkstarProject/darkstar");
+    xiloader::console::output(xiloader::color::lightpurple, "Git Repo   : https://github.com/LandSandBoat/xiloader");
+    xiloader::console::output(xiloader::color::lightpurple, "Bug Reports: https://github.com/LandSandBoat/xiloader/issues");
     xiloader::console::output(xiloader::color::lightred, "==========================================================");
 
     /* Initialize Winsock */
