@@ -25,6 +25,7 @@ This file is part of DarkStar-server source code.
 #include "defines.h"
 
 #include <ctime>
+#include <intrin.h>
 
 #include "console.h"
 #include "functions.h"
@@ -54,7 +55,9 @@ DWORD g_HairpinReturnAddress; // Hairpin return address to allow the code cave t
  */
 extern "C"
 {
-    hostent* (WINAPI __stdcall * Real_gethostbyname)(const char* name) = gethostbyname;
+    hostent*(WINAPI __stdcall* Real_gethostbyname)(const char* name)      = gethostbyname;
+    int(WINAPI* Real_send)(SOCKET s, const char* buf, int len, int flags) = send;
+    int(WINAPI* Real_recv)(SOCKET s, char* buf, int len, int flags)       = recv;
 }
 
 /**
@@ -102,7 +105,7 @@ DWORD ApplyHairpinFixThread(LPVOID lpParam)
     }
 
     // Locate zoning IP change address..
-    // 
+    //
     // As of 07.08.2013
     //      74 08                 - je FFXiMain.dll+E5E72
     //      8B 0D 68322B03        - mov ecx, [FFXiMain.dll+463268]
@@ -137,7 +140,7 @@ DWORD ApplyHairpinFixThread(LPVOID lpParam)
 /**
  * @brief gethostbyname detour callback.
  *
- * @param name      The hostname to obtain information of.
+ * @param name The hostname to obtain information of.
  *
  * @return Hostname information object.
  */
@@ -146,11 +149,40 @@ hostent* __stdcall Mine_gethostbyname(const char* name)
     xiloader::console::output(xiloader::color::debug, "Resolving host: %s", name);
 
     if (!strcmp("ffxi00.pol.com", name))
+    {
         return Real_gethostbyname(g_ServerAddress.c_str());
+    }
+
     if (!strcmp("pp000.pol.com", name))
+    {
         return Real_gethostbyname("127.0.0.1");
+    }
 
     return Real_gethostbyname(name);
+}
+
+/**
+ * @brief send detour callback. https://man7.org/linux/man-pages/man2/send.2.html
+ */
+int WINAPI Mine_send(SOCKET s, const char* buf, int len, int flags)
+{
+    const auto ret = _ReturnAddress();
+    std::ignore = ret;
+
+    // xiloader::console::output(xiloader::color::lightred, "send %i", len);
+    return Real_send(s, buf, len, flags);
+}
+
+/**
+ * @brief recv detour callback. https://man7.org/linux/man-pages/man2/recv.2.html
+ */
+int WINAPI Mine_recv(SOCKET s, char* buf, int len, int flags)
+{
+    const auto ret = _ReturnAddress();
+    std::ignore = ret;
+
+    // xiloader::console::output(xiloader::color::lightblue, "recv %i", len);
+    return Real_recv(s, buf, len, flags);
 }
 
 /**
@@ -300,6 +332,8 @@ int __cdecl main(int argc, char* argv[])
     DetourTransactionBegin();
     DetourUpdateThread(GetCurrentThread());
     DetourAttach(&(PVOID&)Real_gethostbyname, Mine_gethostbyname);
+    DetourAttach(&(PVOID&)Real_send, Mine_send);
+    DetourAttach(&(PVOID&)Real_recv, Mine_recv);
     if (DetourTransactionCommit() != NO_ERROR)
     {
         /* Cleanup COM and Winsock */
@@ -398,7 +432,7 @@ int __cdecl main(int argc, char* argv[])
             }
 
             /* Cleanup threads.. */
-            g_IsRunning = false;    
+            g_IsRunning = false;
             TerminateThread(hFFXiServer, 0);
             TerminateThread(hPolServer, 0);
 
@@ -418,6 +452,8 @@ int __cdecl main(int argc, char* argv[])
     DetourTransactionBegin();
     DetourUpdateThread(GetCurrentThread());
     DetourDetach(&(PVOID&)Real_gethostbyname, Mine_gethostbyname);
+    DetourDetach(&(PVOID&)Real_send, Mine_send);
+    DetourDetach(&(PVOID&)Real_recv, Mine_recv);
     DetourTransactionCommit();
 
     /* Cleanup COM and Winsock */
