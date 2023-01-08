@@ -21,18 +21,24 @@ This file is part of DarkStar-server source code.
 ===========================================================================
 */
 
+#include "helpers.h"
 #include "network.h"
+#include <Iphlpapi.h>
+#include <vector>
 
 /* Externals */
 extern std::string g_ServerAddress;
 extern std::string g_Username;
 extern std::string g_Password;
+extern char        g_SessionHash[16];
+extern std::string g_Email;
+extern std::string g_VersionNumber;
 extern std::string g_ServerPort;
 extern std::string g_LoginDataPort;
 extern std::string g_LoginViewPort;
 extern std::string g_LoginAuthPort;
-extern char* g_CharacterList;
-extern bool g_IsRunning;
+extern char*       g_CharacterList;
+extern bool        g_IsRunning;
 
 namespace xiloader
 {
@@ -180,7 +186,6 @@ namespace xiloader
         return true;
     }
 
-
     /**
      * @brief Resolves the given hostname to its long ip format.
      *
@@ -218,9 +223,9 @@ namespace xiloader
     {
         static bool bFirstLogin = true;
 
-        char recvBuffer[1024] = { 0 };
-        char sendBuffer[1024] = { 0 };
-
+        char recvBuffer[1024]    = { 0 };
+        char sendBuffer[1024]    = { 0 };
+        std::string new_password = "";
         /* Create connection if required.. */
         if (sock->s == NULL || sock->s == INVALID_SOCKET)
         {
@@ -281,7 +286,28 @@ namespace xiloader
                 std::cout << std::endl;
 
                 char event_code = (input == "1") ? 0x10 : 0x30;
-                sendBuffer[0x20] = event_code;
+
+                if (input == "3")
+                {
+                    std::string confirmed_password = "";
+                    do
+                    {
+                        std::cout << "Enter new password (6-15 characters): ";
+                        confirmed_password = "";
+                        new_password       = "";
+                        std::cin >> new_password;
+                        std::cout << "Repeat Password           : ";
+                        std::cin >> confirmed_password;
+                        std::cout << std::endl;
+
+                        if (new_password != confirmed_password)
+                        {
+                            xiloader::console::output(xiloader::color::error, "Passwords did not match! Please try again.");
+                        }
+                    } while (new_password != confirmed_password);
+                    new_password = confirmed_password;
+                }
+                sendBuffer[0x29] = event_code;
             }
             /* User wants to create a new account.. */
             else if (input == "2")
@@ -303,7 +329,7 @@ namespace xiloader
                     goto create_account;
                 }
 
-                sendBuffer[0x20] = 0x20;
+                sendBuffer[0x29] = 0x20;
             }
 
             std::cout << std::endl;
@@ -311,79 +337,69 @@ namespace xiloader
         else
         {
             /* User has auto-login enabled.. */
-            sendBuffer[0x20] = 0x10;
+            sendBuffer[0x29] = 0x10;
             bFirstLogin = false;
         }
 
+        sendBuffer[0] = 0xFF; // Magic for new xiloader bits
+
+        sendBuffer[1] = 0x00; // Feature flags, none used yet.
+        sendBuffer[2] = 0x00;
+        sendBuffer[3] = 0x00;
+        sendBuffer[4] = 0x00;
+        sendBuffer[5] = 0x00;
+        sendBuffer[6] = 0x00;
+        sendBuffer[7] = 0x00;
+        sendBuffer[8] = 0x00;
+
         /* Copy username and password into buffer.. */
-        memcpy(sendBuffer + 0x00, g_Username.c_str(), 16);
-        memcpy(sendBuffer + 0x10, g_Password.c_str(), 16);
+        memcpy(sendBuffer + 0x09, g_Username.c_str(), 16);
+        memcpy(sendBuffer + 0x19, g_Password.c_str(), 16);
+
+        /* Copy changed password into buffer */
+        memcpy(sendBuffer + 0x30, new_password.c_str(), 16);
+
+        // 17 byte wide reserved space starting at 0x40
+
+        /* Copy version number into buffer */
+        memcpy(sendBuffer + 0x51, g_VersionNumber.c_str(), 5);
 
         /* Send info to server and obtain response.. */
-        send(sock->s, sendBuffer, 33, 0);
-        recv(sock->s, recvBuffer, 16, 0);
+        send(sock->s, sendBuffer, 86, 0);
+        recv(sock->s, recvBuffer, 21, 0);
 
         /* Handle the obtained result.. */
         switch (recvBuffer[0])
         {
-        case 0x0001: // Success (Login)
-            xiloader::console::output(xiloader::color::success, "Successfully logged in as %s!", g_Username.c_str());
-            sock->AccountId = *(UINT32*)(recvBuffer + 0x01);
-            closesocket(sock->s);
-            sock->s = INVALID_SOCKET;
-            return true;
+            case 0x0001: // Success (Login)
+                xiloader::console::output(xiloader::color::success, "Successfully logged in as %s!", g_Username.c_str());
 
-        case 0x0002: // Error (Login)
-            xiloader::console::output(xiloader::color::error, "Failed to login. Invalid username or password.");
-            closesocket(sock->s);
-            sock->s = INVALID_SOCKET;
-            return false;
+                sock->AccountId = ref<UINT32>(recvBuffer, 1);
+                std::memcpy(&g_SessionHash, recvBuffer + 5, sizeof(g_SessionHash));
 
-        case 0x0003: // Success (Create Account)
-            xiloader::console::output(xiloader::color::success, "Account successfully created!");
-            closesocket(sock->s);
-            sock->s = INVALID_SOCKET;
-            return false;
+                shutdown(sock->s, SD_BOTH);
+                closesocket(sock->s);
+                sock->s = INVALID_SOCKET;
+                return true;
 
-        case 0x0004: // Error (Create Account)
-            xiloader::console::output(xiloader::color::error, "Failed to create the new account. Username already taken.");
-            closesocket(sock->s);
-            sock->s = INVALID_SOCKET;
-            return false;
+            case 0x0002: // Error (Login)
+                xiloader::console::output(xiloader::color::error, "Failed to login. Invalid username or password.");
+                closesocket(sock->s);
+                sock->s = INVALID_SOCKET;
+                return false;
 
-        case 0x0005: // Request for updated password to change to.
-        {
-            xiloader::console::output(xiloader::color::success, "Log in verified for user %s.", g_Username.c_str());
-            std::string confirmed_password = "";
-            do
-            {
-                std::cout << "Enter new password (6-15 characters): ";
-                g_Password.clear();
-                std::cin >> g_Password;
-                std::cout << "Repeat Password           : ";
-                std::cin >> confirmed_password;
-                std::cout << std::endl;
+            case 0x0003: // Success (Create Account)
+                xiloader::console::output(xiloader::color::success, "Account successfully created!");
+                closesocket(sock->s);
+                sock->s = INVALID_SOCKET;
+                return false;
 
-                if (g_Password != confirmed_password)
-                {
-                    xiloader::console::output(xiloader::color::error, "Passwords did not match! Please try again.");
-                }
-            } while (g_Password != confirmed_password);
+            case 0x0004: // Error (Create Account)
+                xiloader::console::output(xiloader::color::error, "Failed to create the new account. Username already taken.");
+                closesocket(sock->s);
+                sock->s = INVALID_SOCKET;
+                return false;
 
-            /* Clear the buffers */
-            memset(sendBuffer, 0, 33);
-            memset(recvBuffer, 0, 16);
-
-            /* Copy the new password into the buffer. */
-            memcpy(sendBuffer, g_Password.c_str(), 16);
-
-            /* Send info to server and obtain response.. */
-            send(sock->s, sendBuffer, 16, 0);
-            recv(sock->s, recvBuffer, 16, 0);
-
-            /* Handle the final result. */
-            switch (recvBuffer[0])
-            {
             case 0x0006: // Success (Changed Password)
                 xiloader::console::output(xiloader::color::success, "Password updated successfully!");
                 std::cout << std::endl;
@@ -399,8 +415,20 @@ namespace xiloader
                 closesocket(sock->s);
                 sock->s = INVALID_SOCKET;
                 return false;
-            }
-        }
+
+            // Gap for previously used command codes
+
+            case 0x000A:
+                xiloader::console::output(xiloader::color::error, "Failed to login. Account already logged in.");
+                closesocket(sock->s);
+                sock->s = INVALID_SOCKET;
+                return false;
+
+            case 0x000B:
+                xiloader::console::output(xiloader::color::error, "Failed to login. Expected xiloader version mismatch; check with your provider.");
+                closesocket(sock->s);
+                sock->s = INVALID_SOCKET;
+                return false;
         }
 
         /* We should not get here.. */
@@ -424,11 +452,28 @@ namespace xiloader
         char recvBuffer[4096] = { 0 };
         char sendBuffer[4096] = { 0 };
 
+        struct sockaddr_in client;
+        unsigned int       socksize = sizeof(client);
+
+        // send session hash
+        sendBuffer[0] = 0xFE;
+        memcpy(sendBuffer + 12, g_SessionHash, 16);
+
+        auto result = send(sock->s, sendBuffer, 28, 0);
+        if (result == SOCKET_ERROR)
+        {
+            shutdown(sock->s, SD_SEND);
+            closesocket(sock->s);
+            sock->s = INVALID_SOCKET;
+
+            xiloader::console::output("Failed to send session hash for data to server; disconnecting!");
+            return 0;
+        }
+        memset(sendBuffer, 0, 28);
+
         while (g_IsRunning)
         {
             /* Attempt to receive the incoming data.. */
-            struct sockaddr_in client;
-            unsigned int socksize = sizeof(client);
             if (recvfrom(sock->s, recvBuffer, sizeof(recvBuffer), 0, (struct sockaddr*)&client, (int*)&socksize) <= 0)
             {
                 /*
@@ -448,15 +493,18 @@ namespace xiloader
                 sendBuffer[0] = 0xA1u;
                 memcpy(sendBuffer + 0x01, &sock->AccountId, 4);
                 memcpy(sendBuffer + 0x05, &sock->ServerAddress, 4);
+                memcpy(sendBuffer + 12, g_SessionHash, 16);
+
                 xiloader::console::output(xiloader::color::warning, "Sending account id..");
-                sendSize = 9;
+                sendSize = 28;
                 break;
 
             case 0x0002:
             case 0x0015:
                 memcpy(sendBuffer, (char*)"\xA2\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x58\xE0\x5D\xAD\x00\x00\x00\x00", 25);
+
                 xiloader::console::output(xiloader::color::warning, "Sending key..");
-                sendSize = 25;
+                sendSize = 28;
                 break;
 
             case 0x0003:

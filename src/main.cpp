@@ -35,16 +35,20 @@ This file is part of DarkStar-server source code.
 
 /* Global Variables */
 xiloader::Language g_Language = xiloader::Language::English; // The language of the loader to be used for polcore.
-std::string g_ServerAddress = "127.0.0.1"; // The server address to connect to.
-std::string g_ServerPort = "51220"; // The server lobby server port to connect to.
-std::string g_LoginDataPort = "54230"; // Login server data port to connect to
-std::string g_LoginViewPort = "54001"; // Login view port to connect to
-std::string g_LoginAuthPort = "54231"; // Login auth port to connect to
-std::string g_Username = ""; // The username being logged in with.
-std::string g_Password = ""; // The password being logged in with.
-char* g_CharacterList = NULL; // Pointer to the character list data being sent from the server.
-bool g_IsRunning = false; // Flag to determine if the network threads should hault.
-bool g_Hide = false; // Determines whether or not to hide the console window after FFXI starts.
+std::string g_ServerAddress   = "127.0.0.1";                 // The server address to connect to.
+std::string g_ServerPort      = "51220";                     // The server lobby server port to connect to.
+std::string g_LoginDataPort   = "54230";                     // Login server data port to connect to
+std::string g_LoginViewPort   = "54001";                     // Login view port to connect to
+std::string g_LoginAuthPort   = "54231";                     // Login auth port to connect to
+std::string g_Username        = "";                          // The username being logged in with.
+std::string g_Password        = "";                          // The password being logged in with.
+char        g_SessionHash[16] = {};                          // Session hash sent from auth
+std::string        g_Email    = "";                           // Email, currently unused
+std::string g_VersionNumber   = "1.0.0";                     // xiloader version number sent to auth server. Must be x.x.x with single characters for 'x'
+
+char* g_CharacterList   = NULL;  // Pointer to the character list data being sent from the server.
+bool  g_IsRunning     = false; // Flag to determine if the network threads should hault.
+bool  g_Hide          = false; // Determines whether or not to hide the console window after FFXI starts.
 
 /* Hairpin Fix Variables */
 DWORD g_NewServerAddress; // Hairpin server address to be overriden with.
@@ -55,9 +59,10 @@ DWORD g_HairpinReturnAddress; // Hairpin return address to allow the code cave t
  */
 extern "C"
 {
-    hostent*(WINAPI __stdcall* Real_gethostbyname)(const char* name)      = gethostbyname;
-    int(WINAPI* Real_send)(SOCKET s, const char* buf, int len, int flags) = send;
-    int(WINAPI* Real_recv)(SOCKET s, char* buf, int len, int flags)       = recv;
+    hostent*(WINAPI __stdcall* Real_gethostbyname)(const char* name)       = gethostbyname;
+    int(WINAPI* Real_send)(SOCKET s, const char* buf, int len, int flags)  = send;
+    int(WINAPI* Real_recv)(SOCKET s, char* buf, int len, int flags)        = recv;
+    int(WINAPI* Real_connect)(SOCKET s, const sockaddr* name, int namelen) = connect;
 }
 
 /**
@@ -169,6 +174,18 @@ int WINAPI Mine_send(SOCKET s, const char* buf, int len, int flags)
     const auto ret = _ReturnAddress();
     std::ignore = ret;
 
+    auto command = buf[8];
+
+    // check for lobby specific commands
+    if (command == 0x07 || command == 0x14 || command == 0x1F || command == 0x21 || command == 0x22 || command == 0x26 || command == 0x24)
+    {
+        // Check for magic number
+        if (buf[4] == 0x49 && buf[5] == 0x58 && buf[6] == 0x46 && buf[7] == 0x46)
+        {
+            // always send server provided session hash in packets with XIFF commands
+            std::memcpy((char*)buf + 12, g_SessionHash, 16);
+        }
+    }
     // xiloader::console::output(xiloader::color::lightred, "send %i", len);
     return Real_send(s, buf, len, flags);
 }
@@ -183,6 +200,15 @@ int WINAPI Mine_recv(SOCKET s, char* buf, int len, int flags)
 
     // xiloader::console::output(xiloader::color::lightblue, "recv %i", len);
     return Real_recv(s, buf, len, flags);
+}
+/**
+ * @brief connect detour callback. https://man7.org/linux/man-pages/man2/connect.2.html
+ */
+int WINAPI Mine_connect(SOCKET s, const sockaddr* name, int namelen)
+{
+    int ret = Real_connect(s, name, namelen);
+
+    return ret;
 }
 
 /**
@@ -236,6 +262,7 @@ int __cdecl main(int argc, char* argv[])
     args.add_argument("--server").help("The server address to connect to.");
     args.add_argument("--user", "--username").help("The username being logged in with.");
     args.add_argument("--pass", "--password").help("The password being logged in with.");
+    args.add_argument("--email", "--email").help("The email being logged in with.");
 
     args.add_argument("--serverport").help("(optional) The server's lobby port to connect to.");
 
@@ -275,6 +302,7 @@ int __cdecl main(int argc, char* argv[])
 
     g_Username = args.is_used("--user") ? args.get<std::string>("--user") : g_Username;
     g_Password = args.is_used("--pass") ? args.get<std::string>("--pass") : g_Password;
+    g_Email    = args.is_used("--email") ? args.get<std::string>("--email") : g_Email;
 
     if (args.is_used("--lang"))
     {
@@ -334,6 +362,7 @@ int __cdecl main(int argc, char* argv[])
     DetourAttach(&(PVOID&)Real_gethostbyname, Mine_gethostbyname);
     DetourAttach(&(PVOID&)Real_send, Mine_send);
     DetourAttach(&(PVOID&)Real_recv, Mine_recv);
+    DetourAttach(&(PVOID&)Real_connect, Mine_connect);
     if (DetourTransactionCommit() != NO_ERROR)
     {
         /* Cleanup COM and Winsock */
@@ -454,6 +483,7 @@ int __cdecl main(int argc, char* argv[])
     DetourDetach(&(PVOID&)Real_gethostbyname, Mine_gethostbyname);
     DetourDetach(&(PVOID&)Real_send, Mine_send);
     DetourDetach(&(PVOID&)Real_recv, Mine_recv);
+    DetourDetach(&(PVOID&)Real_connect, Mine_connect);
     DetourTransactionCommit();
 
     /* Cleanup COM and Winsock */

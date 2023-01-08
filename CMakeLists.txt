@@ -40,7 +40,7 @@ add_executable(xiloader
 set_target_properties(xiloader PROPERTIES LINK_FLAGS "/LARGEADDRESSAWARE")
 
 target_include_directories(xiloader PUBLIC ${PROJECT_SOURCE_DIR}/xiloader)
-target_link_libraries(xiloader PUBLIC detours argparse psapi ws2_32)
+target_link_libraries(xiloader PUBLIC detours argparse psapi ws2_32 iphlpapi)
 
 message(STATUS "CMAKE_VERSION: ${CMAKE_VERSION}")
 message(STATUS "CMAKE_BUILD_TYPE: ${CMAKE_BUILD_TYPE}")
