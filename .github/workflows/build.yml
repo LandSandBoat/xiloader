@@ -24,8 +24,9 @@ jobs:
         shell: cmd
         run: |
           mkdir build
-          cmake -S . -B build -A Win32
+          cmake -DCMAKE_BUILD_TYPE=Release -S . -B build -A Win32
       - name: Build
         shell: cmd
         run: |
-          cmake --build build
+          # https://stackoverflow.com/a/19026241
+          cmake --build build --config Release
