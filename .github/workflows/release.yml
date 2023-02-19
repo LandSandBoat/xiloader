@@ -22,7 +22,8 @@ jobs:
       - name: Build
         shell: cmd
         run: |
-          cmake --build build
+          # https://stackoverflow.com/a/19026241
+          cmake --build build --config Release
       - name: Get Exe Hash
         id: hashes
         shell: pwsh
