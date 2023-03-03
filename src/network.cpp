@@ -430,7 +430,13 @@ namespace xiloader
             struct sockaddr_in client;
             unsigned int socksize = sizeof(client);
             if (recvfrom(sock->s, recvBuffer, sizeof(recvBuffer), 0, (struct sockaddr*)&client, (int*)&socksize) <= 0)
+            {
+                if (WSAGetLastError() == 0)
+                {
+                    Sleep(100);
+                }
                 continue;
+            }
 
             switch (recvBuffer[0])
             {
