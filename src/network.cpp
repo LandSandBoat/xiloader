@@ -431,6 +431,10 @@ namespace xiloader
             unsigned int socksize = sizeof(client);
             if (recvfrom(sock->s, recvBuffer, sizeof(recvBuffer), 0, (struct sockaddr*)&client, (int*)&socksize) <= 0)
             {
+                /*
+                Under some conditions, this recvfrom call would immediately error with a WSAGetLastError value of 0 when no data was waiting.
+                This would cause the call to occur over and over, saturating a cpu thread.                
+                */
                 if (WSAGetLastError() == 0)
                 {
                     Sleep(100);
