@@ -478,7 +478,7 @@ namespace xiloader
             {
                 /*
                 Under some conditions, this recvfrom call would immediately error with a WSAGetLastError value of 0 when no data was waiting.
-                This would cause the call to occur over and over, saturating a cpu thread.                
+                This would cause the call to occur over and over, saturating a cpu thread.
                 */
                 if (WSAGetLastError() == 0)
                 {
@@ -509,7 +509,7 @@ namespace xiloader
 
             case 0x0003:
                 xiloader::console::output(xiloader::color::warning, "Receiving character list..");
-                for (auto x = 0; x <= recvBuffer[1]; x++)
+                for (auto x = 0; x < recvBuffer[1]; x++)
                 {
                     g_CharacterList[0x00 + (x * 0x68)] = 1;
                     g_CharacterList[0x02 + (x * 0x68)] = 1;
