@@ -470,8 +470,8 @@ namespace xiloader
                     g_CharacterList[0x18 + (x * 0x68)] = 0x20;
                     g_CharacterList[0x28 + (x * 0x68)] = 0x20;
 
-                    memcpy(g_CharacterList + 0x04 + (x * 0x68), recvBuffer + 0x10 * (x + 1), 4); // Character Id
-                    memcpy(g_CharacterList + 0x08 + (x * 0x68), recvBuffer + 0x10 * (x + 1), 4); // Content Id
+                    memcpy(g_CharacterList + 0x04 + (x * 0x68), recvBuffer + 0x10 * (x + 1) + 0x04, 4); // Character Id
+                    memcpy(g_CharacterList + 0x08 + (x * 0x68), recvBuffer + 0x10 * (x + 1), 4);        // Content Id
                 }
                 sendSize = 0;
                 break;
