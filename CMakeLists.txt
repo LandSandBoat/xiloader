@@ -37,6 +37,8 @@ add_executable(xiloader
     src/network.h
     src/polcore.h)
 
+set_target_properties(xiloader PROPERTIES LINK_FLAGS "/LARGEADDRESSAWARE")
+
 target_include_directories(xiloader PUBLIC ${PROJECT_SOURCE_DIR}/xiloader)
 target_link_libraries(xiloader PUBLIC detours argparse psapi ws2_32)
 
