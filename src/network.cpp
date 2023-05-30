@@ -34,6 +34,39 @@ extern std::string g_LoginAuthPort;
 extern char* g_CharacterList;
 extern bool g_IsRunning;
 
+std::string WSAGetLastErrorStr()
+{
+    auto        code = WSAGetLastError();
+    std::string outString;
+
+    {
+        wchar_t* s = NULL;
+        FormatMessageW(FORMAT_MESSAGE_ALLOCATE_BUFFER | FORMAT_MESSAGE_FROM_SYSTEM | FORMAT_MESSAGE_IGNORE_INSERTS,
+                       NULL, code,
+                       MAKELANGID(LANG_NEUTRAL, SUBLANG_DEFAULT),
+                       (LPWSTR)&s, 0, NULL);
+
+        char output[512];
+        sprintf(output, "%ws", s);
+        outString = output;
+
+        // Remove trailing chars leftover from FormatMessageW
+        outString.pop_back();
+        outString.pop_back();
+        outString.pop_back();
+
+        LocalFree(s);
+    }
+
+    {
+        char output[512];
+        sprintf(output, "Code: %d: %s", code, outString.c_str());
+        outString = output;
+    }
+
+    return outString;
+}
+
 namespace xiloader
 {
     /**
@@ -57,7 +90,7 @@ namespace xiloader
         struct addrinfo* addr = NULL;
         if (getaddrinfo(g_ServerAddress.c_str(), port, &hints, &addr))
         {
-            xiloader::console::output(xiloader::color::error, "Failed to obtain remote server information.");
+            xiloader::console::output(xiloader::color::error, "Failed to obtain remote server information. (%s)", WSAGetLastErrorStr());
             return 0;
         }
 
@@ -68,8 +101,7 @@ namespace xiloader
             sock->s = socket(ptr->ai_family, ptr->ai_socktype, ptr->ai_protocol);
             if (sock->s == INVALID_SOCKET)
             {
-                xiloader::console::output(xiloader::color::error, "Failed to create socket.");
-
+                xiloader::console::output(xiloader::color::error, "Failed to create socket. (%s)", WSAGetLastErrorStr().c_str());
                 freeaddrinfo(addr);
                 return 0;
             }
@@ -77,7 +109,7 @@ namespace xiloader
             /* Attempt to connect to the server.. */
             if (connect(sock->s, ptr->ai_addr, ptr->ai_addrlen) == SOCKET_ERROR)
             {
-                xiloader::console::output(xiloader::color::error, "Failed to connect to server!");
+                xiloader::console::output(xiloader::color::error, "Failed to connect to server! (%s)", WSAGetLastErrorStr().c_str());
 
                 closesocket(sock->s);
                 sock->s = INVALID_SOCKET;
@@ -128,7 +160,7 @@ namespace xiloader
         struct addrinfo* addr = NULL;
         if (getaddrinfo(NULL, port, &hints, &addr))
         {
-            xiloader::console::output(xiloader::color::error, "Failed to obtain local address information.");
+            xiloader::console::output(xiloader::color::error, "Failed to obtain local address information. (%s)", WSAGetLastErrorStr().c_str());
             return false;
         }
 
@@ -145,7 +177,7 @@ namespace xiloader
         /* Set socket option on internal server to allow sharing the port for multibox users */
         if (setsockopt(*sock, SOL_SOCKET, SO_REUSEADDR, (char*)(&[] { return TRUE; }), sizeof(BOOL)) == SOCKET_ERROR)
         {
-            xiloader::console::output(xiloader::color::error, "Failed to set reusable address option on socket. %d", WSAGetLastError());
+            xiloader::console::output(xiloader::color::error, "Failed to set reusable address option on socket. (%s)", WSAGetLastErrorStr().c_str());
 
             freeaddrinfo(addr);
             return false;
@@ -154,7 +186,7 @@ namespace xiloader
         /* Bind to the local address.. */
         if (bind(*sock, addr->ai_addr, (int)addr->ai_addrlen) == SOCKET_ERROR)
         {
-            xiloader::console::output(xiloader::color::error, "Failed to bind to listening socket.");
+            xiloader::console::output(xiloader::color::error, "Failed to bind to listening socket. (%s)", WSAGetLastErrorStr().c_str());
 
             freeaddrinfo(addr);
             closesocket(*sock);
@@ -169,7 +201,7 @@ namespace xiloader
         {
             if (listen(*sock, SOMAXCONN) == SOCKET_ERROR)
             {
-                xiloader::console::output(xiloader::color::error, "Failed to listen for connections.");
+                xiloader::console::output(xiloader::color::error, "Failed to listen for connections. (%s)", WSAGetLastErrorStr().c_str());
 
                 closesocket(*sock);
                 *sock = INVALID_SOCKET;
@@ -520,7 +552,7 @@ namespace xiloader
             result = recv(client, (char*)recvBuffer, sizeof(recvBuffer), 0);
             if (result <= 0)
             {
-                xiloader::console::output(xiloader::color::error, "Client recv failed: %d", WSAGetLastError());
+                xiloader::console::output(xiloader::color::error, "Client recv failed: %s", WSAGetLastErrorStr().c_str());
                 break;
             }
 
@@ -551,7 +583,7 @@ namespace xiloader
             /* Echo back the buffer to the server.. */
             if (send(client, (char*)recvBuffer, result, 0) == SOCKET_ERROR)
             {
-                xiloader::console::output(xiloader::color::error, "Client send failed: %d", WSAGetLastError());
+                xiloader::console::output(xiloader::color::error, "Client send failed: %s", WSAGetLastErrorStr().c_str());
                 break;
             }
 
@@ -564,7 +596,7 @@ namespace xiloader
 
         /* Shutdown the client socket.. */
         if (shutdown(client, SD_SEND) == SOCKET_ERROR)
-            xiloader::console::output(xiloader::color::error, "Client shutdown failed: %d", WSAGetLastError());
+            xiloader::console::output(xiloader::color::error, "Client shutdown failed: %s", WSAGetLastErrorStr().c_str());
         closesocket(client);
 
         return 0;
@@ -612,7 +644,7 @@ namespace xiloader
             /* Attempt to accept incoming connections.. */
             if ((client = accept(sock, NULL, NULL)) == INVALID_SOCKET)
             {
-                xiloader::console::output(xiloader::color::error, "Accept failed: %d", WSAGetLastError());
+                xiloader::console::output(xiloader::color::error, "Accept failed: %s", WSAGetLastErrorStr().c_str());
 
                 closesocket(sock);
                 return 1;
