@@ -23,7 +23,7 @@ This file is part of DarkStar-server source code.
 
 #include "helpers.h"
 #include "network.h"
-#include <Iphlpapi.h>
+#include <iphlpapi.h>
 #include <vector>
 
 /* Externals */
@@ -40,6 +40,15 @@ extern std::string g_LoginAuthPort;
 extern char*       g_CharacterList;
 extern bool        g_IsRunning;
 
+// mbed tls state
+extern mbedtls_net_context      server_fd;
+extern mbedtls_entropy_context  entropy;
+extern mbedtls_ctr_drbg_context ctr_drbg;
+extern mbedtls_ssl_context      ssl;
+extern mbedtls_ssl_config       conf;
+extern mbedtls_x509_crt         cacert;
+extern mbedtls_x509_crt*        ca_chain;
+
 namespace xiloader
 {
     /**
@@ -55,7 +64,7 @@ namespace xiloader
         struct addrinfo hints;
         memset(&hints, 0x00, sizeof(hints));
 
-        hints.ai_family = AF_UNSPEC;
+        hints.ai_family   = AF_UNSPEC;
         hints.ai_socktype = SOCK_STREAM;
         hints.ai_protocol = IPPROTO_TCP;
 
@@ -105,7 +114,96 @@ namespace xiloader
                 localAddress = inet_ntoa(*(struct in_addr*)*hostent->h_addr_list);
         }
 
-        sock->LocalAddress = inet_addr(localAddress.c_str());
+        sock->LocalAddress  = inet_addr(localAddress.c_str());
+        sock->ServerAddress = inet_addr(g_ServerAddress.c_str());
+
+        return 1;
+    }
+
+     /**
+     * @brief Creates a connection to the auth server on the given port.
+     *
+     * @param sock      The datasocket object to store information within.
+     * @param port      The port to create the connection on.
+     *
+     * @return True on success, false otherwise.
+     */
+    bool network::CreateAuthConnection(datasocket* sock, const char* port)
+    {
+        struct addrinfo hints;
+        memset(&hints, 0x00, sizeof(hints));
+
+        hints.ai_family   = AF_UNSPEC;
+        hints.ai_socktype = SOCK_STREAM;
+        hints.ai_protocol = IPPROTO_TCP;
+
+        /* Attempt to get the server information. */
+        struct addrinfo* addr = NULL;
+        if (getaddrinfo(g_ServerAddress.c_str(), port, &hints, &addr))
+        {
+            xiloader::console::output(xiloader::color::error, "Failed to obtain remote server information.");
+            return 0;
+        }
+
+        if ((mbedtls_net_connect(&server_fd, g_ServerAddress.c_str(), port, MBEDTLS_NET_PROTO_TCP)) != 0)
+        {
+            xiloader::console::output(xiloader::color::error, "mbedtls_net_connect failed.");
+            return 0;
+        }
+
+        if (mbedtls_ssl_config_defaults(&conf, MBEDTLS_SSL_IS_CLIENT, MBEDTLS_SSL_TRANSPORT_STREAM, MBEDTLS_SSL_PRESET_DEFAULT) != 0)
+        {
+            xiloader::console::output(xiloader::color::error, "mbedtls_ssl_config_defaults failed.");
+            return 0;
+        }
+
+        // MBEDTLS_SSL_VERIFY_OPTIONAL provides warnings, but doesn't stop connections.
+        mbedtls_ssl_conf_authmode(&conf, MBEDTLS_SSL_VERIFY_OPTIONAL);
+        mbedtls_ssl_conf_ca_chain(&conf, ca_chain, NULL);
+        mbedtls_ssl_conf_rng(&conf, mbedtls_ctr_drbg_random, &ctr_drbg);
+
+        int ret = 0;
+
+        if ((ret = mbedtls_ssl_setup(&ssl, &conf)) != 0)
+        {
+            xiloader::console::output(xiloader::color::error, "mbedtls_ssl_setup returned %d", ret);
+            return 0;
+        }
+
+        mbedtls_ssl_set_bio(&ssl, &server_fd, mbedtls_net_send, mbedtls_net_recv, NULL);
+
+        while ((ret = mbedtls_ssl_handshake(&ssl)) != 0)
+        {
+            if (ret != MBEDTLS_ERR_SSL_WANT_READ && ret != MBEDTLS_ERR_SSL_WANT_WRITE)
+            {
+                xiloader::console::output(xiloader::color::error, "mbedtls_ssl_handshake returned -0x%x", (unsigned int)-ret);
+                return 0;
+            }
+        }
+
+        uint32_t flags = 0;
+
+        if ((flags = mbedtls_ssl_get_verify_result(&ssl)) != 0)
+        {
+            char vrfy_buf[512];
+
+            mbedtls_x509_crt_verify_info(vrfy_buf, sizeof(vrfy_buf), "", flags);
+
+            xiloader::console::output(xiloader::color::warning, "Remote server certificate warnings:", vrfy_buf);
+            xiloader::console::output(xiloader::color::warning, "%s", vrfy_buf);
+        }
+        else
+        {
+            xiloader::console::output(xiloader::color::info, "Remote server (%s) certificate is valid.", g_ServerAddress.c_str());
+        }
+
+        sockaddr clientAddr  = {};
+        int      sockaddrLen = sizeof(clientAddr);
+        getsockname(static_cast<SOCKET>(server_fd.fd), &clientAddr, &sockaddrLen);
+
+        struct sockaddr_in* their_inaddr_ptr = (struct sockaddr_in*)&clientAddr;
+
+        sock->LocalAddress  = their_inaddr_ptr->sin_addr.S_un.S_addr;
         sock->ServerAddress = inet_addr(g_ServerAddress.c_str());
 
         return 1;
@@ -223,15 +321,17 @@ namespace xiloader
     {
         static bool bFirstLogin = true;
 
-        char recvBuffer[1024]    = { 0 };
-        char sendBuffer[1024]    = { 0 };
-        std::string new_password = "";
+        unsigned char recvBuffer[1024] = { 0 };
+        unsigned char sendBuffer[1024] = { 0 };
+        std::string new_password       = "";
         /* Create connection if required.. */
-        if (sock->s == NULL || sock->s == INVALID_SOCKET)
+
+        // TODO: fix this check for TLS
+        /* if (sock->s == NULL || sock->s == INVALID_SOCKET)
         {
             if (!xiloader::network::CreateConnection(sock, g_LoginAuthPort.c_str()))
                 return false;
-        }
+        }*/
 
         /* Determine if we should auto-login.. */
         bool bUseAutoLogin = !g_Username.empty() && !g_Password.empty() && bFirstLogin;
@@ -365,8 +465,10 @@ namespace xiloader
         memcpy(sendBuffer + 0x51, g_VersionNumber.c_str(), 5);
 
         /* Send info to server and obtain response.. */
-        send(sock->s, sendBuffer, 86, 0);
-        recv(sock->s, recvBuffer, 21, 0);
+        mbedtls_ssl_write(&ssl, reinterpret_cast<const unsigned char*>(sendBuffer), 86);
+        mbedtls_ssl_read(&ssl, recvBuffer, 21);
+        //send(sock->s, sendBuffer, 86, 0);
+        //recv(sock->s, recvBuffer, 21, 0);
 
         /* Handle the obtained result.. */
         switch (recvBuffer[0])

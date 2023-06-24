@@ -43,7 +43,7 @@ std::string g_LoginAuthPort   = "54231";                     // Login auth port 
 std::string g_Username        = "";                          // The username being logged in with.
 std::string g_Password        = "";                          // The password being logged in with.
 char        g_SessionHash[16] = {};                          // Session hash sent from auth
-std::string        g_Email    = "";                           // Email, currently unused
+std::string g_Email           = "";                          // Email, currently unused
 std::string g_VersionNumber   = "1.0.0";                     // xiloader version number sent to auth server. Must be x.x.x with single characters for 'x'
 
 char* g_CharacterList   = NULL;  // Pointer to the character list data being sent from the server.
@@ -53,6 +53,15 @@ bool  g_Hide          = false; // Determines whether or not to hide the console 
 /* Hairpin Fix Variables */
 DWORD g_NewServerAddress; // Hairpin server address to be overriden with.
 DWORD g_HairpinReturnAddress; // Hairpin return address to allow the code cave to return properly.
+
+// mbed tls state
+mbedtls_net_context      server_fd = {};
+mbedtls_entropy_context  entropy   = {};
+mbedtls_ctr_drbg_context ctr_drbg  = {};
+mbedtls_ssl_context      ssl       = {};
+mbedtls_ssl_config       conf      = {};
+mbedtls_x509_crt         cacert    = {};
+mbedtls_x509_crt*        ca_chain  = {};
 
 /**
  * @brief Detour function definitions.
@@ -166,6 +175,43 @@ hostent* __stdcall Mine_gethostbyname(const char* name)
     return Real_gethostbyname(name);
 }
 
+// This function's purpose is to identify a command byte and identify if it is meant for the lobby dataport or not.
+// This way, we know we want to send 
+bool isLobbyCommand(const char* buffer)
+{
+    auto command = buffer[8];
+    // See https://github.com/atom0s/XiPackets/tree/main/lobby
+    // Command bytes information, based on what the client visually reports when waiting for a response:
+    // 0x07: Request login to character with account id and character id. Login verifies this and will notify if possible: "Notifying lobby server of current selections."
+    // 0x14: Request character deletion, login will delete if enabled. "Deleting from lobby server"
+    // 0x1F: Request character list, login server only replies with "0x01": "Acquiring Player Data"
+    // 0x21: Notify server character was created clientside (no effect in login server): "Registering character name onto the lobby server"
+    // 0x22: Notify server of character wishing to be created and login creates the character: "Checking name and Gold World Pass"
+    // 0x24: Client requesting server name: "Acquiring FINAL FANTASY XI server data"
+    // 0x26: Send version information to login, login replies with expansion/features bitmask: "Setting up connection."
+    // 0x28: Client sending character rename information if character was renamed by a GM (Not yet implemented in login)
+    // 0x2B: GM command to move character to a new world? See https://github.com/atom0s/XiPackets/blob/main/lobby/C2S_0x002B_RequestMoveGMChr.md
+    if
+        (command == 0x07 ||
+         command == 0x14 ||
+         command == 0x1F ||
+         command == 0x21 ||
+         command == 0x22 ||
+         command == 0x24 ||
+         command == 0x26 ||
+         command == 0x28 ||
+         command == 0x2B)
+    {
+        // Check for magic numbers (XIFF command)
+        if (buffer[4] == 0x49 && buffer[5] == 0x58 && buffer[6] == 0x46 && buffer[7] == 0x46)
+        {
+            return true;
+        }
+    }
+
+    return false;
+}
+
 /**
  * @brief send detour callback. https://man7.org/linux/man-pages/man2/send.2.html
  */
@@ -174,19 +220,13 @@ int WINAPI Mine_send(SOCKET s, const char* buf, int len, int flags)
     const auto ret = _ReturnAddress();
     std::ignore = ret;
 
-    auto command = buf[8];
-
     // check for lobby specific commands
-    if (command == 0x07 || command == 0x14 || command == 0x1F || command == 0x21 || command == 0x22 || command == 0x26 || command == 0x24)
+    if (isLobbyCommand(buf))
     {
-        // Check for magic number
-        if (buf[4] == 0x49 && buf[5] == 0x58 && buf[6] == 0x46 && buf[7] == 0x46)
-        {
-            // always send server provided session hash in packets with XIFF commands
-            std::memcpy((char*)buf + 12, g_SessionHash, 16);
-        }
+        // always send server provided session hash in packets with XIFF commands and is a lobby command
+        std::memcpy((char*)buf + 12, g_SessionHash, 16);
     }
-    // xiloader::console::output(xiloader::color::lightred, "send %i", len);
+
     return Real_send(s, buf, len, flags);
 }
 
@@ -245,6 +285,60 @@ inline LPVOID FindCharacters(void** commFuncs)
     LPVOID lpCharTable = NULL;
     memcpy(&lpCharTable, (char*)commFuncs[0xD3] + 31, sizeof(lpCharTable));
     return lpCharTable;
+}
+
+// Source: https://curl.se/mail/lib-2019-06/0057.html
+mbedtls_x509_crt* extract_cert(PCCERT_CONTEXT certificateContext)
+{
+    // TODO: add delete!
+    mbedtls_x509_crt* certificate = new mbedtls_x509_crt;
+    mbedtls_x509_crt_init(certificate);
+    mbedtls_x509_crt_parse(certificate, certificateContext->pbCertEncoded, certificateContext->cbCertEncoded);
+    return certificate;
+}
+
+// Source: https://curl.se/mail/lib-2019-06/0057.html
+mbedtls_x509_crt* build_windows_ca_chain()
+{
+    mbedtls_x509_crt* ca_chain         = NULL;
+    HCERTSTORE        certificateStore = NULL;
+
+    if (certificateStore = CertOpenStore(CERT_STORE_PROV_SYSTEM, 0, NULL, CERT_SYSTEM_STORE_CURRENT_USER, L"Root"))
+    {
+        mbedtls_x509_crt* previousCertificate = NULL;
+        mbedtls_x509_crt* currentCertificate  = NULL;
+        PCCERT_CONTEXT    certificateContext  = NULL;
+
+        if (certificateContext = CertEnumCertificatesInStore(certificateStore, certificateContext))
+        {
+            if (certificateContext->dwCertEncodingType & X509_ASN_ENCODING)
+            {
+                ca_chain            = extract_cert(certificateContext);
+                previousCertificate = ca_chain;
+            }
+
+            while (certificateContext = CertEnumCertificatesInStore(certificateStore, certificateContext))
+            {
+                if (certificateContext->dwCertEncodingType & X509_ASN_ENCODING)
+                {
+                    currentCertificate        = extract_cert(certificateContext);
+                    previousCertificate->next = currentCertificate;
+                    previousCertificate       = currentCertificate;
+                }
+            }
+
+            if (!CertCloseStore(certificateStore, 0))
+            {
+                return NULL;
+            }
+        }
+    }
+    else
+    {
+        return NULL;
+    }
+
+    return ca_chain;
 }
 
 /**
@@ -373,6 +467,26 @@ int __cdecl main(int argc, char* argv[])
         return 1;
     }
 
+    // init mbed tls
+    mbedtls_net_init(&server_fd);
+    mbedtls_ssl_init(&ssl);
+    mbedtls_ssl_config_init(&conf);
+    mbedtls_x509_crt_init(&cacert);
+    mbedtls_ctr_drbg_init(&ctr_drbg);
+    mbedtls_entropy_init(&entropy);
+
+    const char* pers = "xiloader";
+
+    if ((ret = mbedtls_ctr_drbg_seed(&ctr_drbg, mbedtls_entropy_func, &entropy,
+                                     (const unsigned char*)pers,
+                                     strlen(pers))) != 0)
+    {
+        xiloader::console::output(xiloader::color::error, "mbedtls_ctr_drbg_seed failed!");
+        return 1;
+    }
+
+    ca_chain = build_windows_ca_chain();
+
     /* Attempt to resolve the server address.. */
     ULONG ulAddress = 0;
     if (xiloader::network::ResolveHostname(g_ServerAddress.c_str(), &ulAddress))
@@ -381,7 +495,7 @@ int __cdecl main(int argc, char* argv[])
 
         /* Attempt to create socket to server..*/
         xiloader::datasocket sock;
-        if (xiloader::network::CreateConnection(&sock, g_LoginAuthPort.c_str()))
+        if (xiloader::network::CreateAuthConnection(&sock, g_LoginAuthPort.c_str()))
         {
             /* Attempt to verify the users account info.. */
             while (!xiloader::network::VerifyAccount(&sock))
@@ -476,6 +590,15 @@ int __cdecl main(int argc, char* argv[])
     {
         xiloader::console::output(xiloader::color::error, "Failed to resolve server hostname.");
     }
+
+    mbedtls_net_free(&server_fd);
+    mbedtls_ssl_free(&ssl);
+    mbedtls_ssl_config_free(&conf);
+    mbedtls_ctr_drbg_free(&ctr_drbg);
+    mbedtls_entropy_free(&entropy);
+    mbedtls_x509_crt_free(&cacert);
+
+    delete ca_chain;
 
     /* Detach detour for gethostbyname. */
     DetourTransactionBegin();

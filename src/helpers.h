@@ -1,4 +1,3 @@
-#include <cstddef>
 /*
 ===========================================================================
 
@@ -22,6 +21,7 @@ along with this program.  If not, see http://www.gnu.org/licenses/
 #pragma once
 
 #include <cstddef>
+
 template <typename T, typename U>
 T& ref(U* buf, std::size_t index)
 {

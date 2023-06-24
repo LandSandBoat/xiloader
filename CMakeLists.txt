@@ -19,9 +19,7 @@ endif()
 include(cmake/CPM.cmake)
 include(cmake/detours.cmake)
 include(cmake/argparse.cmake)
-
-# TODO: Add TLS support
-#include(cmake/wolfssl.cmake)
+include(cmake/mbedtls.cmake)
 
 # xiloader
 add_executable(xiloader
@@ -40,7 +38,17 @@ add_executable(xiloader
 set_target_properties(xiloader PROPERTIES LINK_FLAGS "/LARGEADDRESSAWARE")
 
 target_include_directories(xiloader PUBLIC ${PROJECT_SOURCE_DIR}/xiloader)
-target_link_libraries(xiloader PUBLIC detours argparse psapi ws2_32 iphlpapi)
+
+target_link_libraries(xiloader PUBLIC
+    detours
+	argparse
+	crypt32
+	psapi
+	ws2_32
+	iphlpapi
+	MbedTLS::mbedtls
+	MbedTLS::mbedcrypto
+	MbedTLS::mbedx509)
 
 message(STATUS "CMAKE_VERSION: ${CMAKE_VERSION}")
 message(STATUS "CMAKE_BUILD_TYPE: ${CMAKE_BUILD_TYPE}")
