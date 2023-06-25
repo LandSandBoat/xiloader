@@ -34,35 +34,41 @@ This file is part of DarkStar-server source code.
 #include "argparse/argparse.hpp"
 
 /* Global Variables */
-xiloader::Language g_Language = xiloader::Language::English; // The language of the loader to be used for polcore.
-std::string g_ServerAddress   = "127.0.0.1";                 // The server address to connect to.
-std::string g_ServerPort      = "51220";                     // The server lobby server port to connect to.
-std::string g_LoginDataPort   = "54230";                     // Login server data port to connect to
-std::string g_LoginViewPort   = "54001";                     // Login view port to connect to
-std::string g_LoginAuthPort   = "54231";                     // Login auth port to connect to
-std::string g_Username        = "";                          // The username being logged in with.
-std::string g_Password        = "";                          // The password being logged in with.
-char        g_SessionHash[16] = {};                          // Session hash sent from auth
-std::string g_Email           = "";                          // Email, currently unused
-std::string g_VersionNumber   = "1.0.0";                     // xiloader version number sent to auth server. Must be x.x.x with single characters for 'x'
+namespace globals
+{
+    xiloader::Language g_Language        = xiloader::Language::English; // The language of the loader to be used for polcore.
+    std::string        g_ServerAddress   = "127.0.0.1";                 // The server address to connect to.
+    std::string        g_ServerPort      = "51220";                     // The server lobby server port to connect to.
+    std::string        g_LoginDataPort   = "54230";                     // Login server data port to connect to
+    std::string        g_LoginViewPort   = "54001";                     // Login view port to connect to
+    std::string        g_LoginAuthPort   = "54231";                     // Login auth port to connect to
+    std::string        g_Username        = "";                          // The username being logged in with.
+    std::string        g_Password        = "";                          // The password being logged in with.
+    char               g_SessionHash[16] = {};                          // Session hash sent from auth
+    std::string        g_Email           = "";                          // Email, currently unused
+    std::string        g_VersionNumber   = "1.0.0";                     // xiloader version number sent to auth server. Must be x.x.x with single characters for 'x'
 
-char* g_CharacterList   = NULL;  // Pointer to the character list data being sent from the server.
-bool  g_IsRunning     = false; // Flag to determine if the network threads should hault.
-bool  g_Hide          = false; // Determines whether or not to hide the console window after FFXI starts.
+    char* g_CharacterList = NULL;  // Pointer to the character list data being sent from the server.
+    bool  g_IsRunning     = false; // Flag to determine if the network threads should hault.
+    bool  g_Hide          = false; // Determines whether or not to hide the console window after FFXI starts.
 
-/* Hairpin Fix Variables */
-DWORD g_NewServerAddress; // Hairpin server address to be overriden with.
-DWORD g_HairpinReturnAddress; // Hairpin return address to allow the code cave to return properly.
+    /* Hairpin Fix Variables */
+    DWORD g_NewServerAddress;     // Hairpin server address to be overriden with.
+    DWORD g_HairpinReturnAddress; // Hairpin return address to allow the code cave to return properly.
+};
 
-// mbed tls state
-mbedtls_net_context      server_fd = {};
-mbedtls_entropy_context  entropy   = {};
-mbedtls_ctr_drbg_context ctr_drbg  = {};
-mbedtls_ssl_context      ssl       = {};
-mbedtls_ssl_config       conf      = {};
-mbedtls_x509_crt         cacert    = {};
-mbedtls_x509_crt*        ca_chain  = {};
+namespace sslState
+{
+    // mbed tls state
+    mbedtls_net_context      server_fd = {};
+    mbedtls_entropy_context  entropy   = {};
+    mbedtls_ctr_drbg_context ctr_drbg  = {};
+    mbedtls_ssl_context      ssl       = {};
+    mbedtls_ssl_config       conf      = {};
+    mbedtls_x509_crt         cacert    = {};
+    mbedtls_x509_crt*        ca_chain  = {};
 
+}; // namespace globals
 /**
  * @brief Detour function definitions.
  */
@@ -79,10 +85,10 @@ extern "C"
  */
 __declspec(naked) void HairpinFixCave(void)
 {
-    __asm mov eax, g_NewServerAddress
+    __asm mov eax, globals::g_NewServerAddress
     __asm mov [edx + 0x012E90], eax
     __asm mov [edx], eax
-    __asm jmp g_HairpinReturnAddress
+    __asm jmp globals::g_HairpinReturnAddress
 }
 
 /**
@@ -103,7 +109,7 @@ DWORD ApplyHairpinFixThread(LPVOID lpParam)
     } while (GetModuleHandleA("FFXiMain.dll") == NULL);
 
     /* Convert server address.. */
-    xiloader::network::ResolveHostname(g_ServerAddress.c_str(), &g_NewServerAddress);
+    xiloader::network::ResolveHostname(globals::g_ServerAddress.c_str(), &globals::g_NewServerAddress);
 
     // Locate the main hairpin location..
     //
@@ -136,7 +142,7 @@ DWORD ApplyHairpinFixThread(LPVOID lpParam)
 
     /* Apply the hairpin fix.. */
     auto caveDest = ((int)HairpinFixCave - ((int)hairpinAddress)) - 5;
-    g_HairpinReturnAddress = hairpinAddress + 0x08;
+    globals::g_HairpinReturnAddress = hairpinAddress + 0x08;
 
     *(BYTE*)(hairpinAddress + 0x00) = 0xE9; // jmp
     *(UINT*)(hairpinAddress + 0x01) = caveDest;
@@ -164,7 +170,7 @@ hostent* __stdcall Mine_gethostbyname(const char* name)
 
     if (!strcmp("ffxi00.pol.com", name))
     {
-        return Real_gethostbyname(g_ServerAddress.c_str());
+        return Real_gethostbyname(globals::g_ServerAddress.c_str());
     }
 
     if (!strcmp("pp000.pol.com", name))
@@ -224,7 +230,7 @@ int WINAPI Mine_send(SOCKET s, const char* buf, int len, int flags)
     if (isLobbyCommand(buf))
     {
         // always send server provided session hash in packets with XIFF commands and is a lobby command
-        std::memcpy((char*)buf + 12, g_SessionHash, 16);
+        std::memcpy((char*)buf + 12, globals::g_SessionHash, 16);
     }
 
     return Real_send(s, buf, len, flags);
@@ -258,7 +264,7 @@ int WINAPI Mine_connect(SOCKET s, const sockaddr* name, int namelen)
  */
 inline DWORD FindINETMutex(void)
 {
-    const char* module = (g_Language == xiloader::Language::European) ? "polcoreeu.dll" : "polcore.dll";
+    const char* module = (globals::g_Language == xiloader::Language::European) ? "polcoreeu.dll" : "polcore.dll";
     auto result = (DWORD)xiloader::functions::FindPattern(module, (BYTE*)"\x8B\x56\x2C\x8B\x46\x28\x8B\x4E\x24\x52\x50\x51", "xxxxxxxxxxxx");
     return (*(DWORD*)(result - 4) + (result));
 }
@@ -270,7 +276,7 @@ inline DWORD FindINETMutex(void)
  */
 inline DWORD FindPolConn(void)
 {
-    const char* module = (g_Language == xiloader::Language::European) ? "polcoreeu.dll" : "polcore.dll";
+    const char* module = (globals::g_Language == xiloader::Language::European) ? "polcoreeu.dll" : "polcore.dll";
     auto result = (DWORD)xiloader::functions::FindPattern(module, (BYTE*)"\x81\xC6\x38\x03\x00\x00\x83\xC4\x04\x81\xFE", "xxxxxxxxxxx");
     return (*(DWORD*)(result - 10));
 }
@@ -387,16 +393,16 @@ int __cdecl main(int argc, char* argv[])
         std::exit(1);
     }
 
-    g_ServerAddress = args.is_used("--server") ? args.get<std::string>("--server") : g_ServerAddress;
-    g_ServerPort    = args.is_used("--serverport") ? args.get<std::string>("--serverport") : g_ServerPort;
+    globals::g_ServerAddress = args.is_used("--server") ? args.get<std::string>("--server") : globals::g_ServerAddress;
+    globals::g_ServerPort    = args.is_used("--serverport") ? args.get<std::string>("--serverport") : globals::g_ServerPort;
 
-    g_LoginDataPort = args.is_used("--dataport") ? args.get<std::string>("--dataport") : g_LoginDataPort;
-    g_LoginViewPort = args.is_used("--viewport") ? args.get<std::string>("--viewport") : g_LoginViewPort;
-    g_LoginAuthPort = args.is_used("--authport") ? args.get<std::string>("--authport") : g_LoginAuthPort;
+    globals::g_LoginDataPort = args.is_used("--dataport") ? args.get<std::string>("--dataport") : globals::g_LoginDataPort;
+    globals::g_LoginViewPort = args.is_used("--viewport") ? args.get<std::string>("--viewport") : globals::g_LoginViewPort;
+    globals::g_LoginAuthPort = args.is_used("--authport") ? args.get<std::string>("--authport") : globals::g_LoginAuthPort;
 
-    g_Username = args.is_used("--user") ? args.get<std::string>("--user") : g_Username;
-    g_Password = args.is_used("--pass") ? args.get<std::string>("--pass") : g_Password;
-    g_Email    = args.is_used("--email") ? args.get<std::string>("--email") : g_Email;
+    globals::g_Username = args.is_used("--user") ? args.get<std::string>("--user") : globals::g_Username;
+    globals::g_Password = args.is_used("--pass") ? args.get<std::string>("--pass") : globals::g_Password;
+    globals::g_Email    = args.is_used("--email") ? args.get<std::string>("--email") : globals::g_Email;
 
     if (args.is_used("--lang"))
     {
@@ -404,21 +410,21 @@ int __cdecl main(int argc, char* argv[])
 
         if (!_strnicmp(language.c_str(), "JP", 2) || !_strnicmp(language.c_str(), "0", 1))
         {
-            g_Language = xiloader::Language::Japanese;
+            globals::g_Language = xiloader::Language::Japanese;
         }
         if (!_strnicmp(language.c_str(), "US", 2) || !_strnicmp(language.c_str(), "1", 1))
         {
-            g_Language = xiloader::Language::English;
+            globals::g_Language = xiloader::Language::English;
         }
         if (!_strnicmp(language.c_str(), "EU", 2) || !_strnicmp(language.c_str(), "2", 1))
         {
-            g_Language = xiloader::Language::European;
+            globals::g_Language = xiloader::Language::European;
         }
     }
 
     bool bUseHairpinFix = args.is_used("--hairpin") ? args.get<bool>("--hairpin") : false;
 
-    g_Hide = args.is_used("--hide") ? args.get<bool>("--hide") : g_Hide;
+    globals::g_Hide = args.is_used("--hide") ? args.get<bool>("--hide") : globals::g_Hide;
 
     /* Output the banner.. */
     time_t currentTime = time(NULL);
@@ -468,16 +474,16 @@ int __cdecl main(int argc, char* argv[])
     }
 
     // init mbed tls
-    mbedtls_net_init(&server_fd);
-    mbedtls_ssl_init(&ssl);
-    mbedtls_ssl_config_init(&conf);
-    mbedtls_x509_crt_init(&cacert);
-    mbedtls_ctr_drbg_init(&ctr_drbg);
-    mbedtls_entropy_init(&entropy);
+    mbedtls_net_init(&sslState::server_fd);
+    mbedtls_ssl_init(&sslState::ssl);
+    mbedtls_ssl_config_init(&sslState::conf);
+    mbedtls_x509_crt_init(&sslState::cacert);
+    mbedtls_ctr_drbg_init(&sslState::ctr_drbg);
+    mbedtls_entropy_init(&sslState::entropy);
 
     const char* pers = "xiloader";
 
-    if ((ret = mbedtls_ctr_drbg_seed(&ctr_drbg, mbedtls_entropy_func, &entropy,
+    if ((ret = mbedtls_ctr_drbg_seed(&sslState::ctr_drbg, mbedtls_entropy_func, &sslState::entropy,
                                      (const unsigned char*)pers,
                                      strlen(pers))) != 0)
     {
@@ -485,17 +491,17 @@ int __cdecl main(int argc, char* argv[])
         return 1;
     }
 
-    ca_chain = build_windows_ca_chain();
+    sslState::ca_chain = build_windows_ca_chain();
 
     /* Attempt to resolve the server address.. */
     ULONG ulAddress = 0;
-    if (xiloader::network::ResolveHostname(g_ServerAddress.c_str(), &ulAddress))
+    if (xiloader::network::ResolveHostname(globals::g_ServerAddress.c_str(), &ulAddress))
     {
-        g_ServerAddress = inet_ntoa(*((struct in_addr*)&ulAddress));
+        globals::g_ServerAddress = inet_ntoa(*((struct in_addr*)&ulAddress));
 
         /* Attempt to create socket to server..*/
         xiloader::datasocket sock;
-        if (xiloader::network::CreateAuthConnection(&sock, g_LoginAuthPort.c_str()))
+        if (xiloader::network::CreateAuthConnection(&sock, globals::g_LoginAuthPort.c_str()))
         {
             /* Attempt to verify the users account info.. */
             while (!xiloader::network::VerifyAccount(&sock))
@@ -508,13 +514,13 @@ int __cdecl main(int argc, char* argv[])
             }
 
             /* Create listen servers.. */
-            g_IsRunning = true;
+            globals::g_IsRunning = true;
             HANDLE hFFXiServer = CreateThread(NULL, 0, xiloader::network::FFXiServer, &sock, 0, NULL);
             HANDLE hPolServer = CreateThread(NULL, 0, xiloader::network::PolServer, NULL, 0, NULL);
 
             /* Attempt to create polcore instance..*/
             IPOLCoreCom* polcore = NULL;
-            if (CoCreateInstance(xiloader::CLSID_POLCoreCom[g_Language], NULL, 0x17, xiloader::IID_IPOLCoreCom[g_Language], (LPVOID*)&polcore) != S_OK)
+            if (CoCreateInstance(xiloader::CLSID_POLCoreCom[globals::g_Language], NULL, 0x17, xiloader::IID_IPOLCoreCom[globals::g_Language], (LPVOID*)&polcore) != S_OK)
             {
                 xiloader::console::output(xiloader::color::error, "Failed to initialize instance of polcore!");
             }
@@ -522,10 +528,10 @@ int __cdecl main(int argc, char* argv[])
             {
                 /* Invoke the setup functions for polcore.. */
                 //Create string for the login view port
-                std::string polcorecmd = " /game eAZcFcB -net 3 -port " + g_LoginViewPort;
+                std::string polcorecmd = " /game eAZcFcB -net 3 -port " + globals::g_LoginViewPort;
                 //Cast to an LPSTR
                 LPSTR cmd = const_cast<char*>(polcorecmd.c_str());
-                polcore->SetAreaCode(g_Language);
+                polcore->SetAreaCode(globals::g_Language);
                 polcore->SetParamInit(GetModuleHandle(NULL), cmd);
 
                 /* Obtain the common function table.. */
@@ -544,13 +550,13 @@ int __cdecl main(int argc, char* argv[])
                 memcpy(polConnection + 0x48, &enc, sizeof(char**));
 
                 /* Locate the character storage buffer.. */
-                g_CharacterList = (char*)FindCharacters((void **)lpCommandTable);
+                globals::g_CharacterList = (char*)FindCharacters((void**)lpCommandTable);
 
                 /* Invoke the setup functions for polcore.. */
-                lpCommandTable[POLFUNC_REGISTRY_LANG](g_Language);
-                lpCommandTable[POLFUNC_FFXI_LANG](xiloader::functions::GetRegistryPlayOnlineLanguage(g_Language));
-                lpCommandTable[POLFUNC_REGISTRY_KEY](xiloader::functions::GetRegistryPlayOnlineKey(g_Language));
-                lpCommandTable[POLFUNC_INSTALL_FOLDER](xiloader::functions::GetRegistryPlayOnlineInstallFolder(g_Language));
+                lpCommandTable[POLFUNC_REGISTRY_LANG](globals::g_Language);
+                lpCommandTable[POLFUNC_FFXI_LANG](xiloader::functions::GetRegistryPlayOnlineLanguage(globals::g_Language));
+                lpCommandTable[POLFUNC_REGISTRY_KEY](xiloader::functions::GetRegistryPlayOnlineKey(globals::g_Language));
+                lpCommandTable[POLFUNC_INSTALL_FOLDER](xiloader::functions::GetRegistryPlayOnlineInstallFolder(globals::g_Language));
                 lpCommandTable[POLFUNC_INET_MUTEX]();
 
                 /* Attempt to create FFXi instance..*/
@@ -575,7 +581,7 @@ int __cdecl main(int argc, char* argv[])
             }
 
             /* Cleanup threads.. */
-            g_IsRunning = false;
+            globals::g_IsRunning = false;
             TerminateThread(hFFXiServer, 0);
             TerminateThread(hPolServer, 0);
 
@@ -591,14 +597,14 @@ int __cdecl main(int argc, char* argv[])
         xiloader::console::output(xiloader::color::error, "Failed to resolve server hostname.");
     }
 
-    mbedtls_net_free(&server_fd);
-    mbedtls_ssl_free(&ssl);
-    mbedtls_ssl_config_free(&conf);
-    mbedtls_ctr_drbg_free(&ctr_drbg);
-    mbedtls_entropy_free(&entropy);
-    mbedtls_x509_crt_free(&cacert);
+    mbedtls_net_free(&sslState::server_fd);
+    mbedtls_ssl_free(&sslState::ssl);
+    mbedtls_ssl_config_free(&sslState::conf);
+    mbedtls_ctr_drbg_free(&sslState::ctr_drbg);
+    mbedtls_entropy_free(&sslState::entropy);
+    mbedtls_x509_crt_free(&sslState::cacert);
 
-    delete ca_chain;
+    delete sslState::ca_chain;
 
     /* Detach detour for gethostbyname. */
     DetourTransactionBegin();

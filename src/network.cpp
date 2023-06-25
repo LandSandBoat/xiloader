@@ -27,27 +27,35 @@ This file is part of DarkStar-server source code.
 #include <vector>
 
 /* Externals */
-extern std::string g_ServerAddress;
-extern std::string g_Username;
-extern std::string g_Password;
-extern char        g_SessionHash[16];
-extern std::string g_Email;
-extern std::string g_VersionNumber;
-extern std::string g_ServerPort;
-extern std::string g_LoginDataPort;
-extern std::string g_LoginViewPort;
-extern std::string g_LoginAuthPort;
-extern char*       g_CharacterList;
-extern bool        g_IsRunning;
+namespace globals
+{
+
+    extern std::string g_ServerAddress;
+    extern std::string g_Username;
+    extern std::string g_Password;
+    extern char        g_SessionHash[16];
+    extern std::string g_Email;
+    extern std::string g_VersionNumber;
+    extern std::string g_ServerPort;
+    extern std::string g_LoginDataPort;
+    extern std::string g_LoginViewPort;
+    extern std::string g_LoginAuthPort;
+    extern char*       g_CharacterList;
+    extern bool        g_IsRunning;
+}
 
 // mbed tls state
-extern mbedtls_net_context      server_fd;
-extern mbedtls_entropy_context  entropy;
-extern mbedtls_ctr_drbg_context ctr_drbg;
-extern mbedtls_ssl_context      ssl;
-extern mbedtls_ssl_config       conf;
-extern mbedtls_x509_crt         cacert;
-extern mbedtls_x509_crt*        ca_chain;
+namespace sslState
+{
+
+    extern mbedtls_net_context      server_fd;
+    extern mbedtls_entropy_context  entropy;
+    extern mbedtls_ctr_drbg_context ctr_drbg;
+    extern mbedtls_ssl_context      ssl;
+    extern mbedtls_ssl_config       conf;
+    extern mbedtls_x509_crt         cacert;
+    extern mbedtls_x509_crt*        ca_chain;
+};
 
 namespace xiloader
 {
@@ -70,7 +78,7 @@ namespace xiloader
 
         /* Attempt to get the server information. */
         struct addrinfo* addr = NULL;
-        if (getaddrinfo(g_ServerAddress.c_str(), port, &hints, &addr))
+        if (getaddrinfo(globals::g_ServerAddress.c_str(), port, &hints, &addr))
         {
             xiloader::console::output(xiloader::color::error, "Failed to obtain remote server information.");
             return 0;
@@ -115,7 +123,7 @@ namespace xiloader
         }
 
         sock->LocalAddress  = inet_addr(localAddress.c_str());
-        sock->ServerAddress = inet_addr(g_ServerAddress.c_str());
+        sock->ServerAddress = inet_addr(globals::g_ServerAddress.c_str());
 
         return 1;
     }
@@ -139,40 +147,40 @@ namespace xiloader
 
         /* Attempt to get the server information. */
         struct addrinfo* addr = NULL;
-        if (getaddrinfo(g_ServerAddress.c_str(), port, &hints, &addr))
+        if (getaddrinfo(globals::g_ServerAddress.c_str(), port, &hints, &addr))
         {
             xiloader::console::output(xiloader::color::error, "Failed to obtain remote server information.");
             return 0;
         }
 
-        if ((mbedtls_net_connect(&server_fd, g_ServerAddress.c_str(), port, MBEDTLS_NET_PROTO_TCP)) != 0)
+        if ((mbedtls_net_connect(&sslState::server_fd, globals::g_ServerAddress.c_str(), port, MBEDTLS_NET_PROTO_TCP)) != 0)
         {
             xiloader::console::output(xiloader::color::error, "mbedtls_net_connect failed.");
             return 0;
         }
 
-        if (mbedtls_ssl_config_defaults(&conf, MBEDTLS_SSL_IS_CLIENT, MBEDTLS_SSL_TRANSPORT_STREAM, MBEDTLS_SSL_PRESET_DEFAULT) != 0)
+        if (mbedtls_ssl_config_defaults(&sslState::conf, MBEDTLS_SSL_IS_CLIENT, MBEDTLS_SSL_TRANSPORT_STREAM, MBEDTLS_SSL_PRESET_DEFAULT) != 0)
         {
             xiloader::console::output(xiloader::color::error, "mbedtls_ssl_config_defaults failed.");
             return 0;
         }
 
         // MBEDTLS_SSL_VERIFY_OPTIONAL provides warnings, but doesn't stop connections.
-        mbedtls_ssl_conf_authmode(&conf, MBEDTLS_SSL_VERIFY_OPTIONAL);
-        mbedtls_ssl_conf_ca_chain(&conf, ca_chain, NULL);
-        mbedtls_ssl_conf_rng(&conf, mbedtls_ctr_drbg_random, &ctr_drbg);
+        mbedtls_ssl_conf_authmode(&sslState::conf, MBEDTLS_SSL_VERIFY_OPTIONAL);
+        mbedtls_ssl_conf_ca_chain(&sslState::conf, sslState::ca_chain, NULL);
+        mbedtls_ssl_conf_rng(&sslState::conf, mbedtls_ctr_drbg_random, &sslState::ctr_drbg);
 
         int ret = 0;
 
-        if ((ret = mbedtls_ssl_setup(&ssl, &conf)) != 0)
+        if ((ret = mbedtls_ssl_setup(&sslState::ssl, &sslState::conf)) != 0)
         {
             xiloader::console::output(xiloader::color::error, "mbedtls_ssl_setup returned %d", ret);
             return 0;
         }
 
-        mbedtls_ssl_set_bio(&ssl, &server_fd, mbedtls_net_send, mbedtls_net_recv, NULL);
+        mbedtls_ssl_set_bio(&sslState::ssl, &sslState::server_fd, mbedtls_net_send, mbedtls_net_recv, NULL);
 
-        while ((ret = mbedtls_ssl_handshake(&ssl)) != 0)
+        while ((ret = mbedtls_ssl_handshake(&sslState::ssl)) != 0)
         {
             if (ret != MBEDTLS_ERR_SSL_WANT_READ && ret != MBEDTLS_ERR_SSL_WANT_WRITE)
             {
@@ -183,7 +191,7 @@ namespace xiloader
 
         uint32_t flags = 0;
 
-        if ((flags = mbedtls_ssl_get_verify_result(&ssl)) != 0)
+        if ((flags = mbedtls_ssl_get_verify_result(&sslState::ssl)) != 0)
         {
             char vrfy_buf[512];
 
@@ -194,17 +202,17 @@ namespace xiloader
         }
         else
         {
-            xiloader::console::output(xiloader::color::info, "Remote server (%s) certificate is valid.", g_ServerAddress.c_str());
+            xiloader::console::output(xiloader::color::info, "Remote server (%s) certificate is valid.", globals::g_ServerAddress.c_str());
         }
 
         sockaddr clientAddr  = {};
         int      sockaddrLen = sizeof(clientAddr);
-        getsockname(static_cast<SOCKET>(server_fd.fd), &clientAddr, &sockaddrLen);
+        getsockname(static_cast<SOCKET>(sslState::server_fd.fd), &clientAddr, &sockaddrLen);
 
         struct sockaddr_in* their_inaddr_ptr = (struct sockaddr_in*)&clientAddr;
 
         sock->LocalAddress  = their_inaddr_ptr->sin_addr.S_un.S_addr;
-        sock->ServerAddress = inet_addr(g_ServerAddress.c_str());
+        sock->ServerAddress = inet_addr(globals::g_ServerAddress.c_str());
 
         return 1;
     }
@@ -334,7 +342,7 @@ namespace xiloader
         }*/
 
         /* Determine if we should auto-login.. */
-        bool bUseAutoLogin = !g_Username.empty() && !g_Password.empty() && bFirstLogin;
+        bool bUseAutoLogin = !globals::g_Username.empty() && !globals::g_Password.empty() && bFirstLogin;
         if (bUseAutoLogin)
             xiloader::console::output(xiloader::color::lightgreen, "Autologin activated!");
 
@@ -359,9 +367,9 @@ namespace xiloader
                     xiloader::console::output("Before resetting your password, first verify your account details.");
                 xiloader::console::output("Please enter your login information.");
                 std::cout << "\nUsername: ";
-                std::cin >> g_Username;
+                std::cin >> globals::g_Username;
                 std::cout << "Password: ";
-                g_Password.clear();
+                globals::g_Password.clear();
 
                 /* Read in each char and instead of displaying it. display a "*" */
                 char ch;
@@ -371,15 +379,15 @@ namespace xiloader
                         continue;
                     else if (ch == '\b')
                     {
-                        if (g_Password.size())
+                        if (globals::g_Password.size())
                         {
-                            g_Password.pop_back();
+                            globals::g_Password.pop_back();
                             std::cout << "\b \b";
                         }
                     }
                     else
                     {
-                        g_Password.push_back(ch);
+                        globals::g_Password.push_back(ch);
                         std::cout << '*';
                     }
                 }
@@ -392,7 +400,7 @@ namespace xiloader
                     std::string confirmed_password = "";
                     do
                     {
-                        std::cout << "Enter new password (6-15 characters): ";
+                        std::cout << "Enter new password (6-32 characters): ";
                         confirmed_password = "";
                         new_password       = "";
                         std::cin >> new_password;
@@ -407,7 +415,7 @@ namespace xiloader
                     } while (new_password != confirmed_password);
                     new_password = confirmed_password;
                 }
-                sendBuffer[0x29] = event_code;
+                sendBuffer[0x39] = event_code;
             }
             /* User wants to create a new account.. */
             else if (input == "2")
@@ -415,21 +423,21 @@ namespace xiloader
             create_account:
                 xiloader::console::output("Please enter your desired login information.");
                 std::cout << "\nUsername (3-15 characters): ";
-                std::cin >> g_Username;
-                std::cout << "Password (6-15 characters): ";
-                g_Password.clear();
-                std::cin >> g_Password;
+                std::cin >> globals::g_Username;
+                std::cout << "Password (6-32 characters): ";
+                globals::g_Password.clear();
+                std::cin >> globals::g_Password;
                 std::cout << "Repeat Password           : ";
                 std::cin >> input;
                 std::cout << std::endl;
 
-                if (input != g_Password)
+                if (input != globals::g_Password)
                 {
                     xiloader::console::output(xiloader::color::error, "Passwords did not match! Please try again.");
                     goto create_account;
                 }
 
-                sendBuffer[0x29] = 0x20;
+                sendBuffer[0x39] = 0x20;
             }
 
             std::cout << std::endl;
@@ -437,7 +445,7 @@ namespace xiloader
         else
         {
             /* User has auto-login enabled.. */
-            sendBuffer[0x29] = 0x10;
+            sendBuffer[0x39] = 0x10;
             bFirstLogin = false;
         }
 
@@ -453,84 +461,91 @@ namespace xiloader
         sendBuffer[8] = 0x00;
 
         /* Copy username and password into buffer.. */
-        memcpy(sendBuffer + 0x09, g_Username.c_str(), 16);
-        memcpy(sendBuffer + 0x19, g_Password.c_str(), 16);
+        memcpy(sendBuffer + 0x09, globals::g_Username.c_str(), globals::g_Username.length());
+        memcpy(sendBuffer + 0x19, globals::g_Password.c_str(), globals::g_Password.length());
 
         /* Copy changed password into buffer */
-        memcpy(sendBuffer + 0x30, new_password.c_str(), 16);
+        memcpy(sendBuffer + 0x40, new_password.c_str(), 16);
 
-        // 17 byte wide reserved space starting at 0x40
+        // 17 byte wide reserved space starting at 0x50
 
         /* Copy version number into buffer */
-        memcpy(sendBuffer + 0x51, g_VersionNumber.c_str(), 5);
+        memcpy(sendBuffer + 0x61, globals::g_VersionNumber.c_str(), 5);
 
         /* Send info to server and obtain response.. */
-        mbedtls_ssl_write(&ssl, reinterpret_cast<const unsigned char*>(sendBuffer), 86);
-        mbedtls_ssl_read(&ssl, recvBuffer, 21);
-        //send(sock->s, sendBuffer, 86, 0);
-        //recv(sock->s, recvBuffer, 21, 0);
+        mbedtls_ssl_write(&sslState::ssl, reinterpret_cast<const unsigned char*>(sendBuffer), 102);
+        mbedtls_ssl_read(&sslState::ssl, recvBuffer, 21);
 
         /* Handle the obtained result.. */
         switch (recvBuffer[0])
         {
             case 0x0001: // Success (Login)
-                xiloader::console::output(xiloader::color::success, "Successfully logged in as %s!", g_Username.c_str());
+            {
+                xiloader::console::output(xiloader::color::success, "Successfully logged in as %s!", globals::g_Username.c_str());
 
                 sock->AccountId = ref<UINT32>(recvBuffer, 1);
-                std::memcpy(&g_SessionHash, recvBuffer + 5, sizeof(g_SessionHash));
+                std::memcpy(&globals::g_SessionHash, recvBuffer + 5, sizeof(globals::g_SessionHash));
 
                 shutdown(sock->s, SD_BOTH);
                 closesocket(sock->s);
                 sock->s = INVALID_SOCKET;
                 return true;
-
+            }
             case 0x0002: // Error (Login)
+            {
                 xiloader::console::output(xiloader::color::error, "Failed to login. Invalid username or password.");
                 closesocket(sock->s);
                 sock->s = INVALID_SOCKET;
                 return false;
-
+            }
             case 0x0003: // Success (Create Account)
+            {
                 xiloader::console::output(xiloader::color::success, "Account successfully created!");
                 closesocket(sock->s);
                 sock->s = INVALID_SOCKET;
                 return false;
-
+            }
             case 0x0004: // Error (Create Account)
+            {
                 xiloader::console::output(xiloader::color::error, "Failed to create the new account. Username already taken.");
                 closesocket(sock->s);
                 sock->s = INVALID_SOCKET;
                 return false;
-
+            }
             case 0x0006: // Success (Changed Password)
+            {
                 xiloader::console::output(xiloader::color::success, "Password updated successfully!");
                 std::cout << std::endl;
-                g_Password.clear();
+                globals::g_Password.clear();
                 closesocket(sock->s);
                 sock->s = INVALID_SOCKET;
                 return false;
-
+            }
             case 0x0007: // Error (Changed Password)
+            {
                 xiloader::console::output(xiloader::color::error, "Failed to change password.");
                 std::cout << std::endl;
-                g_Password.clear();
+                globals::g_Password.clear();
                 closesocket(sock->s);
                 sock->s = INVALID_SOCKET;
                 return false;
-
+            }
             // Gap for previously used command codes
 
             case 0x000A:
+            {
                 xiloader::console::output(xiloader::color::error, "Failed to login. Account already logged in.");
                 closesocket(sock->s);
                 sock->s = INVALID_SOCKET;
                 return false;
-
+            }
             case 0x000B:
+            {
                 xiloader::console::output(xiloader::color::error, "Failed to login. Expected xiloader version mismatch; check with your provider.");
                 closesocket(sock->s);
                 sock->s = INVALID_SOCKET;
                 return false;
+            }
         }
 
         /* We should not get here.. */
@@ -559,7 +574,7 @@ namespace xiloader
 
         // send session hash
         sendBuffer[0] = 0xFE;
-        memcpy(sendBuffer + 12, g_SessionHash, 16);
+        memcpy(sendBuffer + 12, globals::g_SessionHash, 16);
 
         auto result = send(sock->s, sendBuffer, 28, 0);
         if (result == SOCKET_ERROR)
@@ -573,7 +588,7 @@ namespace xiloader
         }
         memset(sendBuffer, 0, 28);
 
-        while (g_IsRunning)
+        while (globals::g_IsRunning)
         {
             /* Attempt to receive the incoming data.. */
             if (recvfrom(sock->s, recvBuffer, sizeof(recvBuffer), 0, (struct sockaddr*)&client, (int*)&socksize) <= 0)
@@ -595,7 +610,7 @@ namespace xiloader
                 sendBuffer[0] = 0xA1u;
                 memcpy(sendBuffer + 0x01, &sock->AccountId, 4);
                 memcpy(sendBuffer + 0x05, &sock->ServerAddress, 4);
-                memcpy(sendBuffer + 12, g_SessionHash, 16);
+                memcpy(sendBuffer + 12, globals::g_SessionHash, 16);
 
                 xiloader::console::output(xiloader::color::warning, "Sending account id..");
                 sendSize = 28;
@@ -613,15 +628,15 @@ namespace xiloader
                 xiloader::console::output(xiloader::color::warning, "Receiving character list..");
                 for (auto x = 0; x < recvBuffer[1]; x++)
                 {
-                    g_CharacterList[0x00 + (x * 0x68)] = 1;
-                    g_CharacterList[0x02 + (x * 0x68)] = 1;
-                    g_CharacterList[0x10 + (x * 0x68)] = (char)x;
-                    g_CharacterList[0x11 + (x * 0x68)] = 0x80u;
-                    g_CharacterList[0x18 + (x * 0x68)] = 0x20;
-                    g_CharacterList[0x28 + (x * 0x68)] = 0x20;
+                    globals::g_CharacterList[0x00 + (x * 0x68)] = 1;
+                    globals::g_CharacterList[0x02 + (x * 0x68)] = 1;
+                    globals::g_CharacterList[0x10 + (x * 0x68)] = (char)x;
+                    globals::g_CharacterList[0x11 + (x * 0x68)] = 0x80u;
+                    globals::g_CharacterList[0x18 + (x * 0x68)] = 0x20;
+                    globals::g_CharacterList[0x28 + (x * 0x68)] = 0x20;
 
-                    memcpy(g_CharacterList + 0x04 + (x * 0x68), recvBuffer + 0x10 * (x + 1) + 0x04, 4); // Character Id
-                    memcpy(g_CharacterList + 0x08 + (x * 0x68), recvBuffer + 0x10 * (x + 1), 4);        // Content Id
+                    memcpy(globals::g_CharacterList + 0x04 + (x * 0x68), recvBuffer + 0x10 * (x + 1) + 0x04, 4); // Character Id
+                    memcpy(globals::g_CharacterList + 0x08 + (x * 0x68), recvBuffer + 0x10 * (x + 1), 4);        // Content Id
                 }
                 sendSize = 0;
                 break;
@@ -730,7 +745,7 @@ namespace xiloader
     DWORD __stdcall network::FFXiServer(LPVOID lpParam)
     {
         /* Attempt to create connection to the server.. */
-        if (!xiloader::network::CreateConnection((xiloader::datasocket*)lpParam, g_LoginDataPort.c_str()))
+        if (!xiloader::network::CreateConnection((xiloader::datasocket*)lpParam, globals::g_LoginDataPort.c_str()))
             return 1;
 
         /* Attempt to start data communication with the server.. */
@@ -754,10 +769,10 @@ namespace xiloader
         SOCKET sock, client;
 
         /* Attempt to create listening server.. */
-        if (!xiloader::network::CreateListenServer(&sock, IPPROTO_TCP, g_ServerPort.c_str()))
+        if (!xiloader::network::CreateListenServer(&sock, IPPROTO_TCP, globals::g_ServerPort.c_str()))
             return 1;
 
-        while (g_IsRunning)
+        while (globals::g_IsRunning)
         {
             /* Attempt to accept incoming connections.. */
             if ((client = accept(sock, NULL, NULL)) == INVALID_SOCKET)

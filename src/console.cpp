@@ -26,7 +26,10 @@ This file is part of DarkStar-server source code.
 #include <shobjidl.h>
 
 /* Global Externs */
-extern bool g_Hide;
+namespace globals
+{
+    extern bool g_Hide;
+};
 
 namespace xiloader
 {
@@ -54,7 +57,7 @@ namespace xiloader
      */
     void console::visible(bool visible)
     {
-        if (!g_Hide)
+        if (!globals::g_Hide)
             return;
 
         auto console = ::GetConsoleWindow();
