@@ -60,15 +60,15 @@ namespace globals
 namespace sslState
 {
     // mbed tls state
-    mbedtls_net_context      server_fd = {};
-    mbedtls_entropy_context  entropy   = {};
-    mbedtls_ctr_drbg_context ctr_drbg  = {};
-    mbedtls_ssl_context      ssl       = {};
-    mbedtls_ssl_config       conf      = {};
-    mbedtls_x509_crt         cacert    = {};
-    mbedtls_x509_crt*        ca_chain  = {};
+    mbedtls_net_context               server_fd = {};
+    mbedtls_entropy_context           entropy   = {};
+    mbedtls_ctr_drbg_context          ctr_drbg  = {};
+    mbedtls_ssl_context               ssl       = {};
+    mbedtls_ssl_config                conf      = {};
+    mbedtls_x509_crt                  cacert    = {};
+    std::unique_ptr<mbedtls_x509_crt> ca_chain  = {};
+};
 
-}; // namespace globals
 /**
  * @brief Detour function definitions.
  */
@@ -294,33 +294,33 @@ inline LPVOID FindCharacters(void** commFuncs)
 }
 
 // Source: https://curl.se/mail/lib-2019-06/0057.html
-mbedtls_x509_crt* extract_cert(PCCERT_CONTEXT certificateContext)
+std::unique_ptr<mbedtls_x509_crt> extract_cert(PCCERT_CONTEXT certificateContext)
 {
     // TODO: add delete!
-    mbedtls_x509_crt* certificate = new mbedtls_x509_crt;
-    mbedtls_x509_crt_init(certificate);
-    mbedtls_x509_crt_parse(certificate, certificateContext->pbCertEncoded, certificateContext->cbCertEncoded);
-    return certificate;
+    std::unique_ptr<mbedtls_x509_crt> certificate(new mbedtls_x509_crt);
+    mbedtls_x509_crt_init(certificate.get());
+    mbedtls_x509_crt_parse(certificate.get(), certificateContext->pbCertEncoded, certificateContext->cbCertEncoded);
+    return std::move(certificate);
 }
 
 // Source: https://curl.se/mail/lib-2019-06/0057.html
-mbedtls_x509_crt* build_windows_ca_chain()
+std::unique_ptr<mbedtls_x509_crt> build_windows_ca_chain()
 {
-    mbedtls_x509_crt* ca_chain         = NULL;
-    HCERTSTORE        certificateStore = NULL;
+    std::unique_ptr<mbedtls_x509_crt> ca_chain = NULL;
+    HCERTSTORE        certificateStore         = NULL;
 
     if (certificateStore = CertOpenStore(CERT_STORE_PROV_SYSTEM, 0, NULL, CERT_SYSTEM_STORE_CURRENT_USER, L"Root"))
     {
-        mbedtls_x509_crt* previousCertificate = NULL;
-        mbedtls_x509_crt* currentCertificate  = NULL;
-        PCCERT_CONTEXT    certificateContext  = NULL;
+        std::unique_ptr<mbedtls_x509_crt> previousCertificate = NULL;
+        std::unique_ptr<mbedtls_x509_crt> currentCertificate  = NULL;
+        PCCERT_CONTEXT                    certificateContext  = NULL;
 
         if (certificateContext = CertEnumCertificatesInStore(certificateStore, certificateContext))
         {
             if (certificateContext->dwCertEncodingType & X509_ASN_ENCODING)
             {
                 ca_chain            = extract_cert(certificateContext);
-                previousCertificate = ca_chain;
+                previousCertificate = std::move(ca_chain);
             }
 
             while (certificateContext = CertEnumCertificatesInStore(certificateStore, certificateContext))
@@ -328,8 +328,8 @@ mbedtls_x509_crt* build_windows_ca_chain()
                 if (certificateContext->dwCertEncodingType & X509_ASN_ENCODING)
                 {
                     currentCertificate        = extract_cert(certificateContext);
-                    previousCertificate->next = currentCertificate;
-                    previousCertificate       = currentCertificate;
+                    previousCertificate->next = currentCertificate.get();
+                    previousCertificate       = std::move(currentCertificate);
                 }
             }
 
@@ -604,7 +604,7 @@ int __cdecl main(int argc, char* argv[])
     mbedtls_entropy_free(&sslState::entropy);
     mbedtls_x509_crt_free(&sslState::cacert);
 
-    delete sslState::ca_chain;
+    sslState::ca_chain = nullptr;
 
     /* Detach detour for gethostbyname. */
     DetourTransactionBegin();

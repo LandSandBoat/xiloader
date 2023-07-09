@@ -29,7 +29,6 @@ This file is part of DarkStar-server source code.
 /* Externals */
 namespace globals
 {
-
     extern std::string g_ServerAddress;
     extern std::string g_Username;
     extern std::string g_Password;
@@ -48,13 +47,13 @@ namespace globals
 namespace sslState
 {
 
-    extern mbedtls_net_context      server_fd;
-    extern mbedtls_entropy_context  entropy;
-    extern mbedtls_ctr_drbg_context ctr_drbg;
-    extern mbedtls_ssl_context      ssl;
-    extern mbedtls_ssl_config       conf;
-    extern mbedtls_x509_crt         cacert;
-    extern mbedtls_x509_crt*        ca_chain;
+    extern mbedtls_net_context               server_fd;
+    extern mbedtls_entropy_context           entropy;
+    extern mbedtls_ctr_drbg_context          ctr_drbg;
+    extern mbedtls_ssl_context               ssl;
+    extern mbedtls_ssl_config                conf;
+    extern mbedtls_x509_crt                  cacert;
+    extern std::unique_ptr<mbedtls_x509_crt> ca_chain;
 };
 
 namespace xiloader
@@ -167,7 +166,7 @@ namespace xiloader
 
         // MBEDTLS_SSL_VERIFY_OPTIONAL provides warnings, but doesn't stop connections.
         mbedtls_ssl_conf_authmode(&sslState::conf, MBEDTLS_SSL_VERIFY_OPTIONAL);
-        mbedtls_ssl_conf_ca_chain(&sslState::conf, sslState::ca_chain, NULL);
+        mbedtls_ssl_conf_ca_chain(&sslState::conf, sslState::ca_chain.get(), NULL);
         mbedtls_ssl_conf_rng(&sslState::conf, mbedtls_ctr_drbg_random, &sslState::ctr_drbg);
 
         int ret = 0;
@@ -346,6 +345,7 @@ namespace xiloader
         if (bUseAutoLogin)
             xiloader::console::output(xiloader::color::lightgreen, "Autologin activated!");
 
+        // TODO: kill all labels and gotos
         if (!bUseAutoLogin)
         {
             xiloader::console::output("==========================================================");
@@ -431,6 +431,8 @@ namespace xiloader
                 std::cin >> input;
                 std::cout << std::endl;
 
+                // TODO: warn if username/password is too long
+
                 if (input != globals::g_Password)
                 {
                     xiloader::console::output(xiloader::color::error, "Passwords did not match! Please try again.");
@@ -465,9 +467,9 @@ namespace xiloader
         memcpy(sendBuffer + 0x19, globals::g_Password.c_str(), globals::g_Password.length());
 
         /* Copy changed password into buffer */
-        memcpy(sendBuffer + 0x40, new_password.c_str(), 16);
+        memcpy(sendBuffer + 0x40, new_password.c_str(), 32);
 
-        // 17 byte wide reserved space starting at 0x50
+        // 17 byte wide operator specific space starting at 0x50 // This region will be used for anything server operators may install into custom launchers.
 
         /* Copy version number into buffer */
         memcpy(sendBuffer + 0x61, globals::g_VersionNumber.c_str(), 5);
@@ -530,7 +532,8 @@ namespace xiloader
                 sock->s = INVALID_SOCKET;
                 return false;
             }
-            // Gap for previously used command codes
+
+            // Commands 0x0008 through 0x0008 are currently unused
 
             case 0x000A:
             {
