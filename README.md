@@ -10,12 +10,12 @@ cmake -S . -B build -A Win32
 cmake --build build
 ```
 
-## xi_checker
+## Release notes
 
-Verifies DirectPlay and POL are installed and connect to a server using xiloader (installed in POL folder).
+# Windows
 
-Usage:
+Requires VC2022 redist, included in https://aka.ms/vs/17/release/vc_redist.x86.exe
 
-```sh
-xi_checker $server_ip
-```
+#Linux (through Wine)
+
+Requires `winetricks vcrun2022`
