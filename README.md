@@ -12,10 +12,10 @@ cmake --build build
 
 ## Release notes
 
-# Windows
+### Windows
 
 Requires VC2022 redist, included in https://aka.ms/vs/17/release/vc_redist.x86.exe
 
-#Linux (through Wine)
+### Linux (through Wine)
 
 Requires `winetricks vcrun2022`
