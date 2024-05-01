@@ -1,0 +1,11 @@
+1 VERSIONINFO
+FILEVERSION 1,1,1
+BEGIN
+    BLOCK "StringFileInfo"
+    BEGIN
+        BLOCK "081604b0"
+        BEGIN
+            VALUE "FileVersion", "1.1.1"
+        END
+    END
+END

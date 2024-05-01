@@ -46,7 +46,7 @@ namespace globals
     std::string        g_Password        = "";                          // The password being logged in with.
     char               g_SessionHash[16] = {};                          // Session hash sent from auth
     std::string        g_Email           = "";                          // Email, currently unused
-    std::string        g_VersionNumber   = "1.0.0";                     // xiloader version number sent to auth server. Must be x.x.x with single characters for 'x'
+    std::string        g_VersionNumber   = "1.1.1";                     // xiloader version number sent to auth server. Must be x.x.x with single characters for 'x'. Remember to also change in xiloader.rc.in
 
     char* g_CharacterList = NULL;  // Pointer to the character list data being sent from the server.
     bool  g_IsRunning     = false; // Flag to determine if the network threads should hault.
@@ -182,7 +182,7 @@ hostent* __stdcall Mine_gethostbyname(const char* name)
 }
 
 // This function's purpose is to identify a command byte and identify if it is meant for the lobby dataport or not.
-// This way, we know we want to send 
+// This way, we know we want to send.
 bool isLobbyCommand(const char* buffer)
 {
     auto command = buffer[8];
@@ -359,28 +359,54 @@ int __cdecl main(int argc, char* argv[])
 {
     argparse::ArgumentParser args("xiloader", "0.0");
 
-    args.add_argument("--server").help("The server address to connect to.");
-    args.add_argument("--user", "--username").help("The username being logged in with.");
-    args.add_argument("--pass", "--password").help("The password being logged in with.");
-    args.add_argument("--email", "--email").help("The email being logged in with.");
+    // NOTE: .append() is used to allow multiple arguments to be passed to the same option.
+    //     : Otherwise it will throw on repeated arguments (normally accidental).
 
-    args.add_argument("--serverport").help("(optional) The server's lobby port to connect to.");
+    args.add_argument("--server")
+        .help("The server address to connect to.")
+        .append();
 
-    args.add_argument("--dataport").help("(optional) The login server data port to connect to.");
+    args.add_argument("--user", "--username")
+        .help("The username being logged in with.")
+        .append();
 
-    args.add_argument("--viewport").help("(optional) The login view port to connect to.");
+    args.add_argument("--pass", "--password")
+        .help("The password being logged in with.")
+        .append();
 
-    args.add_argument("--authport").help("(optional) The login auth port to connect to.");
+    args.add_argument("--email", "--email")
+        .help("The email being logged in with.")
+        .append();
 
-    args.add_argument("--lang").help("(optional) The language of your FFXI install: JP/US/EU (0/1/2).");
+    args.add_argument("--serverport")
+        .help("(optional) The server's lobby port to connect to.")
+        .append();
+
+    args.add_argument("--dataport")
+        .help("(optional) The login server data port to connect to.")
+        .append();
+
+    args.add_argument("--viewport")
+        .help("(optional) The login view port to connect to.")
+        .append();
+
+    args.add_argument("--authport")
+        .help("(optional) The login auth port to connect to.")
+        .append();
+
+    args.add_argument("--lang")
+        .help("(optional) The language of your FFXI install: JP/US/EU (0/1/2).")
+        .append();
 
     args.add_argument("--hairpin")
         .implicit_value(true)
-        .help("(optional) Use this if connecting to a local server which you have exposed publicly. This should not have to be used if you are connecting to a remote server.");
+        .help("(optional) Use this if connecting to a local server which you have exposed publicly. This should not have to be used if you are connecting to a remote server.")
+        .append();
 
     args.add_argument("--hide")
         .implicit_value(true)
-        .help("(optional) Determines whether or not to hide the console window after FFXI starts.");
+        .help("(optional) Determines whether or not to hide the console window after FFXI starts.")
+        .append();
 
     try
     {
@@ -431,7 +457,7 @@ int __cdecl main(int argc, char* argv[])
     int currentYear = localtime(&currentTime)->tm_year + 1900;  // Year is returned as the number of years since 1900.
     xiloader::console::output(xiloader::color::lightred, "==========================================================");
     xiloader::console::output(xiloader::color::lightgreen, "DarkStar Boot Loader (c) 2015 DarkStar Team");
-    xiloader::console::output(xiloader::color::lightgreen, "LandSandBoat Boot Loader (c) 2021-%d LandSandBoat Team", currentYear);
+    xiloader::console::output(xiloader::color::lightgreen, "LandSandBoat Boot Loader (c) 2021-%d LandSandBoat Team (v%s)", currentYear, globals::g_VersionNumber.c_str());
     xiloader::console::output(xiloader::color::lightpurple, "Git Repo   : https://github.com/LandSandBoat/xiloader");
     xiloader::console::output(xiloader::color::lightpurple, "Bug Reports: https://github.com/LandSandBoat/xiloader/issues");
     xiloader::console::output(xiloader::color::lightred, "==========================================================");
