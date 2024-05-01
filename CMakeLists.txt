@@ -21,6 +21,11 @@ include(cmake/detours.cmake)
 include(cmake/argparse.cmake)
 include(cmake/mbedtls.cmake)
 
+configure_file(
+	src/xiloader.rc.in
+	src/xiloader.rc
+)
+
 # xiloader
 add_executable(xiloader
     src/console.cpp
@@ -33,7 +38,9 @@ add_executable(xiloader
     src/main.cpp
     src/network.cpp
     src/network.h
-    src/polcore.h)
+    src/polcore.h
+    ${CMAKE_CURRENT_BINARY_DIR}/src/xiloader.rc
+)
 
 set_target_properties(xiloader PROPERTIES LINK_FLAGS "/LARGEADDRESSAWARE")
 

@@ -46,7 +46,7 @@ namespace globals
     std::string        g_Password        = "";                          // The password being logged in with.
     char               g_SessionHash[16] = {};                          // Session hash sent from auth
     std::string        g_Email           = "";                          // Email, currently unused
-    std::string        g_VersionNumber   = "1.0.0";                     // xiloader version number sent to auth server. Must be x.x.x with single characters for 'x'
+    std::string        g_VersionNumber   = "1.1.1";                     // xiloader version number sent to auth server. Must be x.x.x with single characters for 'x'. Remember to also change in xiloader.rc.in
 
     char* g_CharacterList = NULL;  // Pointer to the character list data being sent from the server.
     bool  g_IsRunning     = false; // Flag to determine if the network threads should hault.
@@ -182,7 +182,7 @@ hostent* __stdcall Mine_gethostbyname(const char* name)
 }
 
 // This function's purpose is to identify a command byte and identify if it is meant for the lobby dataport or not.
-// This way, we know we want to send 
+// This way, we know we want to send.
 bool isLobbyCommand(const char* buffer)
 {
     auto command = buffer[8];
@@ -431,7 +431,7 @@ int __cdecl main(int argc, char* argv[])
     int currentYear = localtime(&currentTime)->tm_year + 1900;  // Year is returned as the number of years since 1900.
     xiloader::console::output(xiloader::color::lightred, "==========================================================");
     xiloader::console::output(xiloader::color::lightgreen, "DarkStar Boot Loader (c) 2015 DarkStar Team");
-    xiloader::console::output(xiloader::color::lightgreen, "LandSandBoat Boot Loader (c) 2021-%d LandSandBoat Team", currentYear);
+    xiloader::console::output(xiloader::color::lightgreen, "LandSandBoat Boot Loader (c) 2021-%d LandSandBoat Team (v%s)", currentYear, globals::g_VersionNumber.c_str());
     xiloader::console::output(xiloader::color::lightpurple, "Git Repo   : https://github.com/LandSandBoat/xiloader");
     xiloader::console::output(xiloader::color::lightpurple, "Bug Reports: https://github.com/LandSandBoat/xiloader/issues");
     xiloader::console::output(xiloader::color::lightred, "==========================================================");
