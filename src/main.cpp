@@ -359,28 +359,54 @@ int __cdecl main(int argc, char* argv[])
 {
     argparse::ArgumentParser args("xiloader", "0.0");
 
-    args.add_argument("--server").help("The server address to connect to.");
-    args.add_argument("--user", "--username").help("The username being logged in with.");
-    args.add_argument("--pass", "--password").help("The password being logged in with.");
-    args.add_argument("--email", "--email").help("The email being logged in with.");
+    // NOTE: .append() is used to allow multiple arguments to be passed to the same option.
+    //     : Otherwise it will throw on repeated arguments (normally accidental).
 
-    args.add_argument("--serverport").help("(optional) The server's lobby port to connect to.");
+    args.add_argument("--server")
+        .help("The server address to connect to.")
+        .append();
 
-    args.add_argument("--dataport").help("(optional) The login server data port to connect to.");
+    args.add_argument("--user", "--username")
+        .help("The username being logged in with.")
+        .append();
 
-    args.add_argument("--viewport").help("(optional) The login view port to connect to.");
+    args.add_argument("--pass", "--password")
+        .help("The password being logged in with.")
+        .append();
 
-    args.add_argument("--authport").help("(optional) The login auth port to connect to.");
+    args.add_argument("--email", "--email")
+        .help("The email being logged in with.")
+        .append();
 
-    args.add_argument("--lang").help("(optional) The language of your FFXI install: JP/US/EU (0/1/2).");
+    args.add_argument("--serverport")
+        .help("(optional) The server's lobby port to connect to.")
+        .append();
+
+    args.add_argument("--dataport")
+        .help("(optional) The login server data port to connect to.")
+        .append();
+
+    args.add_argument("--viewport")
+        .help("(optional) The login view port to connect to.")
+        .append();
+
+    args.add_argument("--authport")
+        .help("(optional) The login auth port to connect to.")
+        .append();
+
+    args.add_argument("--lang")
+        .help("(optional) The language of your FFXI install: JP/US/EU (0/1/2).")
+        .append();
 
     args.add_argument("--hairpin")
         .implicit_value(true)
-        .help("(optional) Use this if connecting to a local server which you have exposed publicly. This should not have to be used if you are connecting to a remote server.");
+        .help("(optional) Use this if connecting to a local server which you have exposed publicly. This should not have to be used if you are connecting to a remote server.")
+        .append();
 
     args.add_argument("--hide")
         .implicit_value(true)
-        .help("(optional) Determines whether or not to hide the console window after FFXI starts.");
+        .help("(optional) Determines whether or not to hide the console window after FFXI starts.")
+        .append();
 
     try
     {
