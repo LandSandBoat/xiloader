@@ -21,10 +21,10 @@ This file is part of DarkStar-server source code.
 ===========================================================================
 */
 
-#include "helpers.h"
 #include "network.h"
+#include "helpers.h"
+
 #include <iphlpapi.h>
-#include <vector>
 
 /* Externals */
 namespace globals
@@ -195,6 +195,7 @@ namespace xiloader
             char vrfy_buf[512];
 
             mbedtls_x509_crt_verify_info(vrfy_buf, sizeof(vrfy_buf), "", flags);
+            removeNewlineAtEnd(vrfy_buf);
 
             xiloader::console::output(xiloader::color::warning, "Remote server certificate warnings:", vrfy_buf);
             xiloader::console::output(xiloader::color::warning, "%s", vrfy_buf);

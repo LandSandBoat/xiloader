@@ -27,3 +27,12 @@ T& ref(U* buf, std::size_t index)
 {
     return *reinterpret_cast<T*>(reinterpret_cast<UINT8*>(buf) + index);
 }
+
+void removeNewlineAtEnd(char* buf)
+{
+    size_t len = strlen(buf);
+    if (len > 0 && buf[len - 1] == '\n')
+    {
+        buf[len - 1] = '\0'; // Replace the newline with a null terminator
+    }
+}
