@@ -46,7 +46,7 @@ namespace globals
     std::string        g_Password        = "";                          // The password being logged in with.
     char               g_SessionHash[16] = {};                          // Session hash sent from auth
     std::string        g_Email           = "";                          // Email, currently unused
-    std::string        g_VersionNumber   = "1.1.1";                     // xiloader version number sent to auth server. Must be x.x.x with single characters for 'x'. Remember to also change in xiloader.rc.in
+    std::string        g_VersionNumber   = "1.1.2";                     // xiloader version number sent to auth server. Must be x.x.x with single characters for 'x'. Remember to also change in xiloader.rc.in
 
     char* g_CharacterList = NULL;  // Pointer to the character list data being sent from the server.
     bool  g_IsRunning     = false; // Flag to determine if the network threads should hault.
@@ -458,6 +458,7 @@ int __cdecl main(int argc, char* argv[])
     xiloader::console::output(xiloader::color::lightred, "==========================================================");
     xiloader::console::output(xiloader::color::lightgreen, "DarkStar Boot Loader (c) 2015 DarkStar Team");
     xiloader::console::output(xiloader::color::lightgreen, "LandSandBoat Boot Loader (c) 2021-%d LandSandBoat Team (v%s)", currentYear, globals::g_VersionNumber.c_str());
+    xiloader::console::output(xiloader::color::lightblue, "Using %s", MBEDTLS_VERSION_STRING_FULL); // this prints "Using Mbed TLS #.#.#"
     xiloader::console::output(xiloader::color::lightpurple, "Git Repo   : https://github.com/LandSandBoat/xiloader");
     xiloader::console::output(xiloader::color::lightpurple, "Bug Reports: https://github.com/LandSandBoat/xiloader/issues");
     xiloader::console::output(xiloader::color::lightred, "==========================================================");

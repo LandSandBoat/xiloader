@@ -192,12 +192,20 @@ namespace xiloader
 
         if ((flags = mbedtls_ssl_get_verify_result(&sslState::ssl)) != 0)
         {
-            char vrfy_buf[512];
+            // We genuinely don't care if the error flags is ONLY that the cert isn't trusted,
+            // If this is the only warning, just don't print it.
+            if (flags != MBEDTLS_X509_BADCERT_NOT_TRUSTED)
+            {
+                char        vrfy_buf[1024] = {};
+                std::string timestamp      = xiloader::console::getTimestamp();
 
-            mbedtls_x509_crt_verify_info(vrfy_buf, sizeof(vrfy_buf), "", flags);
+                flags &= ~MBEDTLS_X509_BADCERT_NOT_TRUSTED; // Don't report the cert isn't trusted -- we don't care.
 
-            xiloader::console::output(xiloader::color::warning, "Remote server certificate warnings:", vrfy_buf);
-            xiloader::console::output(xiloader::color::warning, "%s", vrfy_buf);
+                mbedtls_x509_crt_verify_info(vrfy_buf, sizeof(vrfy_buf), timestamp.c_str(), flags);
+
+                xiloader::console::output(xiloader::color::warning, "Remote server certificate warnings:", vrfy_buf);
+                xiloader::console::print(xiloader::color::warning, vrfy_buf);
+            }
         }
         else
         {

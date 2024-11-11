@@ -5,7 +5,7 @@ BEGIN
     BEGIN
         BLOCK "081604b0"
         BEGIN
-            VALUE "FileVersion", "1.1.1"
+            VALUE "FileVersion", "1.1.2"
         END
     END
 END
