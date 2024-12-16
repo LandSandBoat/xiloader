@@ -522,9 +522,14 @@ int __cdecl main(int argc, char* argv[])
 
     /* Attempt to resolve the server address.. */
     ULONG ulAddress = 0;
+
+    xiloader::console::output(xiloader::color::info, "Resolving '%s' ...", globals::g_ServerAddress.c_str());
+
     if (xiloader::network::ResolveHostname(globals::g_ServerAddress.c_str(), &ulAddress))
     {
         globals::g_ServerAddress = inet_ntoa(*((struct in_addr*)&ulAddress));
+
+        xiloader::console::output(xiloader::color::info, "Resolved server address to '%s:%s'", globals::g_ServerAddress.c_str(), globals::g_LoginAuthPort.c_str());
 
         /* Attempt to create socket to server..*/
         xiloader::datasocket sock;
