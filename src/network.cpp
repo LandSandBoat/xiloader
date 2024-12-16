@@ -41,6 +41,7 @@ namespace globals
     extern std::string g_LoginAuthPort;
     extern char*       g_CharacterList;
     extern bool        g_IsRunning;
+    extern bool        g_FirstLogin;
 }
 
 // mbed tls state
@@ -152,15 +153,18 @@ namespace xiloader
             return 0;
         }
 
-        if ((mbedtls_net_connect(&sslState::server_fd, globals::g_ServerAddress.c_str(), port, MBEDTLS_NET_PROTO_TCP)) != 0)
+        int ret = 0;
+
+        ret = mbedtls_net_connect(&sslState::server_fd, globals::g_ServerAddress.c_str(), port, MBEDTLS_NET_PROTO_TCP);
+        if (ret != 0)
         {
-            xiloader::console::output(xiloader::color::error, "mbedtls_net_connect failed.");
+            xiloader::console::output(xiloader::color::error, "mbedtls_net_connect failed, (%s)", mbedtls_low_level_strerr(ret));
             return 0;
         }
 
-        if (mbedtls_ssl_config_defaults(&sslState::conf, MBEDTLS_SSL_IS_CLIENT, MBEDTLS_SSL_TRANSPORT_STREAM, MBEDTLS_SSL_PRESET_DEFAULT) != 0)
+        if ((ret = mbedtls_ssl_config_defaults(&sslState::conf, MBEDTLS_SSL_IS_CLIENT, MBEDTLS_SSL_TRANSPORT_STREAM, MBEDTLS_SSL_PRESET_DEFAULT)) != 0)
         {
-            xiloader::console::output(xiloader::color::error, "mbedtls_ssl_config_defaults failed.");
+            xiloader::console::output(xiloader::color::error, "mbedtls_ssl_config_defaults failed, (%s)", mbedtls_low_level_strerr(ret));
             return 0;
         }
 
@@ -169,11 +173,9 @@ namespace xiloader
         mbedtls_ssl_conf_ca_chain(&sslState::conf, sslState::ca_chain.get(), NULL);
         mbedtls_ssl_conf_rng(&sslState::conf, mbedtls_ctr_drbg_random, &sslState::ctr_drbg);
 
-        int ret = 0;
-
         if ((ret = mbedtls_ssl_setup(&sslState::ssl, &sslState::conf)) != 0)
         {
-            xiloader::console::output(xiloader::color::error, "mbedtls_ssl_setup returned %d", ret);
+            xiloader::console::output(xiloader::color::error, "mbedtls_ssl_setup failed, (%s)", mbedtls_low_level_strerr(ret));
             return 0;
         }
 
@@ -334,8 +336,6 @@ namespace xiloader
      */
     bool network::VerifyAccount(datasocket* sock)
     {
-        static bool bFirstLogin = true;
-
         unsigned char recvBuffer[1024] = { 0 };
         unsigned char sendBuffer[1024] = { 0 };
         std::string new_password       = "";
@@ -349,7 +349,7 @@ namespace xiloader
         }*/
 
         /* Determine if we should auto-login.. */
-        bool bUseAutoLogin = !globals::g_Username.empty() && !globals::g_Password.empty() && bFirstLogin;
+        bool bUseAutoLogin = !globals::g_Username.empty() && !globals::g_Password.empty() && globals::g_FirstLogin;
         if (bUseAutoLogin)
             xiloader::console::output(xiloader::color::lightgreen, "Autologin activated!");
 
@@ -455,8 +455,8 @@ namespace xiloader
         else
         {
             /* User has auto-login enabled.. */
-            sendBuffer[0x39] = 0x10;
-            bFirstLogin = false;
+            sendBuffer[0x39]      = 0x10;
+            globals::g_FirstLogin = false;
         }
 
         sendBuffer[0] = 0xFF; // Magic for new xiloader bits

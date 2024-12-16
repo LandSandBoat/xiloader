@@ -46,7 +46,8 @@ namespace globals
     std::string        g_Password        = "";                          // The password being logged in with.
     char               g_SessionHash[16] = {};                          // Session hash sent from auth
     std::string        g_Email           = "";                          // Email, currently unused
-    std::string        g_VersionNumber   = "1.1.2";                     // xiloader version number sent to auth server. Must be x.x.x with single characters for 'x'. Remember to also change in xiloader.rc.in
+    std::string        g_VersionNumber   = "1.1.3";                     // xiloader version number sent to auth server. Must be x.x.x with single characters for 'x'. Remember to also change in xiloader.rc.in
+    bool               g_FirstLogin      = false;                       // set to true when --user --pass are both set to allow for autologin
 
     char* g_CharacterList = NULL;  // Pointer to the character list data being sent from the server.
     bool  g_IsRunning     = false; // Flag to determine if the network threads should hault.
@@ -430,6 +431,11 @@ int __cdecl main(int argc, char* argv[])
     globals::g_Password = args.is_used("--pass") ? args.get<std::string>("--pass") : globals::g_Password;
     globals::g_Email    = args.is_used("--email") ? args.get<std::string>("--email") : globals::g_Email;
 
+    if (args.is_used("--user") && args.is_used("--pass"))
+    {
+        globals::g_FirstLogin = true;
+    }
+
     if (args.is_used("--lang"))
     {
         std::string language = args.get<std::string>("--lang");
@@ -522,9 +528,14 @@ int __cdecl main(int argc, char* argv[])
 
     /* Attempt to resolve the server address.. */
     ULONG ulAddress = 0;
+
+    xiloader::console::output(xiloader::color::info, "Resolving '%s' ...", globals::g_ServerAddress.c_str());
+
     if (xiloader::network::ResolveHostname(globals::g_ServerAddress.c_str(), &ulAddress))
     {
         globals::g_ServerAddress = inet_ntoa(*((struct in_addr*)&ulAddress));
+
+        xiloader::console::output(xiloader::color::info, "Resolved server address to '%s:%s'", globals::g_ServerAddress.c_str(), globals::g_LoginAuthPort.c_str());
 
         /* Attempt to create socket to server..*/
         xiloader::datasocket sock;

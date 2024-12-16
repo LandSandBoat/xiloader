@@ -40,6 +40,7 @@ add_executable(xiloader
     src/network.h
     src/polcore.h
     ${CMAKE_CURRENT_BINARY_DIR}/src/xiloader.rc
+    xiloader.manifest
 )
 
 set_target_properties(xiloader PROPERTIES LINK_FLAGS "/LARGEADDRESSAWARE")
