@@ -41,6 +41,7 @@ namespace globals
     extern std::string g_LoginAuthPort;
     extern char*       g_CharacterList;
     extern bool        g_IsRunning;
+    extern bool        g_FirstLogin;
 }
 
 // mbed tls state
@@ -335,8 +336,6 @@ namespace xiloader
      */
     bool network::VerifyAccount(datasocket* sock)
     {
-        static bool bFirstLogin = true;
-
         unsigned char recvBuffer[1024] = { 0 };
         unsigned char sendBuffer[1024] = { 0 };
         std::string new_password       = "";
@@ -350,7 +349,7 @@ namespace xiloader
         }*/
 
         /* Determine if we should auto-login.. */
-        bool bUseAutoLogin = !globals::g_Username.empty() && !globals::g_Password.empty() && bFirstLogin;
+        bool bUseAutoLogin = !globals::g_Username.empty() && !globals::g_Password.empty() && globals::g_FirstLogin;
         if (bUseAutoLogin)
             xiloader::console::output(xiloader::color::lightgreen, "Autologin activated!");
 
@@ -456,8 +455,8 @@ namespace xiloader
         else
         {
             /* User has auto-login enabled.. */
-            sendBuffer[0x39] = 0x10;
-            bFirstLogin = false;
+            sendBuffer[0x39]      = 0x10;
+            globals::g_FirstLogin = false;
         }
 
         sendBuffer[0] = 0xFF; // Magic for new xiloader bits

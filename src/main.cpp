@@ -47,6 +47,7 @@ namespace globals
     char               g_SessionHash[16] = {};                          // Session hash sent from auth
     std::string        g_Email           = "";                          // Email, currently unused
     std::string        g_VersionNumber   = "1.1.2";                     // xiloader version number sent to auth server. Must be x.x.x with single characters for 'x'. Remember to also change in xiloader.rc.in
+    bool               g_FirstLogin      = false;                       // set to true when --user --pass are both set to allow for autologin
 
     char* g_CharacterList = NULL;  // Pointer to the character list data being sent from the server.
     bool  g_IsRunning     = false; // Flag to determine if the network threads should hault.
@@ -429,6 +430,11 @@ int __cdecl main(int argc, char* argv[])
     globals::g_Username = args.is_used("--user") ? args.get<std::string>("--user") : globals::g_Username;
     globals::g_Password = args.is_used("--pass") ? args.get<std::string>("--pass") : globals::g_Password;
     globals::g_Email    = args.is_used("--email") ? args.get<std::string>("--email") : globals::g_Email;
+
+    if (args.is_used("--user") && args.is_used("--pass"))
+    {
+        globals::g_FirstLogin = true;
+    }
 
     if (args.is_used("--lang"))
     {
