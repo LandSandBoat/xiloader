@@ -46,7 +46,7 @@ namespace globals
     std::string        g_Password        = "";                          // The password being logged in with.
     char               g_SessionHash[16] = {};                          // Session hash sent from auth
     std::string        g_Email           = "";                          // Email, currently unused
-    std::string        g_VersionNumber   = "1.1.3";                     // xiloader version number sent to auth server. Must be x.x.x with single characters for 'x'. Remember to also change in xiloader.rc.in
+    std::string        g_VersionNumber   = "1.1.4";                     // xiloader version number sent to auth server. Must be x.x.x with single characters for 'x'. Remember to also change in xiloader.rc.in
     bool               g_FirstLogin      = false;                       // set to true when --user --pass are both set to allow for autologin
 
     char* g_CharacterList = NULL;  // Pointer to the character list data being sent from the server.
