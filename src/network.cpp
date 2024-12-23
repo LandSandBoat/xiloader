@@ -35,10 +35,10 @@ namespace globals
     extern char        g_SessionHash[16];
     extern std::string g_Email;
     extern std::string g_VersionNumber;
-    extern std::string g_ServerPort;
-    extern std::string g_LoginDataPort;
-    extern std::string g_LoginViewPort;
-    extern std::string g_LoginAuthPort;
+    extern uint16_t    g_ServerPort;
+    extern uint16_t    g_LoginDataPort;
+    extern uint16_t    g_LoginViewPort;
+    extern uint16_t    g_LoginAuthPort;
     extern char*       g_CharacterList;
     extern bool        g_IsRunning;
     extern bool        g_FirstLogin;
@@ -755,8 +755,9 @@ namespace xiloader
      */
     DWORD __stdcall network::FFXiServer(LPVOID lpParam)
     {
+        std::string port = std::to_string(globals::g_LoginDataPort); // also known as "servicename" in getaddrinfo
         /* Attempt to create connection to the server.. */
-        if (!xiloader::network::CreateConnection((xiloader::datasocket*)lpParam, globals::g_LoginDataPort.c_str()))
+        if (!xiloader::network::CreateConnection((xiloader::datasocket*)lpParam, port.c_str()))
             return 1;
 
         /* Attempt to start data communication with the server.. */
@@ -777,10 +778,12 @@ namespace xiloader
     {
         UNREFERENCED_PARAMETER(lpParam);
 
-        SOCKET sock, client;
+        SOCKET      sock;
+        SOCKET      client;
+        std::string port = std::to_string(globals::g_ServerPort); // also known as "servicename" in getaddrinfo
 
         /* Attempt to create listening server.. */
-        if (!xiloader::network::CreateListenServer(&sock, IPPROTO_TCP, globals::g_ServerPort.c_str()))
+        if (!xiloader::network::CreateListenServer(&sock, IPPROTO_TCP, port.c_str()))
             return 1;
 
         while (globals::g_IsRunning)
