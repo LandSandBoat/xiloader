@@ -38,15 +38,15 @@ namespace globals
 {
     xiloader::Language g_Language        = xiloader::Language::English; // The language of the loader to be used for polcore.
     std::string        g_ServerAddress   = "127.0.0.1";                 // The server address to connect to.
-    std::string        g_ServerPort      = "51220";                     // The server lobby server port to connect to.
-    std::string        g_LoginDataPort   = "54230";                     // Login server data port to connect to
-    std::string        g_LoginViewPort   = "54001";                     // Login view port to connect to
-    std::string        g_LoginAuthPort   = "54231";                     // Login auth port to connect to
+    uint16_t           g_ServerPort      = 51220;                       // The server lobby server port to connect to.
+    uint16_t           g_LoginDataPort   = 54230;                       // Login server data port to connect to
+    uint16_t           g_LoginViewPort   = 54001;                       // Login view port to connect to
+    uint16_t           g_LoginAuthPort   = 54231;                       // Login auth port to connect to
     std::string        g_Username        = "";                          // The username being logged in with.
     std::string        g_Password        = "";                          // The password being logged in with.
     char               g_SessionHash[16] = {};                          // Session hash sent from auth
     std::string        g_Email           = "";                          // Email, currently unused
-    std::string        g_VersionNumber   = "1.1.3";                     // xiloader version number sent to auth server. Must be x.x.x with single characters for 'x'. Remember to also change in xiloader.rc.in
+    std::string        g_VersionNumber   = "1.1.4";                     // xiloader version number sent to auth server. Must be x.x.x with single characters for 'x'. Remember to also change in xiloader.rc.in
     bool               g_FirstLogin      = false;                       // set to true when --user --pass are both set to allow for autologin
 
     char* g_CharacterList = NULL;  // Pointer to the character list data being sent from the server.
@@ -184,8 +184,20 @@ hostent* __stdcall Mine_gethostbyname(const char* name)
 
 // This function's purpose is to identify a command byte and identify if it is meant for the lobby dataport or not.
 // This way, we know we want to send.
-bool isLobbyCommand(const char* buffer)
+bool isLobbyCommand(const char* buffer, SOCKET socket)
 {
+    struct sockaddr_in sin;
+    int                addrlen = sizeof(sin);
+
+    getpeername(socket, reinterpret_cast<struct sockaddr*>(&sin), &addrlen);
+
+    auto port = ntohs(sin.sin_port);
+
+    if (port != globals::g_LoginDataPort && port != globals::g_LoginViewPort)
+    {
+        return false;
+    }
+
     auto command = buffer[8];
     // See https://github.com/atom0s/XiPackets/tree/main/lobby
     // Command bytes information, based on what the client visually reports when waiting for a response:
@@ -228,7 +240,7 @@ int WINAPI Mine_send(SOCKET s, const char* buf, int len, int flags)
     std::ignore = ret;
 
     // check for lobby specific commands
-    if (isLobbyCommand(buf))
+    if (isLobbyCommand(buf, s))
     {
         // always send server provided session hash in packets with XIFF commands and is a lobby command
         std::memcpy((char*)buf + 12, globals::g_SessionHash, 16);
@@ -380,18 +392,22 @@ int __cdecl main(int argc, char* argv[])
         .append();
 
     args.add_argument("--serverport")
+        .scan<'i', uint16_t>()
         .help("(optional) The server's lobby port to connect to.")
         .append();
 
     args.add_argument("--dataport")
+        .scan<'i', uint16_t>()
         .help("(optional) The login server data port to connect to.")
         .append();
 
     args.add_argument("--viewport")
+        .scan<'i', uint16_t>()
         .help("(optional) The login view port to connect to.")
         .append();
 
     args.add_argument("--authport")
+        .scan<'i', uint16_t>()
         .help("(optional) The login auth port to connect to.")
         .append();
 
@@ -421,11 +437,11 @@ int __cdecl main(int argc, char* argv[])
     }
 
     globals::g_ServerAddress = args.is_used("--server") ? args.get<std::string>("--server") : globals::g_ServerAddress;
-    globals::g_ServerPort    = args.is_used("--serverport") ? args.get<std::string>("--serverport") : globals::g_ServerPort;
+    globals::g_ServerPort    = args.is_used("--serverport") ? args.get<uint16_t>("--serverport") : globals::g_ServerPort;
 
-    globals::g_LoginDataPort = args.is_used("--dataport") ? args.get<std::string>("--dataport") : globals::g_LoginDataPort;
-    globals::g_LoginViewPort = args.is_used("--viewport") ? args.get<std::string>("--viewport") : globals::g_LoginViewPort;
-    globals::g_LoginAuthPort = args.is_used("--authport") ? args.get<std::string>("--authport") : globals::g_LoginAuthPort;
+    globals::g_LoginDataPort = args.is_used("--dataport") ? args.get<uint16_t>("--dataport") : globals::g_LoginDataPort;
+    globals::g_LoginViewPort = args.is_used("--viewport") ? args.get<uint16_t>("--viewport") : globals::g_LoginViewPort;
+    globals::g_LoginAuthPort = args.is_used("--authport") ? args.get<uint16_t>("--authport") : globals::g_LoginAuthPort;
 
     globals::g_Username = args.is_used("--user") ? args.get<std::string>("--user") : globals::g_Username;
     globals::g_Password = args.is_used("--pass") ? args.get<std::string>("--pass") : globals::g_Password;
@@ -535,11 +551,13 @@ int __cdecl main(int argc, char* argv[])
     {
         globals::g_ServerAddress = inet_ntoa(*((struct in_addr*)&ulAddress));
 
-        xiloader::console::output(xiloader::color::info, "Resolved server address to '%s:%s'", globals::g_ServerAddress.c_str(), globals::g_LoginAuthPort.c_str());
+        xiloader::console::output(xiloader::color::info, "Resolved server address to '%s:%d'", globals::g_ServerAddress.c_str(), globals::g_LoginAuthPort);
 
         /* Attempt to create socket to server..*/
         xiloader::datasocket sock;
-        if (xiloader::network::CreateAuthConnection(&sock, globals::g_LoginAuthPort.c_str()))
+        std::string          port = std::to_string(globals::g_LoginAuthPort); // also known as "servicename" in getaddrinfo
+
+        if (xiloader::network::CreateAuthConnection(&sock, port.c_str()))
         {
             /* Attempt to verify the users account info.. */
             while (!xiloader::network::VerifyAccount(&sock))
