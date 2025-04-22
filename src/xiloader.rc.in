@@ -1,5 +1,9 @@
+// Remember to update both when you change file versions:
+// FILEVERSION ...
+// VALUE "FileVersion", ...
+
 1 VERSIONINFO
-FILEVERSION 1,1,1
+FILEVERSION 1,1,4
 BEGIN
     BLOCK "StringFileInfo"
     BEGIN
