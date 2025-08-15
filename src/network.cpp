@@ -755,11 +755,6 @@ namespace xiloader
      */
     DWORD __stdcall network::FFXiServer(LPVOID lpParam)
     {
-        std::string port = std::to_string(globals::g_LoginDataPort); // also known as "servicename" in getaddrinfo
-        /* Attempt to create connection to the server.. */
-        if (!xiloader::network::CreateConnection((xiloader::datasocket*)lpParam, port.c_str()))
-            return 1;
-
         /* Attempt to start data communication with the server.. */
         CreateThread(NULL, 0, xiloader::network::FFXiDataComm, lpParam, 0, NULL);
         Sleep(200);
@@ -778,13 +773,8 @@ namespace xiloader
     {
         UNREFERENCED_PARAMETER(lpParam);
 
-        SOCKET      sock;
-        SOCKET      client;
-        std::string port = std::to_string(globals::g_ServerPort); // also known as "servicename" in getaddrinfo
-
-        /* Attempt to create listening server.. */
-        if (!xiloader::network::CreateListenServer(&sock, IPPROTO_TCP, port.c_str()))
-            return 1;
+        SOCKET sock = *reinterpret_cast<SOCKET*>(lpParam);
+        SOCKET client;
 
         while (globals::g_IsRunning)
         {
