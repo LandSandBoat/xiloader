@@ -22,32 +22,42 @@ This file is part of DarkStar-server source code.
 ===========================================================================
 */
 
+#define NOMINMAX 1 // Interferes with std::numeric_limits
+
 #include "defines.h"
 
 #include <ctime>
+#include <chrono>
+#include <filesystem>
+#include <fstream>
 #include <intrin.h>
 
 #include "console.h"
 #include "functions.h"
+#include "helpers.h"
 #include "network.h"
 
 #include "argparse/argparse.hpp"
+#include <nlohmann/json.hpp>
+
+using json = nlohmann::json;
 
 /* Global Variables */
 namespace globals
 {
-    xiloader::Language g_Language        = xiloader::Language::English; // The language of the loader to be used for polcore.
-    std::string        g_ServerAddress   = "192.168.50.227";                 // The server address to connect to.
-    uint16_t           g_ServerPort      = 51220;                       // The server lobby server port to connect to.
-    uint16_t           g_LoginDataPort   = 54230;                       // Login server data port to connect to
-    uint16_t           g_LoginViewPort   = 54001;                       // Login view port to connect to
-    uint16_t           g_LoginAuthPort   = 54231;                       // Login auth port to connect to
-    std::string        g_Username        = "";                          // The username being logged in with.
-    std::string        g_Password        = "";                          // The password being logged in with.
-    char               g_SessionHash[16] = {};                          // Session hash sent from auth
-    std::string        g_Email           = "";                          // Email, currently unused
-    std::string        g_VersionNumber   = "1.1.5";                     // xiloader version number sent to auth server. Must be x.x.x with single characters for 'x'. Remember to also change in xiloader.rc.in
-    bool               g_FirstLogin      = false;                       // set to true when --user --pass are both set to allow for autologin
+    xiloader::Language     g_Language        = xiloader::Language::English; // The language of the loader to be used for polcore.
+    std::string            g_ServerAddress   = "127.0.0.1";                 // The server address to connect to.
+    uint16_t               g_ServerPort      = 51220;                       // The server lobby server port to connect to.
+    uint16_t               g_LoginDataPort   = 54230;                       // Login server data port to connect to
+    uint16_t               g_LoginViewPort   = 54001;                       // Login view port to connect to
+    uint16_t               g_LoginAuthPort   = 54231;                       // Login auth port to connect to
+    std::string            g_Username        = "";                          // The username being logged in with.
+    std::string            g_Password        = "";                          // The password being logged in with.
+    std::string            g_OtpCode         = "";                          // The OTP code the user input
+    char                   g_SessionHash[16] = {};                          // Session hash sent from auth
+    std::string            g_Email           = "";                          // Email, currently unused
+    std::array<uint8_t, 3> g_VersionNumber   = { 2, 0, 0 };                 // xiloader version number sent to auth server. Must be x.x.x with single characters for 'x'. Remember to also change in xiloader.rc.in
+    bool                   g_FirstLogin      = false;                       // set to true when --user --pass are both set to allow for autologin
 
     char* g_CharacterList = NULL;  // Pointer to the character list data being sent from the server.
     bool  g_IsRunning     = false; // Flag to determine if the network threads should hault.
@@ -387,6 +397,10 @@ int __cdecl main(int argc, char* argv[])
         .help("The password being logged in with.")
         .append();
 
+    args.add_argument("--otp", "--otp-code")
+        .help("The otp code being logged in with.")
+        .append();
+
     args.add_argument("--email", "--email")
         .help("The email being logged in with.")
         .append();
@@ -425,6 +439,10 @@ int __cdecl main(int argc, char* argv[])
         .help("(optional) Determines whether or not to hide the console window after FFXI starts.")
         .append();
 
+    args.add_argument("--json", "--json-file")
+        .help("(optional) The json file to load arguments in from")
+        .append();
+
     try
     {
         args.parse_args(argc, argv);
@@ -445,45 +463,136 @@ int __cdecl main(int argc, char* argv[])
 
     globals::g_Username = args.is_used("--user") ? args.get<std::string>("--user") : globals::g_Username;
     globals::g_Password = args.is_used("--pass") ? args.get<std::string>("--pass") : globals::g_Password;
+    globals::g_OtpCode  = args.is_used("--otp") ? args.get<std::string>("--otp") : globals::g_OtpCode;
     globals::g_Email    = args.is_used("--email") ? args.get<std::string>("--email") : globals::g_Email;
+
+    std::string jsonFilename = args.is_used("--json") ? args.get<std::string>("--json") : std::string {};
 
     if (args.is_used("--user") && args.is_used("--pass"))
     {
         globals::g_FirstLogin = true;
     }
 
+    auto setLanguage = [&](std::string language)
+    {
+        if (!language.empty())
+        {
+            if (!_strnicmp(language.c_str(), "JP", 2) || !_strnicmp(language.c_str(), "0", 1))
+            {
+                globals::g_Language = xiloader::Language::Japanese;
+            }
+            if (!_strnicmp(language.c_str(), "US", 2) || !_strnicmp(language.c_str(), "1", 1))
+            {
+                globals::g_Language = xiloader::Language::English;
+            }
+            if (!_strnicmp(language.c_str(), "EU", 2) || !_strnicmp(language.c_str(), "2", 1))
+            {
+                globals::g_Language = xiloader::Language::European;
+            }
+        }
+    };
+
     if (args.is_used("--lang"))
     {
         std::string language = args.get<std::string>("--lang");
 
-        if (!_strnicmp(language.c_str(), "JP", 2) || !_strnicmp(language.c_str(), "0", 1))
-        {
-            globals::g_Language = xiloader::Language::Japanese;
-        }
-        if (!_strnicmp(language.c_str(), "US", 2) || !_strnicmp(language.c_str(), "1", 1))
-        {
-            globals::g_Language = xiloader::Language::English;
-        }
-        if (!_strnicmp(language.c_str(), "EU", 2) || !_strnicmp(language.c_str(), "2", 1))
-        {
-            globals::g_Language = xiloader::Language::European;
-        }
+        setLanguage(language);
     }
 
     bool bUseHairpinFix = args.is_used("--hairpin") ? args.get<bool>("--hairpin") : false;
 
     globals::g_Hide = args.is_used("--hide") ? args.get<bool>("--hide") : globals::g_Hide;
 
+    bool readInJsonArgs = false;
+    if (!jsonFilename.empty())
+    {
+        std::string extension = ".json";
+
+        bool endsInJsonExtension = std::equal(extension.rbegin(), extension.rend(), jsonFilename.rbegin());
+
+        if (endsInJsonExtension && std::filesystem::exists(jsonFilename))
+        {
+            std::ifstream jsonFile(jsonFilename);
+            json          jsonData = json::parse(jsonFile, nullptr, false);
+
+            jsonFile.close();
+
+            if (jsonData.is_discarded()) // not valid json
+            {
+                xiloader::console::output(xiloader::color::error, "--json was specified but the file at the input arg is not valid json");
+                return 1;
+            }
+            else
+            {
+                readInJsonArgs = true;
+
+                auto maybeUsername = jsonGet<std::string>(jsonData, "username");
+                auto maybePassword = jsonGet<std::string>(jsonData, "password");
+
+                globals::g_Username = maybeUsername.value_or(globals::g_Username);
+                globals::g_Password = maybeUsername.value_or(globals::g_Password);
+
+                // Set autologin if it isn't set already
+                if (maybeUsername.has_value() && maybePassword.has_value())
+                {
+                    globals::g_FirstLogin = true;
+                }
+
+                globals::g_ServerAddress = jsonGet<std::string>(jsonData, "server").value_or(globals::g_ServerAddress);
+                globals::g_ServerPort    = jsonGet<uint16_t>(jsonData, "serverport").value_or(globals::g_ServerPort);
+
+                globals::g_LoginDataPort = jsonGet<uint16_t>(jsonData, "dataport").value_or(globals::g_LoginDataPort);
+                globals::g_LoginViewPort = jsonGet<uint16_t>(jsonData, "viewport").value_or(globals::g_LoginViewPort);
+                globals::g_LoginAuthPort = jsonGet<uint16_t>(jsonData, "authport").value_or(globals::g_LoginAuthPort);
+
+                // try string and int
+                auto maybeOtpString = jsonGet<std::string>(jsonData, "otp");
+                auto maybeOtpInt    = jsonGet<uint32_t>(jsonData, "otp");
+
+                if (maybeOtpString.has_value())
+                {
+                    globals::g_OtpCode = maybeOtpString.value();
+                }
+                else if (maybeOtpInt.has_value())
+                {
+                    globals::g_OtpCode = std::to_string(maybeOtpInt.value());
+                }
+
+                globals::g_OtpCode = jsonGet<std::string>(jsonData, "otp").value_or(globals::g_OtpCode);
+                globals::g_Email   = jsonGet<std::string>(jsonData, "email").value_or(globals::g_Email);
+
+                bUseHairpinFix  = jsonGet<bool>(jsonData, "hairpin").value_or(bUseHairpinFix);
+                globals::g_Hide = jsonGet<bool>(jsonData, "hide").value_or(globals::g_Hide);
+
+                std::string language = jsonGet<std::string>(jsonData, "language").value_or({});
+
+                setLanguage(language);
+            }
+        }
+        else
+        {
+            xiloader::console::output(xiloader::color::error, "--json was specified but the file at the input arg does not exist.");
+            return 1;
+        }
+    }
+
+    std::array<uint8_t, 3> version = globals::g_VersionNumber;
+
     /* Output the banner.. */
     time_t currentTime = time(NULL);
     int currentYear = localtime(&currentTime)->tm_year + 1900;  // Year is returned as the number of years since 1900.
     xiloader::console::output(xiloader::color::lightred, "==========================================================");
     xiloader::console::output(xiloader::color::lightgreen, "DarkStar Boot Loader (c) 2015 DarkStar Team");
-    xiloader::console::output(xiloader::color::lightgreen, "LandSandBoat Boot Loader (c) 2021-%d LandSandBoat Team (v%s)", currentYear, globals::g_VersionNumber.c_str());
+    xiloader::console::output(xiloader::color::lightgreen, "LandSandBoat Boot Loader (c) 2021-%d LandSandBoat Team (v%u.%u.%u)", currentYear, version[0], version[1], version[2]);
     xiloader::console::output(xiloader::color::lightblue, "Using %s", MBEDTLS_VERSION_STRING_FULL); // this prints "Using Mbed TLS #.#.#"
     xiloader::console::output(xiloader::color::lightpurple, "Git Repo   : https://github.com/LandSandBoat/xiloader");
     xiloader::console::output(xiloader::color::lightpurple, "Bug Reports: https://github.com/LandSandBoat/xiloader/issues");
     xiloader::console::output(xiloader::color::lightred, "==========================================================");
+
+    if (readInJsonArgs)
+    {
+        xiloader::console::output(xiloader::color::info, "Read in arguments from json file.");
+    }
 
     /* Initialize Winsock */
     WSADATA wsaData = { 0 };
