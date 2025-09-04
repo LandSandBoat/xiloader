@@ -237,60 +237,45 @@ namespace xiloader
      */
     bool network::CreateListenServer(SOCKET* sock, int protocol, const char* port)
     {
-        struct addrinfo hints;
-        memset(&hints, 0x00, sizeof(hints));
-
-        hints.ai_family = AF_INET;
-        hints.ai_socktype = protocol == IPPROTO_UDP ? SOCK_DGRAM : SOCK_STREAM;
-        hints.ai_protocol = protocol;
-        hints.ai_flags = AI_PASSIVE;
-
-        /* Attempt to resolve the local address.. */
-        struct addrinfo* addr = NULL;
-        if (getaddrinfo(NULL, port, &hints, &addr))
-        {
-            xiloader::console::output(xiloader::color::error, "Failed to obtain local address information.");
-            return false;
-        }
+        sockaddr_in sin     = {};
+        sin.sin_family      = AF_INET;
+        sin.sin_addr.s_addr = inet_addr("127.0.0.1");
+        sin.sin_port        = htons(51220);
 
         /* Create the listening socket.. */
-        *sock = socket(addr->ai_family, addr->ai_socktype, addr->ai_protocol);
+        *sock = socket(AF_INET, protocol == IPPROTO_UDP ? SOCK_DGRAM : SOCK_STREAM, protocol);
         if (*sock == INVALID_SOCKET)
         {
             xiloader::console::output(xiloader::color::error, "Failed to create listening socket.");
 
-            freeaddrinfo(addr);
             return false;
         }
 
+        BOOL enable = 1;
+
         /* Set socket option on internal server to allow sharing the port for multibox users */
-        if (setsockopt(*sock, SOL_SOCKET, SO_REUSEADDR, (char*)(&[] { return TRUE; }), sizeof(BOOL)) == SOCKET_ERROR)
+        if (setsockopt(*sock, SOL_SOCKET, SO_REUSEADDR, (char*)&enable, sizeof(BOOL)) == SOCKET_ERROR)
         {
             xiloader::console::output(xiloader::color::error, "Failed to set reusable address option on socket. %d", WSAGetLastError());
-
-            freeaddrinfo(addr);
             return false;
         }
 
         /* Bind to the local address.. */
-        if (bind(*sock, addr->ai_addr, (int)addr->ai_addrlen) == SOCKET_ERROR)
+        if (bind(*sock, reinterpret_cast<struct sockaddr*>(&sin), sizeof(sin)) == SOCKET_ERROR)
         {
-            xiloader::console::output(xiloader::color::error, "Failed to bind to listening socket.");
+            xiloader::console::output(xiloader::color::error, "Failed to bind to listening socket. %d", WSAGetLastError());
 
-            freeaddrinfo(addr);
             closesocket(*sock);
             *sock = INVALID_SOCKET;
             return false;
         }
-
-        freeaddrinfo(addr);
 
         /* Attempt to listen for clients if we are using TCP.. */
         if (protocol == IPPROTO_TCP)
         {
             if (listen(*sock, SOMAXCONN) == SOCKET_ERROR)
             {
-                xiloader::console::output(xiloader::color::error, "Failed to listen for connections.");
+                xiloader::console::output(xiloader::color::error, "Failed to listen for connections, %d", WSAGetLastError());
 
                 closesocket(*sock);
                 *sock = INVALID_SOCKET;

@@ -37,7 +37,7 @@ This file is part of DarkStar-server source code.
 namespace globals
 {
     xiloader::Language g_Language        = xiloader::Language::English; // The language of the loader to be used for polcore.
-    std::string        g_ServerAddress   = "127.0.0.1";                 // The server address to connect to.
+    std::string        g_ServerAddress   = "192.168.50.227";                 // The server address to connect to.
     uint16_t           g_ServerPort      = 51220;                       // The server lobby server port to connect to.
     uint16_t           g_LoginDataPort   = 54230;                       // Login server data port to connect to
     uint16_t           g_LoginViewPort   = 54001;                       // Login view port to connect to
@@ -569,15 +569,17 @@ int __cdecl main(int argc, char* argv[])
             /* Attempt to create connection to the login server.. */
             if (!xiloader::network::CreateConnection(&sock, loginport.c_str()))
             {
-                sock.s = INVALID_SOCKET;
-                xiloader::console::output(xiloader::color::error, "Failed to initialize connection to server on port %s!", loginport);
+                sock.s  = INVALID_SOCKET;
+                int err = WSAGetLastError();
+                xiloader::console::output(xiloader::color::error, "Failed to initialize connection to server on port %s, winsock error: %d", loginport.c_str(), err);
             }
 
             /* Attempt to create listening server for POL thread*/
             if (!xiloader::network::CreateListenServer(&polsock, IPPROTO_TCP, serverport.c_str()))
             {
                 polsock = INVALID_SOCKET;
-                xiloader::console::output(xiloader::color::error, "Failed to initialize listen server on port %s!", serverport);
+                int err = WSAGetLastError();
+                xiloader::console::output(xiloader::color::error, "Failed to initialize listen server on port %s, winsock error: %d", serverport.c_str(), err);
             }
 
             // Check if sockets are invalid
