@@ -1,11 +1,11 @@
 cmake_minimum_required(VERSION 3.15)
 project(xiloader CXX)
 
-set_property(GLOBAL PROPERTY CXX_STANDARD 17)
-set_property(GLOBAL PROPERTY CXX_STANDARD_REQUIRED ON)
-set_property(GLOBAL PROPERTY CXX_EXTENSIONS ON)
-set_property(GLOBAL PROPERTY LINKER_LANGUAGE CXX)
-set_property(GLOBAL PROPERTY USE_FOLDERS ON)
+set(CMAKE_CXX_STANDARD 20)
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
+set(CMAKE_CXX_EXTENSIONS ON)
+set(LINKER_LANGUAGE CXX)
+set(USE_FOLDERS ON)
 
 set(CMAKE_POSITION_INDEPENDENT_CODE ON)
 
@@ -17,9 +17,13 @@ elseif(CMAKE_SIZEOF_VOID_P EQUAL 4)
 endif()
 
 include(cmake/CPM.cmake)
-include(cmake/detours.cmake)
+
 include(cmake/argparse.cmake)
+include(cmake/detours.cmake)
+include(cmake/ftxui.cmake)
+include(cmake/json.cmake)
 include(cmake/mbedtls.cmake)
+include(cmake/qr-code-generator.cmake)
 
 configure_file(
 	src/xiloader.rc.in
@@ -28,6 +32,7 @@ configure_file(
 
 # xiloader
 add_executable(xiloader
+    src/command_handler.h
     src/console.cpp
     src/console.h
     src/defines.h
@@ -36,6 +41,7 @@ add_executable(xiloader
     src/functions.cpp
     src/functions.h
     src/main.cpp
+    src/menus.h
     src/network.cpp
     src/network.h
     src/polcore.h
@@ -49,14 +55,19 @@ target_include_directories(xiloader PUBLIC ${PROJECT_SOURCE_DIR}/xiloader)
 
 target_link_libraries(xiloader PUBLIC
     detours
-	argparse
-	crypt32
-	psapi
-	ws2_32
-	iphlpapi
-	MbedTLS::mbedtls
-	MbedTLS::mbedcrypto
-	MbedTLS::mbedx509)
+    argparse
+    crypt32
+    psapi
+    ws2_32
+    iphlpapi
+    MbedTLS::mbedtls
+    MbedTLS::mbedcrypto
+    MbedTLS::mbedx509    
+    nlohmann_json::nlohmann_json
+    ftxui::screen
+    ftxui::dom
+    ftxui::component
+    qr-code-generator)
 
 message(STATUS "CMAKE_VERSION: ${CMAKE_VERSION}")
 message(STATUS "CMAKE_BUILD_TYPE: ${CMAKE_BUILD_TYPE}")

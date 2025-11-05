@@ -1,7 +1,7 @@
 CPMAddPackage(
   NAME mbedtls
   GITHUB_REPOSITORY Mbed-TLS/mbedtls
-  GIT_TAG mbedtls-3.6.4
+  GIT_TAG mbedtls-3.6.5
   OPTIONS
     "ENABLE_PROGRAMS OFF"
     "ENABLE_TESTING OFF"

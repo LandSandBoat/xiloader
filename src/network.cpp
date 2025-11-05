@@ -22,26 +22,31 @@ This file is part of DarkStar-server source code.
 */
 
 #include "helpers.h"
+#include "menus.h"
 #include "network.h"
 #include <iphlpapi.h>
 #include <vector>
 
+#include "helpers.h"
+#include "command_handler.h"
+
 /* Externals */
 namespace globals
 {
-    extern std::string g_ServerAddress;
-    extern std::string g_Username;
-    extern std::string g_Password;
-    extern char        g_SessionHash[16];
-    extern std::string g_Email;
-    extern std::string g_VersionNumber;
-    extern uint16_t    g_ServerPort;
-    extern uint16_t    g_LoginDataPort;
-    extern uint16_t    g_LoginViewPort;
-    extern uint16_t    g_LoginAuthPort;
-    extern char*       g_CharacterList;
-    extern bool        g_IsRunning;
-    extern bool        g_FirstLogin;
+    extern std::string            g_ServerAddress;
+    extern std::string            g_Username;
+    extern std::string            g_Password;
+    extern std::string            g_OtpCode;
+    extern char                   g_SessionHash[16];
+    extern std::string            g_Email;
+    extern std::array<uint8_t, 3> g_VersionNumber;
+    extern uint16_t               g_ServerPort;
+    extern uint16_t               g_LoginDataPort;
+    extern uint16_t               g_LoginViewPort;
+    extern uint16_t               g_LoginAuthPort;
+    extern char*                  g_CharacterList;
+    extern bool                   g_IsRunning;
+    extern bool                   g_FirstLogin;
 }
 
 // mbed tls state
@@ -223,6 +228,10 @@ namespace xiloader
         sock->LocalAddress  = their_inaddr_ptr->sin_addr.S_un.S_addr;
         sock->ServerAddress = inet_addr(globals::g_ServerAddress.c_str());
 
+        unsigned char recvBuffer[4096] = {};
+
+        mbedtls_ssl_conf_read_timeout(&sslState::conf, 1000);
+
         return 1;
     }
 
@@ -237,60 +246,45 @@ namespace xiloader
      */
     bool network::CreateListenServer(SOCKET* sock, int protocol, const char* port)
     {
-        struct addrinfo hints;
-        memset(&hints, 0x00, sizeof(hints));
-
-        hints.ai_family = AF_INET;
-        hints.ai_socktype = protocol == IPPROTO_UDP ? SOCK_DGRAM : SOCK_STREAM;
-        hints.ai_protocol = protocol;
-        hints.ai_flags = AI_PASSIVE;
-
-        /* Attempt to resolve the local address.. */
-        struct addrinfo* addr = NULL;
-        if (getaddrinfo(NULL, port, &hints, &addr))
-        {
-            xiloader::console::output(xiloader::color::error, "Failed to obtain local address information.");
-            return false;
-        }
+        sockaddr_in sin     = {};
+        sin.sin_family      = AF_INET;
+        sin.sin_addr.s_addr = inet_addr("127.0.0.1");
+        sin.sin_port        = htons(51220);
 
         /* Create the listening socket.. */
-        *sock = socket(addr->ai_family, addr->ai_socktype, addr->ai_protocol);
+        *sock = socket(AF_INET, protocol == IPPROTO_UDP ? SOCK_DGRAM : SOCK_STREAM, protocol);
         if (*sock == INVALID_SOCKET)
         {
             xiloader::console::output(xiloader::color::error, "Failed to create listening socket.");
 
-            freeaddrinfo(addr);
             return false;
         }
 
+        BOOL enable = 1;
+
         /* Set socket option on internal server to allow sharing the port for multibox users */
-        if (setsockopt(*sock, SOL_SOCKET, SO_REUSEADDR, (char*)(&[] { return TRUE; }), sizeof(BOOL)) == SOCKET_ERROR)
+        if (setsockopt(*sock, SOL_SOCKET, SO_REUSEADDR, (char*)&enable, sizeof(BOOL)) == SOCKET_ERROR)
         {
             xiloader::console::output(xiloader::color::error, "Failed to set reusable address option on socket. %d", WSAGetLastError());
-
-            freeaddrinfo(addr);
             return false;
         }
 
         /* Bind to the local address.. */
-        if (bind(*sock, addr->ai_addr, (int)addr->ai_addrlen) == SOCKET_ERROR)
+        if (bind(*sock, reinterpret_cast<struct sockaddr*>(&sin), sizeof(sin)) == SOCKET_ERROR)
         {
-            xiloader::console::output(xiloader::color::error, "Failed to bind to listening socket.");
+            xiloader::console::output(xiloader::color::error, "Failed to bind to listening socket. %d", WSAGetLastError());
 
-            freeaddrinfo(addr);
             closesocket(*sock);
             *sock = INVALID_SOCKET;
             return false;
         }
-
-        freeaddrinfo(addr);
 
         /* Attempt to listen for clients if we are using TCP.. */
         if (protocol == IPPROTO_TCP)
         {
             if (listen(*sock, SOMAXCONN) == SOCKET_ERROR)
             {
-                xiloader::console::output(xiloader::color::error, "Failed to listen for connections.");
+                xiloader::console::output(xiloader::color::error, "Failed to listen for connections, %d", WSAGetLastError());
 
                 closesocket(*sock);
                 *sock = INVALID_SOCKET;
@@ -336,9 +330,12 @@ namespace xiloader
      */
     bool network::VerifyAccount(datasocket* sock)
     {
-        unsigned char recvBuffer[1024] = { 0 };
-        unsigned char sendBuffer[1024] = { 0 };
+        unsigned char recvBuffer[8192] = { 0 };
+        unsigned char sendBuffer[8192] = { 0 };
         std::string new_password       = "";
+
+        int8_t command = 0; // Same datatype as in xi_connect
+
         /* Create connection if required.. */
 
         // TODO: fix this check for TLS
@@ -353,216 +350,191 @@ namespace xiloader
         if (bUseAutoLogin)
             xiloader::console::output(xiloader::color::lightgreen, "Autologin activated!");
 
-        // TODO: kill all labels and gotos
         if (!bUseAutoLogin)
         {
-            xiloader::console::output("==========================================================");
-            xiloader::console::output("What would you like to do?");
-            xiloader::console::output("   1.) Login");
-            xiloader::console::output("   2.) Create New Account");
-            xiloader::console::output("   3.) Change Account Password");
-            xiloader::console::output("==========================================================");
-            printf("\nEnter a selection: ");
+            auto selected = MenuSelection::None;
 
-            std::string input;
-            std::cin >> input;
-            std::cout << std::endl;
-
-            /* User wants to log into an existing account or modify an existing account's password. */
-            if (input == "1" || input == "3")
+            // Check for None, because the 2FA submenu can select None and needs to replay the main menu.
+            // Any other option is a "real" selection
+            while (selected == MenuSelection::None)
             {
-                if (input == "3")
+                xiloader::console::output("What would you like to do?");
+                selected = menus::mainMenu();
+
+                if (selected == MenuSelection::TwoFactorSubmenu)
+                {
+                    xiloader::console::output("What would you like to do?");
+                    selected = menus::twoFactorSubMenu();
+                }
+            }
+
+            globals::g_Username = "";
+            globals::g_Password = "";
+            globals::g_OtpCode  = "";
+
+            switch (selected)
+            {
+                case MenuSelection::Login:
+                {
+                    menus::enterCredentialsWithOTP(globals::g_Username, globals::g_Password, globals::g_OtpCode);
+
+                    command = 0x10; // login
+                    break;
+                }
+                case MenuSelection::CreateAccount:
+                {
+                    xiloader::console::output("Please enter your desired login information.");
+                    xiloader::console::output("Username (3-15 characters)");
+                    xiloader::console::output("Password (6-32 characters)");
+
+                    while (!menus::createNewAccount(globals::g_Username, globals::g_Password))
+                    {
+                        xiloader::console::output(xiloader::color::error, "Passwords did not match! Please try again.");
+                    }
+
+                    command = 0x20; // create account
+                    break;
+                }
+
+                case MenuSelection::ChangePassword:
+                {
                     xiloader::console::output("Before resetting your password, first verify your account details.");
-                xiloader::console::output("Please enter your login information.");
-                std::cout << "\nUsername: ";
-                std::cin >> globals::g_Username;
-                std::cout << "Password: ";
-                globals::g_Password.clear();
+                    xiloader::console::output("Please enter your login information. The OTP code is only necessary if you have one registered.");
 
-                /* Read in each char and instead of displaying it. display a "*" */
-                char ch;
-                while ((ch = static_cast<char>(_getch())) != '\r')
-                {
-                    if (ch == '\0')
-                        continue;
-                    else if (ch == '\b')
+                    menus::enterCredentialsWithOTP(globals::g_Username, globals::g_Password, globals::g_OtpCode);
+
+                    xiloader::console::output("Enter new password (6-32 characters): ");
+
+                    while (!menus::confirmNewPassword(new_password))
                     {
-                        if (globals::g_Password.size())
-                        {
-                            globals::g_Password.pop_back();
-                            std::cout << "\b \b";
-                        }
+                        xiloader::console::output(xiloader::color::error, "Passwords did not match! Please try again.");
                     }
-                    else
-                    {
-                        globals::g_Password.push_back(ch);
-                        std::cout << '*';
-                    }
+
+                    command = 0x30; // change password
+                    break;
                 }
-                std::cout << std::endl;
-
-                char event_code = (input == "1") ? 0x10 : 0x30;
-
-                if (input == "3")
+                case MenuSelection::RegisterTwoFactorOTP:
                 {
-                    std::string confirmed_password = "";
-                    do
-                    {
-                        std::cout << "Enter new password (6-32 characters): ";
-                        confirmed_password = "";
-                        new_password       = "";
-                        std::cin >> new_password;
-                        std::cout << "Repeat Password           : ";
-                        std::cin >> confirmed_password;
-                        std::cout << std::endl;
+                    menus::enterCredentialsNoOTP(globals::g_Username, globals::g_Password);
 
-                        if (new_password != confirmed_password)
-                        {
-                            xiloader::console::output(xiloader::color::error, "Passwords did not match! Please try again.");
-                        }
-                    } while (new_password != confirmed_password);
-                    new_password = confirmed_password;
+                    command = 0x31; // create TOTP
+                    break;
                 }
-                sendBuffer[0x39] = event_code;
-            }
-            /* User wants to create a new account.. */
-            else if (input == "2")
-            {
-            create_account:
-                xiloader::console::output("Please enter your desired login information.");
-                std::cout << "\nUsername (3-15 characters): ";
-                std::cin >> globals::g_Username;
-                std::cout << "Password (6-32 characters): ";
-                globals::g_Password.clear();
-                std::cin >> globals::g_Password;
-                std::cout << "Repeat Password           : ";
-                std::cin >> input;
-                std::cout << std::endl;
 
-                // TODO: warn if username/password is too long
-
-                if (input != globals::g_Password)
+                case MenuSelection::RemoveTwoFactorOTP:
                 {
-                    xiloader::console::output(xiloader::color::error, "Passwords did not match! Please try again.");
-                    goto create_account;
+                    xiloader::console::output("Please enter your login information; your OTP code may be substituted for the recovery code");
+                    menus::enterCredentialsWithOTP(globals::g_Username, globals::g_Password, globals::g_OtpCode);
+
+                    command = 0x32;
+                    break;
                 }
 
-                sendBuffer[0x39] = 0x20;
-            }
+                case MenuSelection::RegenerateTwoFactorRemovalCode:
+                {
+                    xiloader::console::output("Please enter your login information; your OTP code may be substituted for the recovery code");
+                    menus::enterCredentialsWithOTP(globals::g_Username, globals::g_Password, globals::g_OtpCode);
 
-            std::cout << std::endl;
+                    command = 0x33; // Regenerate recovery code
+                    break;
+                }
+                case MenuSelection::ValidateTwoFactorOTP: // also enables OTP
+                {
+                    menus::enterCredentialsWithOTP(globals::g_Username, globals::g_Password, globals::g_OtpCode);
+
+                    command = 0x34;
+                    break;
+                }
+                case MenuSelection::Exit:
+                {
+                    exit(0); // Bit ugly, can't really exit properly with the current code flow
+                    break;
+                }
+
+                default:
+                {
+                    xiloader::console::output("Invalid menu selection");
+                    return 0;
+                }
+            }
         }
         else
         {
             /* User has auto-login enabled.. */
-            sendBuffer[0x39]      = 0x10;
+            command               = 0x10;
             globals::g_FirstLogin = false;
         }
 
-        sendBuffer[0] = 0xFF; // Magic for new xiloader bits
+        json login_json;
+        login_json["username"]     = globals::g_Username;
+        login_json["password"]     = globals::g_Password;
+        login_json["otp"]          = globals::g_OtpCode;
+        login_json["new_password"] = new_password;
+        login_json["version"]      = globals::g_VersionNumber;
+        login_json["command"]      = command;
 
-        sendBuffer[1] = 0x00; // Feature flags, none used yet.
-        sendBuffer[2] = 0x00;
-        sendBuffer[3] = 0x00;
-        sendBuffer[4] = 0x00;
-        sendBuffer[5] = 0x00;
-        sendBuffer[6] = 0x00;
-        sendBuffer[7] = 0x00;
-        sendBuffer[8] = 0x00;
-
-        /* Copy username and password into buffer.. */
-        memcpy(sendBuffer + 0x09, globals::g_Username.c_str(), globals::g_Username.length());
-        memcpy(sendBuffer + 0x19, globals::g_Password.c_str(), globals::g_Password.length());
-
-        /* Copy changed password into buffer */
-        memcpy(sendBuffer + 0x40, new_password.c_str(), 32);
-
-        // 17 byte wide operator specific space starting at 0x50 // This region will be used for anything server operators may install into custom launchers.
-
-        /* Copy version number into buffer */
-        memcpy(sendBuffer + 0x61, globals::g_VersionNumber.c_str(), 5);
+        std::string str          = login_json.dump();
+        const char* strBuffer    = str.c_str();
+        size_t      strBufferLen = strlen(strBuffer);
 
         /* Send info to server and obtain response.. */
-        mbedtls_ssl_write(&sslState::ssl, reinterpret_cast<const unsigned char*>(sendBuffer), 102);
-        mbedtls_ssl_read(&sslState::ssl, recvBuffer, 21);
+        mbedtls_ssl_write(&sslState::ssl, reinterpret_cast<const unsigned char*>(strBuffer), strBufferLen);
 
-        /* Handle the obtained result.. */
-        switch (recvBuffer[0])
+        std::memset(recvBuffer, 0, sizeof(recvBuffer));
+
+        if (mbedtls_ssl_read(&sslState::ssl, recvBuffer, sizeof(recvBuffer)) == MBEDTLS_ERR_SSL_TIMEOUT)
         {
-            case 0x0001: // Success (Login)
-            {
-                xiloader::console::output(xiloader::color::success, "Successfully logged in as %s!", globals::g_Username.c_str());
-
-                sock->AccountId = ref<UINT32>(recvBuffer, 1);
-                std::memcpy(&globals::g_SessionHash, recvBuffer + 5, sizeof(globals::g_SessionHash));
-
-                shutdown(sock->s, SD_BOTH);
-                closesocket(sock->s);
-                sock->s = INVALID_SOCKET;
-                return true;
-            }
-            case 0x0002: // Error (Login)
-            {
-                xiloader::console::output(xiloader::color::error, "Failed to login. Invalid username or password.");
-                closesocket(sock->s);
-                sock->s = INVALID_SOCKET;
-                return false;
-            }
-            case 0x0003: // Success (Create Account)
-            {
-                xiloader::console::output(xiloader::color::success, "Account successfully created!");
-                closesocket(sock->s);
-                sock->s = INVALID_SOCKET;
-                return false;
-            }
-            case 0x0004: // Error (Create Account)
-            {
-                xiloader::console::output(xiloader::color::error, "Failed to create the new account. Username already taken.");
-                closesocket(sock->s);
-                sock->s = INVALID_SOCKET;
-                return false;
-            }
-            case 0x0006: // Success (Changed Password)
-            {
-                xiloader::console::output(xiloader::color::success, "Password updated successfully!");
-                std::cout << std::endl;
-                globals::g_Password.clear();
-                closesocket(sock->s);
-                sock->s = INVALID_SOCKET;
-                return false;
-            }
-            case 0x0007: // Error (Changed Password)
-            {
-                xiloader::console::output(xiloader::color::error, "Failed to change password.");
-                std::cout << std::endl;
-                globals::g_Password.clear();
-                closesocket(sock->s);
-                sock->s = INVALID_SOCKET;
-                return false;
-            }
-
-            // Commands 0x0008 through 0x0008 are currently unused
-
-            case 0x000A:
-            {
-                xiloader::console::output(xiloader::color::error, "Failed to login. Account already logged in.");
-                closesocket(sock->s);
-                sock->s = INVALID_SOCKET;
-                return false;
-            }
-            case 0x000B:
-            {
-                xiloader::console::output(xiloader::color::error, "Failed to login. Expected xiloader version mismatch; check with your provider.");
-                closesocket(sock->s);
-                sock->s = INVALID_SOCKET;
-                return false;
-            }
+            xiloader::console::output(xiloader::color::error, "Remote failed to reply within the timeout, exiting...");
+            exit(2);
         }
 
-        /* We should not get here.. */
-        closesocket(sock->s);
+        json login_reply_json = json::parse(recvBuffer, nullptr, false);
+
+        if (login_reply_json.is_discarded())
+        {
+            xiloader::console::output(xiloader::color::error, "Bad json reply from remote");
+            closesocket(sock->s);
+            sock->s = INVALID_SOCKET;
+            return false;
+        }
+
+        bool retval = false;
+
+        std::string errorMessage = jsonGet<std::string>(login_reply_json, "error_message").value_or({}); // {} = empty string
+
+        if (errorMessage.empty())
+        {
+            auto maybeCommand = jsonGet<int8_t>(login_reply_json, "result");
+            if (maybeCommand.has_value())
+            {
+                command = maybeCommand.value();
+            }
+            else
+            {
+                xiloader::console::output(xiloader::color::error, "xi_connect didn't send a proper reply command");
+                closesocket(sock->s);
+                sock->s = INVALID_SOCKET;
+                return false;
+            }
+
+            retval = handleLoginCommand(command, login_reply_json, sock->AccountId, sock->s);
+        }
+        else
+        {
+            xiloader::console::output(xiloader::color::error, "Error from remote:");
+
+            xiloader::console::printMultiLine(errorMessage, "\n", xiloader::color::error);
+            return false;
+        }
+
+        // Socket is already closed if handleLoginCommand is true
+        if (!retval)
+        {
+            closesocket(sock->s);
+        }
+
         sock->s = INVALID_SOCKET;
-        return false;
+        return retval;
     }
 
     /**

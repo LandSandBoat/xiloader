@@ -21,12 +21,7 @@ This file is part of DarkStar-server source code.
 ===========================================================================
 */
 
-#ifndef __XILOADER_CONSOLE_H_INCLUDED__
-#define __XILOADER_CONSOLE_H_INCLUDED__
-
-#if defined (_MSC_VER) && (_MSC_VER >= 1020)
 #pragma once
-#endif
 
 #include <windows.h>
 #include <iostream>
@@ -94,7 +89,7 @@ namespace xiloader
 
         /**
          * @brief Prints a text fragment with the specified color to the console.
-         * 
+         *
          * @param c         The color to print the fragment with.
          * @param message   The fragment to print.
          */
@@ -152,6 +147,21 @@ namespace xiloader
             std::cout << std::endl;
         }
 
+        static void printMultiLine(std::string msg, const std::string delimiter, const xiloader::color color)
+        {
+            auto pos = msg.find(delimiter);
+
+            while (pos != -1)
+            {
+                xiloader::console::output(color, "%s", msg.substr(0, pos).c_str());
+                msg.erase(0, pos + delimiter.length());
+
+                pos = msg.find(delimiter);
+            }
+
+            xiloader::console::output(color, "%s", msg.c_str());
+        }
+
         /**
          * @brief Hides the console window.
          */
@@ -164,5 +174,3 @@ namespace xiloader
     };
 
 }; // namespace xiloader
-
-#endif // __XILOADER_CONSOLE_H_INCLUDED__
