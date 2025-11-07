@@ -176,7 +176,7 @@ bool handleLoginCommand(int8_t command, json& login_reply_json, uint32_t& accoun
             {
                 xiloader::console::output(xiloader::color::info, "Your recovery code is '%s'. Please write this down!", maybeRecoveryCode.value().c_str());
                 xiloader::console::output(xiloader::color::info, "Tip: Try using shift + leftclick to select the text if it doesn't work.", maybeRecoveryCode.value().c_str());
-                xiloader::console::output(xiloader::color::info, "You may remove you may remove your TOTP with this recovery code.");
+                xiloader::console::output(xiloader::color::info, "You may remove your TOTP with this recovery code.");
             }
 
             std::string svgFilePath = getTemporaryPath() + "temp.svg";
