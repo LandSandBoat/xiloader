@@ -281,6 +281,34 @@ int WINAPI Mine_connect(SOCKET s, const sockaddr* name, int namelen)
 }
 
 /**
+ * @brief Locates profile server port addresses and sets the profile server port
+ *
+ * @return Failed to find the patterns or succeeded to write
+ */
+bool SetProfileServerPort(uint16_t profileServerPort)
+{
+    const char* module                   = (globals::g_Language == xiloader::Language::European) ? "polcoreeu.dll" : "polcore.dll";
+    auto        profileServerPortAddress = (DWORD)xiloader::functions::FindPattern(module, (BYTE*)"\x66\xC7\x46\x26\x14\xC8\x88\x46\x09\x8D\x46\x24", "xxxxxxxxxxx");
+    if (profileServerPortAddress == 0)
+    {
+        xiloader::console::output(xiloader::color::error, "Failed to locate profileServerPortAddress!");
+        return false;
+    }
+
+    auto profileServerPortAddress2 = (DWORD)xiloader::functions::FindPattern(module, (BYTE*)"\x66\xC7\x05\xBA\x4A\x3F\x04\x14\xC8", "xxxxx??xx"); // This pattern changed slightly on a few month old polcore, it used to be a total match but some bytes changed.
+    if (profileServerPortAddress2 == 0)
+    {
+        xiloader::console::output(xiloader::color::error, "Failed to locate profileServerPortAddress2!");
+        return false;
+    }
+
+    *((uint16_t*)(profileServerPortAddress + 4))  = profileServerPort;
+    *((uint16_t*)(profileServerPortAddress2 + 7)) = profileServerPort;
+
+    return true;
+}
+
+/**
  * @brief Locates the INET mutex function call inside of polcore.dll
  *
  * @return The pointer to the function call.
@@ -701,6 +729,15 @@ int __cdecl main(int argc, char* argv[])
                     CreateThread(NULL, 0, (LPTHREAD_START_ROUTINE)ApplyHairpinFixThread, NULL, 0, NULL);
                 }
 
+                struct sockaddr_in pol_sin;
+                int                pol_len           = sizeof(pol_sin);
+                unsigned short     profileServerPort = 0;
+
+                if (getsockname(polsock, (struct sockaddr*)&pol_sin, &pol_len) == 0)
+                {
+                    profileServerPort = ntohs(pol_sin.sin_port);
+                }
+
                 /* Create listen servers.. */
                 globals::g_IsRunning = true;
                 HANDLE hFFXiServer   = CreateThread(NULL, 0, xiloader::network::FFXiServer, &sock, 0, NULL);
@@ -746,6 +783,11 @@ int __cdecl main(int argc, char* argv[])
                     lpCommandTable[POLFUNC_REGISTRY_KEY](xiloader::functions::GetRegistryPlayOnlineKey(globals::g_Language));
                     lpCommandTable[POLFUNC_INSTALL_FOLDER](xiloader::functions::GetRegistryPlayOnlineInstallFolder(globals::g_Language));
                     lpCommandTable[POLFUNC_INET_MUTEX]();
+
+                    if (!SetProfileServerPort(profileServerPort))
+                    {
+                        return 1;
+                    }
 
                     /* Attempt to create FFXi instance..*/
                     IFFXiEntry* ffxi = NULL;
