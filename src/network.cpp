@@ -249,7 +249,7 @@ namespace xiloader
         sockaddr_in sin     = {};
         sin.sin_family      = AF_INET;
         sin.sin_addr.s_addr = inet_addr("127.0.0.1");
-        sin.sin_port        = htons(51220);
+        sin.sin_port        = htons(0);
 
         /* Create the listening socket.. */
         *sock = socket(AF_INET, protocol == IPPROTO_UDP ? SOCK_DGRAM : SOCK_STREAM, protocol);

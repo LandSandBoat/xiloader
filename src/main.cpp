@@ -56,7 +56,7 @@ namespace globals
     std::string            g_OtpCode         = "";                          // The OTP code the user input
     char                   g_SessionHash[16] = {};                          // Session hash sent from auth
     std::string            g_Email           = "";                          // Email, currently unused
-    std::array<uint8_t, 3> g_VersionNumber   = { 2, 0, 0 };                 // xiloader version number sent to auth server. Must be x.x.x with single characters for 'x'. Remember to also change in xiloader.rc.in
+    std::array<uint8_t, 3> g_VersionNumber   = { 2, 0, 1 };                 // xiloader version number sent to auth server. Must be x.x.x with single characters for 'x'. Remember to also change in xiloader.rc.in
     bool                   g_FirstLogin      = false;                       // set to true when --user --pass are both set to allow for autologin
 
     char* g_CharacterList = NULL;  // Pointer to the character list data being sent from the server.
@@ -278,6 +278,34 @@ int WINAPI Mine_connect(SOCKET s, const sockaddr* name, int namelen)
     int ret = Real_connect(s, name, namelen);
 
     return ret;
+}
+
+/**
+ * @brief Locates profile server port addresses and sets the profile server port
+ *
+ * @return Failed to find the patterns or succeeded to write
+ */
+bool SetProfileServerPort(uint16_t profileServerPort)
+{
+    const char* module                   = (globals::g_Language == xiloader::Language::European) ? "polcoreeu.dll" : "polcore.dll";
+    auto        profileServerPortAddress = (DWORD)xiloader::functions::FindPattern(module, (BYTE*)"\x66\xC7\x46\x26\x14\xC8\x88\x46\x09\x8D\x46\x24", "xxxxxxxxxxx");
+    if (profileServerPortAddress == 0)
+    {
+        xiloader::console::output(xiloader::color::error, "Failed to locate profileServerPortAddress!");
+        return false;
+    }
+
+    auto profileServerPortAddress2 = (DWORD)xiloader::functions::FindPattern(module, (BYTE*)"\x66\xC7\x05\xBA\x4A\x3F\x04\x14\xC8", "xxxxx??xx"); // This pattern changed slightly on a few month old polcore, it used to be a total match but some bytes changed.
+    if (profileServerPortAddress2 == 0)
+    {
+        xiloader::console::output(xiloader::color::error, "Failed to locate profileServerPortAddress2!");
+        return false;
+    }
+
+    *((uint16_t*)(profileServerPortAddress + 4))  = profileServerPort;
+    *((uint16_t*)(profileServerPortAddress2 + 7)) = profileServerPort;
+
+    return true;
 }
 
 /**
@@ -701,6 +729,15 @@ int __cdecl main(int argc, char* argv[])
                     CreateThread(NULL, 0, (LPTHREAD_START_ROUTINE)ApplyHairpinFixThread, NULL, 0, NULL);
                 }
 
+                struct sockaddr_in pol_sin;
+                int                pol_len           = sizeof(pol_sin);
+                unsigned short     profileServerPort = 0;
+
+                if (getsockname(polsock, (struct sockaddr*)&pol_sin, &pol_len) == 0)
+                {
+                    profileServerPort = ntohs(pol_sin.sin_port);
+                }
+
                 /* Create listen servers.. */
                 globals::g_IsRunning = true;
                 HANDLE hFFXiServer   = CreateThread(NULL, 0, xiloader::network::FFXiServer, &sock, 0, NULL);
@@ -746,6 +783,11 @@ int __cdecl main(int argc, char* argv[])
                     lpCommandTable[POLFUNC_REGISTRY_KEY](xiloader::functions::GetRegistryPlayOnlineKey(globals::g_Language));
                     lpCommandTable[POLFUNC_INSTALL_FOLDER](xiloader::functions::GetRegistryPlayOnlineInstallFolder(globals::g_Language));
                     lpCommandTable[POLFUNC_INET_MUTEX]();
+
+                    if (!SetProfileServerPort(profileServerPort))
+                    {
+                        return 1;
+                    }
 
                     /* Attempt to create FFXi instance..*/
                     IFFXiEntry* ffxi = NULL;
