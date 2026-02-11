@@ -1,7 +1,7 @@
 /*
 ===========================================================================
 
-  Copyright (c) 2025 LandSandBoat Dev Teams
+  Copyright (c) 2026 LandSandBoat Dev Teams
 
   This program is free software: you can redistribute it and/or modify
   it under the terms of the GNU General Public License as published by
@@ -26,6 +26,8 @@
 #include "ftxui/component/component_options.hpp"  // for MenuOption
 #include "ftxui/component/screen_interactive.hpp" // for ScreenInteractive
 
+#include "trust_token.h"
+
 enum class MenuSelection : uint8_t
 {
     None                           = 0,
@@ -37,6 +39,7 @@ enum class MenuSelection : uint8_t
     RemoveTwoFactorOTP             = 6,
     RegenerateTwoFactorRemovalCode = 7,
     ValidateTwoFactorOTP           = 8,
+    RevokeComputerTrust            = 9,
     Exit                           = 255,
 };
 
@@ -56,7 +59,8 @@ namespace menus
             MenuEntry("2) Remove 2FA OTP"),
             MenuEntry("3) Regenerate 2FA OTP removal code"),
             MenuEntry("4) Validate 2FA OTP"),
-            MenuEntry("5) Exit Menu"),
+            MenuEntry("5) Revoke Computer Trust"),
+            MenuEntry("6) Exit Menu"),
         },
         &selected);
 
@@ -88,9 +92,15 @@ namespace menus
                 screen.Exit();
                 return true;
             }
-            else if (event == Event::Character('5')) // Select "Exit Menu"
+            else if (event == Event::Character('5')) // Select "Revoke Computer Trust"
             {
                 selected = 4;
+                screen.Exit();
+                return true;
+            }
+            else if (event == Event::Character('6')) // Select "Exit Menu"
+            {
+                selected = 5;
                 screen.Exit();
                 return true;
             }
@@ -126,6 +136,10 @@ namespace menus
                 return MenuSelection::ValidateTwoFactorOTP;
             }
             case 4:
+            {
+                return MenuSelection::RevokeComputerTrust;
+            }
+            case 5:
             default:
             {
                 return MenuSelection::None; // In this instance, the caller will replay the main menu
@@ -229,7 +243,7 @@ namespace menus
         return MenuSelection::None;
     }
 
-    void enterCredentialsWithOTP(std::string& username, std::string& password, std::string& OTP)
+    void enterCredentialsWithOTP(std::string& username, std::string& password, std::string& OTP, bool* trustThisComputer = nullptr, const std::string& serverAddress = "")
     {
         ftxui::InputOption password_option;
         password_option.password = true;
@@ -238,14 +252,22 @@ namespace menus
         ftxui::Component input_password = ftxui::Input(&password, "", password_option);
         ftxui::Component input_otp      = ftxui::Input(&OTP, "");
 
-        // The component tree:
-        auto component = ftxui::Container::Vertical({
-            input_username,
-            input_password,
-            input_otp,
-        });
+        std::vector<ftxui::Component> components = { input_username, input_password, input_otp };
+
+        ftxui::Component checkbox_trust;
+        if (trustThisComputer)
+        {
+            checkbox_trust = ftxui::Checkbox("Trust this computer", trustThisComputer);
+            components.push_back(checkbox_trust);
+        }
+
+        auto component = ftxui::Container::Vertical(components);
 
         auto screen = ftxui::ScreenInteractive::TerminalOutput();
+
+        // Trust token cache — only re-check when username changes
+        std::string lastCheckedUser;
+        bool        isTrusted = false;
 
         // clang-format off
         component |= ftxui::CatchEvent([&](ftxui::Event event)
@@ -258,9 +280,27 @@ namespace menus
                 }
                 else if (input_password->Focused())
                 {
-                    input_otp->TakeFocus();
+                    if (isTrusted)
+                    {
+                        screen.Exit();
+                    }
+                    else
+                    {
+                        input_otp->TakeFocus();
+                    }
                 }
                 else if (input_otp->Focused())
+                {
+                    if (checkbox_trust)
+                    {
+                        checkbox_trust->TakeFocus();
+                    }
+                    else
+                    {
+                        screen.Exit();
+                    }
+                }
+                else if (checkbox_trust && checkbox_trust->Focused())
                 {
                     screen.Exit();
                 }
@@ -274,10 +314,37 @@ namespace menus
         // clang-format off
         auto renderer = ftxui::Renderer(component, [&]
         {
-                return ftxui::vbox({    ftxui::hbox(ftxui::text("  Username: "), input_username->Render()),
-                                        ftxui::hbox(ftxui::text("  Password: "), input_password->Render()),
-                                        ftxui::hbox(ftxui::text("  OTP Code: "), input_otp->Render())
-                                   }) | ftxui::border;
+                // Check trust status when username changes
+                if (!serverAddress.empty() && username != lastCheckedUser)
+                {
+                    lastCheckedUser = username;
+                    isTrusted = !username.empty() && !loadTrustToken(serverAddress, username).empty();
+                    if (isTrusted)
+                    {
+                        OTP.clear();
+                    }
+                }
+
+                auto elements = std::vector<ftxui::Element>{
+                    ftxui::hbox(ftxui::text("  Username: "), input_username->Render()),
+                    ftxui::hbox(ftxui::text("  Password: "), input_password->Render()),
+                };
+
+                if (isTrusted)
+                {
+                    elements.push_back(ftxui::hbox(ftxui::text("  OTP Code: "), input_otp->Render(), ftxui::text(" (optional - trusted)") | ftxui::color(ftxui::Color::GrayDark)));
+                    elements.push_back(ftxui::hbox(ftxui::text("  Computer is trusted") | ftxui::color(ftxui::Color::Green)));
+                }
+                else
+                {
+                    elements.push_back(ftxui::hbox(ftxui::text("  OTP Code: "), input_otp->Render()));
+                    if (checkbox_trust)
+                    {
+                        elements.push_back(ftxui::hbox(ftxui::text("  "), checkbox_trust->Render()));
+                    }
+                }
+
+                return ftxui::vbox(elements) | ftxui::border;
         });
         // clang-format on
 
@@ -500,5 +567,37 @@ namespace menus
         }
 
         return true;
+    }
+    void enterUsernameOnly(std::string& username)
+    {
+        ftxui::Component input_username = ftxui::Input(&username, "");
+
+        auto component = ftxui::Container::Vertical({
+            input_username,
+        });
+
+        auto screen = ftxui::ScreenInteractive::TerminalOutput();
+
+        // clang-format off
+        component |= ftxui::CatchEvent([&](ftxui::Event event)
+        {
+            if (event == event.Return)
+            {
+                screen.Exit();
+                return true;
+            }
+            return false;
+        });
+        // clang-format on
+
+        // clang-format off
+        auto renderer = ftxui::Renderer(component, [&]
+        {
+                return ftxui::vbox({    ftxui::hbox(ftxui::text("  Username: "), input_username->Render()),
+                                   }) | ftxui::border;
+        });
+        // clang-format on
+
+        screen.Loop(renderer);
     }
 } // namespace menus

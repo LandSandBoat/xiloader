@@ -2,7 +2,7 @@
 ===========================================================================
 
 Copyright (c) 2010-2015 Darkstar Dev Teams
-Copyright (c) 2021-2022 LandSandBoat Dev Teams
+Copyright (c) 2021-2026 LandSandBoat Dev Teams
 
 This program is free software: you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
@@ -45,19 +45,21 @@ using json = nlohmann::json;
 /* Global Variables */
 namespace globals
 {
-    xiloader::Language     g_Language        = xiloader::Language::English; // The language of the loader to be used for polcore.
-    std::string            g_ServerAddress   = "127.0.0.1";                 // The server address to connect to.
-    uint16_t               g_ServerPort      = 51220;                       // The server lobby server port to connect to.
-    uint16_t               g_LoginDataPort   = 54230;                       // Login server data port to connect to
-    uint16_t               g_LoginViewPort   = 54001;                       // Login view port to connect to
-    uint16_t               g_LoginAuthPort   = 54231;                       // Login auth port to connect to
-    std::string            g_Username        = "";                          // The username being logged in with.
-    std::string            g_Password        = "";                          // The password being logged in with.
-    std::string            g_OtpCode         = "";                          // The OTP code the user input
-    char                   g_SessionHash[16] = {};                          // Session hash sent from auth
-    std::string            g_Email           = "";                          // Email, currently unused
-    std::array<uint8_t, 3> g_VersionNumber   = { 2, 0, 1 };                 // xiloader version number sent to auth server. Must be x.x.x with single characters for 'x'. Remember to also change in xiloader.rc.in
-    bool                   g_FirstLogin      = false;                       // set to true when --user --pass are both set to allow for autologin
+    xiloader::Language     g_Language          = xiloader::Language::English; // The language of the loader to be used for polcore.
+    std::string            g_ServerAddress     = "127.0.0.1";                 // The server address to connect to.
+    uint16_t               g_ServerPort        = 51220;                       // The server lobby server port to connect to.
+    uint16_t               g_LoginDataPort     = 54230;                       // Login server data port to connect to
+    uint16_t               g_LoginViewPort     = 54001;                       // Login view port to connect to
+    uint16_t               g_LoginAuthPort     = 54231;                       // Login auth port to connect to
+    std::string            g_Username          = "";                          // The username being logged in with.
+    std::string            g_Password          = "";                          // The password being logged in with.
+    std::string            g_OtpCode           = "";                          // The OTP code the user input
+    char                   g_SessionHash[16]   = {};                          // Session hash sent from auth
+    std::string            g_Email             = "";                          // Email, currently unused
+    std::array<uint8_t, 3> g_VersionNumber     = { 2, 1, 0 };                 // xiloader version number sent to auth server. Must be x.x.x with single characters for 'x'. Remember to also change in xiloader.rc.in
+    bool                   g_FirstLogin        = false;                       // set to true when --user --pass are both set to allow for autologin
+    std::string            g_TrustToken        = "";                          // trust token loaded from disk or received from server
+    bool                   g_TrustThisComputer = false;                       // user checkbox / CLI flag for "trust this computer"
 
     char* g_CharacterList = NULL;  // Pointer to the character list data being sent from the server.
     bool  g_IsRunning     = false; // Flag to determine if the network threads should hault.
@@ -467,6 +469,11 @@ int __cdecl main(int argc, char* argv[])
         .help("(optional) Determines whether or not to hide the console window after FFXI starts.")
         .append();
 
+    args.add_argument("--trust")
+        .implicit_value(true)
+        .help("(optional) Trust this computer for 30 days, skipping 2FA on subsequent logins.")
+        .append();
+
     args.add_argument("--json", "--json-file")
         .help("(optional) The json file to load arguments in from")
         .append();
@@ -531,6 +538,8 @@ int __cdecl main(int argc, char* argv[])
 
     globals::g_Hide = args.is_used("--hide") ? args.get<bool>("--hide") : globals::g_Hide;
 
+    globals::g_TrustThisComputer = args.is_used("--trust") ? args.get<bool>("--trust") : globals::g_TrustThisComputer;
+
     bool readInJsonArgs = false;
     if (!jsonFilename.empty())
     {
@@ -589,8 +598,9 @@ int __cdecl main(int argc, char* argv[])
                 globals::g_OtpCode = jsonGet<std::string>(jsonData, "otp").value_or(globals::g_OtpCode);
                 globals::g_Email   = jsonGet<std::string>(jsonData, "email").value_or(globals::g_Email);
 
-                bUseHairpinFix  = jsonGet<bool>(jsonData, "hairpin").value_or(bUseHairpinFix);
-                globals::g_Hide = jsonGet<bool>(jsonData, "hide").value_or(globals::g_Hide);
+                bUseHairpinFix               = jsonGet<bool>(jsonData, "hairpin").value_or(bUseHairpinFix);
+                globals::g_Hide              = jsonGet<bool>(jsonData, "hide").value_or(globals::g_Hide);
+                globals::g_TrustThisComputer = jsonGet<bool>(jsonData, "trust_this_computer").value_or(globals::g_TrustThisComputer);
 
                 std::string language = jsonGet<std::string>(jsonData, "language").value_or({});
 
@@ -753,7 +763,7 @@ int __cdecl main(int argc, char* argv[])
                 {
                     /* Invoke the setup functions for polcore.. */
                     // Create string for the login view port
-                    std::string polcorecmd = " /game eAZcFcB -net 3 -port " + globals::g_LoginViewPort;
+                    std::string polcorecmd = " /game eAZcFcB -net 3 -port " + std::to_string(globals::g_LoginViewPort);
                     // Cast to an LPSTR
                     LPSTR cmd = const_cast<char*>(polcorecmd.c_str());
                     polcore->SetAreaCode(globals::g_Language);

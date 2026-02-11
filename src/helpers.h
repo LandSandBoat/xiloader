@@ -1,7 +1,7 @@
 /*
 ===========================================================================
 
-Copyright (c) 2022 LandSandBoat Dev Teams
+Copyright (c) 2026 LandSandBoat Dev Teams
 
 This program is free software: you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
@@ -19,6 +19,13 @@ along with this program.  If not, see http://www.gnu.org/licenses/
 ===========================================================================
 */
 #pragma once
+
+#ifndef NOMINMAX
+#define NOMINMAX 1
+#endif
+
+#include <winsock2.h>
+#include <windows.h>
 
 #include <cstddef>
 #include <filesystem>

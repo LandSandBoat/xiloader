@@ -1,7 +1,7 @@
 /*
 ===========================================================================
 
-  Copyright (c) 2025 LandSandBoat Dev Teams
+  Copyright (c) 2026 LandSandBoat Dev Teams
 
   This program is free software: you can redistribute it and/or modify
   it under the terms of the GNU General Public License as published by
@@ -38,11 +38,14 @@ namespace globals
     extern char*                  g_CharacterList;
     extern bool                   g_IsRunning;
     extern bool                   g_FirstLogin;
+    extern std::string            g_TrustToken;
+    extern bool                   g_TrustThisComputer;
 } // namespace globals
 
 #include "defines.h"
 #include "helpers.h"
 #include "network.h"
+#include "trust_token.h"
 
 #include <nlohmann/json.hpp>
 #include <qrcodegen.hpp>
@@ -80,6 +83,19 @@ bool handleLoginCommand(int8_t command, json& login_reply_json, uint32_t& accoun
             }
 
             xiloader::console::output(xiloader::color::success, "Successfully logged in as %s!", globals::g_Username.c_str());
+
+            auto maybeTrustToken = jsonGet<std::string>(login_reply_json, "trust_token");
+            if (maybeTrustToken.has_value() && !maybeTrustToken.value().empty())
+            {
+                // Use server-provided expiry; fall back to 30 days if absent
+                int64_t expires = jsonGet<int64_t>(login_reply_json, "trust_expires")
+                                      .value_or(static_cast<int64_t>(time(nullptr)) + (30 * 24 * 60 * 60));
+                saveTrustToken(globals::g_ServerAddress, globals::g_Username,
+                               maybeTrustToken.value(), expires);
+                int64_t days = (expires - static_cast<int64_t>(time(nullptr))) / (24 * 60 * 60);
+                xiloader::console::output(xiloader::color::info, "This computer is now trusted for %lld day%s.",
+                    days, days == 1 ? "" : "s");
+            }
 
             shutdown(sock, SD_BOTH);
 
@@ -129,6 +145,18 @@ bool handleLoginCommand(int8_t command, json& login_reply_json, uint32_t& accoun
         case 0x000B:
         {
             xiloader::console::output(xiloader::color::error, "Failed to login. Expected xiloader version mismatch; check with your provider.");
+
+            return false;
+        }
+
+        // LOGIN_ERROR_TRUST_TOKEN_INVALID
+        case 0x0013:
+        {
+            removeTrustToken(globals::g_ServerAddress, globals::g_Username);
+            xiloader::console::output(xiloader::color::error, "==========================================================");
+            xiloader::console::output(xiloader::color::error, "Trust token rejected! It has been cleared from this computer.");
+            xiloader::console::output(xiloader::color::error, "Please log in again and enter your OTP code.");
+            xiloader::console::output(xiloader::color::error, "==========================================================");
 
             return false;
         }
@@ -193,6 +221,8 @@ bool handleLoginCommand(int8_t command, json& login_reply_json, uint32_t& accoun
         {
             xiloader::console::output(xiloader::color::info, "Your TOTP has been removed.");
             xiloader::console::output(xiloader::color::info, "You no longer need to use an OTP code to login.");
+
+            removeTrustToken(globals::g_ServerAddress, globals::g_Username);
 
             return false;
         }

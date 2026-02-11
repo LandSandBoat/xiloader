@@ -2,6 +2,7 @@
 ===========================================================================
 
 Copyright (c) 2010-2014 Darkstar Dev Teams
+Copyright (c) 2026 LandSandBoat Dev Teams
 
 This program is free software: you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
@@ -24,6 +25,7 @@ This file is part of DarkStar-server source code.
 #include "helpers.h"
 #include "menus.h"
 #include "network.h"
+#include "trust_token.h"
 #include <iphlpapi.h>
 #include <vector>
 
@@ -47,6 +49,8 @@ namespace globals
     extern char*                  g_CharacterList;
     extern bool                   g_IsRunning;
     extern bool                   g_FirstLogin;
+    extern std::string            g_TrustToken;
+    extern bool                   g_TrustThisComputer;
 }
 
 // mbed tls state
@@ -368,15 +372,19 @@ namespace xiloader
                 }
             }
 
-            globals::g_Username = "";
-            globals::g_Password = "";
-            globals::g_OtpCode  = "";
+            globals::g_Username   = "";
+            globals::g_Password   = "";
+            globals::g_OtpCode    = "";
+            globals::g_TrustToken = "";
 
             switch (selected)
             {
                 case MenuSelection::Login:
                 {
-                    menus::enterCredentialsWithOTP(globals::g_Username, globals::g_Password, globals::g_OtpCode);
+                    menus::enterCredentialsWithOTP(globals::g_Username, globals::g_Password, globals::g_OtpCode, &globals::g_TrustThisComputer, globals::g_ServerAddress);
+
+                    // Load trust token for this server+user combination
+                    globals::g_TrustToken = loadTrustToken(globals::g_ServerAddress, globals::g_Username);
 
                     command = 0x10; // login
                     break;
@@ -445,6 +453,15 @@ namespace xiloader
                     command = 0x34;
                     break;
                 }
+                case MenuSelection::RevokeComputerTrust:
+                {
+                    std::string revokeUsername;
+                    xiloader::console::output("Enter the username to revoke trust for:");
+                    menus::enterUsernameOnly(revokeUsername);
+                    removeTrustToken(globals::g_ServerAddress, revokeUsername);
+                    xiloader::console::output(xiloader::color::info, "Computer trust revoked for '%s'.", revokeUsername.c_str());
+                    return 0; // Return to menu
+                }
                 case MenuSelection::Exit:
                 {
                     exit(0); // Bit ugly, can't really exit properly with the current code flow
@@ -463,6 +480,9 @@ namespace xiloader
             /* User has auto-login enabled.. */
             command               = 0x10;
             globals::g_FirstLogin = false;
+
+            // Load trust token for autologin
+            globals::g_TrustToken = loadTrustToken(globals::g_ServerAddress, globals::g_Username);
         }
 
         json login_json;
@@ -472,6 +492,12 @@ namespace xiloader
         login_json["new_password"] = new_password;
         login_json["version"]      = globals::g_VersionNumber;
         login_json["command"]      = command;
+
+        if (command == 0x10) // Only send trust fields for login
+        {
+            login_json["trust_token"]        = globals::g_TrustToken;
+            login_json["trust_this_computer"] = globals::g_TrustThisComputer;
+        }
 
         std::string str          = login_json.dump();
         const char* strBuffer    = str.c_str();
