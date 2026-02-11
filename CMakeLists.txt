@@ -45,6 +45,8 @@ add_executable(xiloader
     src/network.cpp
     src/network.h
     src/polcore.h
+    src/trust_token.cpp
+    src/trust_token.h
     ${CMAKE_CURRENT_BINARY_DIR}/src/xiloader.rc
     xiloader.manifest
 )
