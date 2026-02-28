@@ -567,7 +567,7 @@ int __cdecl main(int argc, char* argv[])
                 auto maybePassword = jsonGet<std::string>(jsonData, "password");
 
                 globals::g_Username = maybeUsername.value_or(globals::g_Username);
-                globals::g_Password = maybeUsername.value_or(globals::g_Password);
+                globals::g_Password = maybePassword.value_or(globals::g_Password);
 
                 // Set autologin if it isn't set already
                 if (maybeUsername.has_value() && maybePassword.has_value())
