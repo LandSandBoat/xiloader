@@ -56,7 +56,7 @@ namespace globals
     std::string            g_OtpCode           = "";                          // The OTP code the user input
     char                   g_SessionHash[16]   = {};                          // Session hash sent from auth
     std::string            g_Email             = "";                          // Email, currently unused
-    std::array<uint8_t, 3> g_VersionNumber     = { 2, 1, 0 };                 // xiloader version number sent to auth server. Must be x.x.x with single characters for 'x'. Remember to also change in xiloader.rc.in
+    std::array<uint8_t, 3> g_VersionNumber     = { 2, 1, 1 };                 // xiloader version number sent to auth server. Must be x.x.x with single characters for 'x'. Remember to also change in xiloader.rc.in
     bool                   g_FirstLogin        = false;                       // set to true when --user --pass are both set to allow for autologin
     std::string            g_TrustToken        = "";                          // trust token loaded from disk or received from server
     bool                   g_TrustThisComputer = false;                       // user checkbox / CLI flag for "trust this computer"

@@ -3,13 +3,13 @@
 // VALUE "FileVersion", ...
 
 1 VERSIONINFO
-FILEVERSION 2,1,0
+FILEVERSION 2,1,1
 BEGIN
     BLOCK "StringFileInfo"
     BEGIN
         BLOCK "081604b0"
         BEGIN
-            VALUE "FileVersion", "2.1.0"
+            VALUE "FileVersion", "2.1.1"
         END
     END
 END
