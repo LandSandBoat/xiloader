@@ -40,6 +40,7 @@ namespace globals
     extern bool                   g_FirstLogin;
     extern std::string            g_TrustToken;
     extern bool                   g_TrustThisComputer;
+    extern std::string            g_LoginToken;
 } // namespace globals
 
 #include "defines.h"
@@ -156,6 +157,19 @@ bool handleLoginCommand(int8_t command, json& login_reply_json, uint32_t& accoun
             xiloader::console::output(xiloader::color::error, "==========================================================");
             xiloader::console::output(xiloader::color::error, "Trust token rejected! It has been cleared from this computer.");
             xiloader::console::output(xiloader::color::error, "Please log in again and enter your OTP code.");
+            xiloader::console::output(xiloader::color::error, "==========================================================");
+
+            return false;
+        }
+
+        // LOGIN_ERROR_LAUNCH_TOKEN_INVALID
+        case 0x0014:
+        {
+            // Single-use and short-lived; invalid means it was already used or expired.
+            globals::g_LoginToken.clear();
+            xiloader::console::output(xiloader::color::error, "==========================================================");
+            xiloader::console::output(xiloader::color::error, "Launch token invalid or expired (session expired).");
+            xiloader::console::output(xiloader::color::error, "Please log in again from the launcher.");
             xiloader::console::output(xiloader::color::error, "==========================================================");
 
             return false;

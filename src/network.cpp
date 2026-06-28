@@ -51,6 +51,7 @@ namespace globals
     extern bool                   g_FirstLogin;
     extern std::string            g_TrustToken;
     extern bool                   g_TrustThisComputer;
+    extern std::string            g_LoginToken;
 }
 
 // mbed tls state
@@ -493,10 +494,17 @@ namespace xiloader
         login_json["version"]      = globals::g_VersionNumber;
         login_json["command"]      = command;
 
-        if (command == 0x10) // Only send trust fields for login
+        if (command == 0x10) // Only send trust/launch fields for login
         {
             login_json["trust_token"]        = globals::g_TrustToken;
             login_json["trust_this_computer"] = globals::g_TrustThisComputer;
+
+            // Optional single-use launch token; xi_connect consumes it in place
+            // of password + OTP (password may be empty).
+            if (!globals::g_LoginToken.empty())
+            {
+                login_json["login_token"] = globals::g_LoginToken;
+            }
         }
 
         std::string str          = login_json.dump();
