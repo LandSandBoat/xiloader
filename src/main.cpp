@@ -60,6 +60,7 @@ namespace globals
     bool                   g_FirstLogin        = false;                       // set to true when --user --pass are both set to allow for autologin
     std::string            g_TrustToken        = "";                          // trust token loaded from disk or received from server
     bool                   g_TrustThisComputer = false;                       // user checkbox / CLI flag for "trust this computer"
+    std::string            g_LoginToken        = "";                          // single-use launch token from the launcher; sent in place of password + OTP
 
     char* g_CharacterList = NULL;  // Pointer to the character list data being sent from the server.
     bool  g_IsRunning     = false; // Flag to determine if the network threads should hault.
@@ -569,8 +570,14 @@ int __cdecl main(int argc, char* argv[])
                 globals::g_Username = maybeUsername.value_or(globals::g_Username);
                 globals::g_Password = maybePassword.value_or(globals::g_Password);
 
-                // Set autologin if it isn't set already
-                if (maybeUsername.has_value() && maybePassword.has_value())
+                // Launcher-injected single-use launch token. Sent in place of
+                // password + OTP (Discord-login boot); wins over any password.
+                globals::g_LoginToken = jsonGet<std::string>(jsonData, "login_token").value_or(globals::g_LoginToken);
+
+                // Set autologin if it isn't set already. A launch token boot has a
+                // username + token but no password, so it also enables autologin.
+                if (maybeUsername.has_value() &&
+                    (maybePassword.has_value() || !globals::g_LoginToken.empty()))
                 {
                     globals::g_FirstLogin = true;
                 }
