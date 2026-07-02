@@ -56,7 +56,7 @@ namespace globals
     std::string            g_OtpCode           = "";                          // The OTP code the user input
     char                   g_SessionHash[16]   = {};                          // Session hash sent from auth
     std::string            g_Email             = "";                          // Email, currently unused
-    std::array<uint8_t, 3> g_VersionNumber     = { 2, 1, 1 };                 // xiloader version number sent to auth server. Must be x.x.x with single characters for 'x'. Remember to also change in xiloader.rc.in
+    std::array<uint8_t, 3> g_VersionNumber     = { 2, 1, 2 };                 // xiloader version number sent to auth server. Must be x.x.x with single characters for 'x'. Remember to also change in xiloader.rc.in
     bool                   g_FirstLogin        = false;                       // set to true when --user --pass are both set to allow for autologin
     std::string            g_TrustToken        = "";                          // trust token loaded from disk or received from server
     bool                   g_TrustThisComputer = false;                       // user checkbox / CLI flag for "trust this computer"
@@ -792,6 +792,14 @@ int __cdecl main(int argc, char* argv[])
                     lpCommandTable[POLFUNC_FFXI_LANG](xiloader::functions::GetRegistryPlayOnlineLanguage(globals::g_Language));
                     lpCommandTable[POLFUNC_REGISTRY_KEY](xiloader::functions::GetRegistryPlayOnlineKey(globals::g_Language));
                     lpCommandTable[POLFUNC_INSTALL_FOLDER](xiloader::functions::GetRegistryPlayOnlineInstallFolder(globals::g_Language));
+
+                    // If we are set to non-japanese locale for POL, copy in the english text for invalid name on character creation
+                    // We are not properly loading in sqpolcts.bin which would normally have this (decrypted)
+                    if (globals::g_Language != xiloader::Language::Japanese)
+                    {
+                        lpCommandTable[1302](0x04, "The name you entered is unavailable.\nPlease choose another name.");
+                    }
+
                     lpCommandTable[POLFUNC_INET_MUTEX]();
 
                     if (!SetProfileServerPort(profileServerPort))
