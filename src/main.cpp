@@ -792,6 +792,14 @@ int __cdecl main(int argc, char* argv[])
                     lpCommandTable[POLFUNC_FFXI_LANG](xiloader::functions::GetRegistryPlayOnlineLanguage(globals::g_Language));
                     lpCommandTable[POLFUNC_REGISTRY_KEY](xiloader::functions::GetRegistryPlayOnlineKey(globals::g_Language));
                     lpCommandTable[POLFUNC_INSTALL_FOLDER](xiloader::functions::GetRegistryPlayOnlineInstallFolder(globals::g_Language));
+
+                    // If we are set to non-japanese locale for POL, copy in the english text for invalid name on character creation
+                    // We are not properly loading in sqpolcts.bin which would normally have this (decrypted)
+                    if (globals::g_Language != xiloader::Language::Japanese)
+                    {
+                        lpCommandTable[1302](0x04, "The name you entered is unavailable.\nPlease choose another name.");
+                    }
+
                     lpCommandTable[POLFUNC_INET_MUTEX]();
 
                     if (!SetProfileServerPort(profileServerPort))
