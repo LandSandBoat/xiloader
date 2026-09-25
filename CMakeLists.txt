@@ -36,6 +36,7 @@ add_executable(xiloader
     src/console.cpp
     src/console.h
     src/defines.h
+    src/enums/polcon_state.h
     src/FFXi.h
     src/FFXiMain.h
     src/functions.cpp
@@ -45,6 +46,10 @@ add_executable(xiloader
     src/network.cpp
     src/network.h
     src/polcore.h
+    src/playonline.cpp
+    src/playonline.h
+    src/polrelay.cpp
+    src/polrelay.h
     src/trust_token.cpp
     src/trust_token.h
     ${CMAKE_CURRENT_BINARY_DIR}/src/xiloader.rc

@@ -73,15 +73,6 @@ namespace xiloader
          */
         static DWORD __stdcall FFXiDataComm(LPVOID lpParam);
 
-        /**
-         * @brief Data communication between the local client and the lobby server.
-         *
-         * @param lpParam       Thread param object.
-         *
-         * @return Non-important return.
-         */
-        static DWORD __stdcall PolDataComm(LPVOID lpParam);
-
     public:
 
         /**
@@ -104,17 +95,6 @@ namespace xiloader
          * @return True on success, false otherwise.
          */
         static bool CreateAuthConnection(datasocket* sock, const char* port);
-
-        /**
-         * @brief Creates a listening server on the given port and protocol.
-         *
-         * @param sock          The socket object to bind to.
-         * @param protocol      The protocol to use on the new listening socket.
-         * @param port          The port to bind to listen on.
-         *
-         * @return True on success, false otherwise.
-         */
-        static bool CreateListenServer(SOCKET* sock, int protocol, const char* port);
 
         /**
          * @brief Resolves the given hostname to its long ip format.
@@ -143,15 +123,6 @@ namespace xiloader
          * @return Non-important return.
          */
         static DWORD __stdcall FFXiServer(LPVOID lpParam);
-
-        /**
-         * @brief Starts the local listen server to lobby server communications.
-         *
-         * @param lpParam       Thread param object.
-         *
-         * @return Non-important return.
-         */
-        static DWORD __stdcall PolServer(LPVOID lpParam);
     };
 
 }; // namespace xiloader

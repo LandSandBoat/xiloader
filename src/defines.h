@@ -49,6 +49,42 @@ This file is part of DarkStar-server source code.
 #define POLFUNC_REGISTRY_KEY    0x016F
 #define POLFUNC_INSTALL_FOLDER  0x007D
 
+// PlayOnline login, as the viewer performs it
+#define POLFUNC_POLCON_OPEN         0x032E // (type, connection data) opens the PlayOnline connection
+#define POLFUNC_POLCON_STEP         0x032F // advances the connect state machine; 0x1E once connected (same entry as POLFUNC_INET_MUTEX)
+#define POLFUNC_POLCON_IDLE         0x0332 // lets polcore process pending network events
+#define POLFUNC_SET_POLID           0x0353
+#define POLFUNC_SET_PASSWORD        0x0354
+#define POLFUNC_SET_POLCOM_HOST     0x0355
+#define POLFUNC_ENCODE_POLID        0x0356
+#define POLFUNC_ENCODE_PASSWORD     0x0358 // (out[17], password)
+#define POLFUNC_FORMAT_POLID        0x0161 // (low, high, out[8]) unmasks a POL id and writes its 8 digits, without a terminator
+#define POLFUNC_MASK_POLID          0x0163 // (low, high) masks a POL id with the session key, returned in edx:eax
+#define POLFUNC_ENCODE_HOST         0x0364
+#define POLFUNC_SET_USER_SLOT       0x0366 // picks pub\homeNN for local message copies
+#define POLFUNC_FILE_INIT           0x03A4 // starts the file layer the game saves messages through
+#define POLFUNC_MESSAGE_NOTICES     0x0408 // (1) turns on message notices
+#define POLFUNC_SET_EVENT_HANDLER   0x0120 // (handler) sets the handler PlayOnline events such as new messages go to; FFXiMain installs its own
+#define POLFUNC_NOTICE_HANDLER      0x014E // polcore's IRC notice handler, slot 1 of the polcon handler block (read, not called)
+#define POLFUNC_POLCON_HANDLER_3    0x0191 // polcore's default for slot 3 of the polcon handler block (read, not called)
+#define POLFUNC_POLCON_SET_HANDLERS 0x0367 // (six handlers) replaces the polcon handler block that each IRC open applies
+#define POLFUNC_POLCON_CLEAR_ERROR  0x0344 // clears the error POLCON_POLL keeps reporting after the connection drops
+#define POLFUNC_POLCON_POLL         0x02C1 // FFXiMain polls it every frame; a negative result ends the game with POL-xxxx
+#define POLFUNC_SET_MESSAGE_TITLE   0x0430 // (index < 10, text) replaces a built-in Japanese message title
+#define POLFUNC_SET_MESSAGE_TEXT    0x0516 // (index < 10, text) replaces a built-in Japanese message text
+
+// Profile list loads the viewer runs after login: LOAD_* returns a ticket (one of 4 session slots), CHECK_* polls it (0 pending, 1 done, negative failed)
+#define POLFUNC_LOAD_FRIEND_LIST         0x00A3 // 2/3 LoadFriendList
+#define POLFUNC_CHECK_FRIEND_LIST        0x00A4
+#define POLFUNC_LOAD_HANDLE_NAME_LIST    0x00AB // 0/9 LoadHandleNameList
+#define POLFUNC_CHECK_HANDLE_NAME_LIST   0x00AC
+#define POLFUNC_LOAD_CHARACTER_LIST      0x00AF // 1/3 LoadCharacterList
+#define POLFUNC_CHECK_CHARACTER_LIST     0x00B0
+#define POLFUNC_LOAD_MY_STATUS           0x0176 // 4/6 LoadMyStatus
+#define POLFUNC_CHECK_MY_STATUS          0x0177
+#define POLFUNC_LOAD_GROUP_LIST          0x017F // 7/12 group list
+#define POLFUNC_CHECK_GROUP_LIST         0x0180
+
 namespace xiloader
 {
     /* PolCore COM Class ID Definitions */

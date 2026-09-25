@@ -31,7 +31,6 @@ namespace globals
     extern char                   g_SessionHash[16];
     extern std::string            g_Email;
     extern std::array<uint8_t, 3> g_VersionNumber;
-    extern uint16_t               g_ServerPort;
     extern uint16_t               g_LoginDataPort;
     extern uint16_t               g_LoginViewPort;
     extern uint16_t               g_LoginAuthPort;

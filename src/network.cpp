@@ -42,7 +42,6 @@ namespace globals
     extern char                   g_SessionHash[16];
     extern std::string            g_Email;
     extern std::array<uint8_t, 3> g_VersionNumber;
-    extern uint16_t               g_ServerPort;
     extern uint16_t               g_LoginDataPort;
     extern uint16_t               g_LoginViewPort;
     extern uint16_t               g_LoginAuthPort;
@@ -179,6 +178,7 @@ namespace xiloader
 
         // MBEDTLS_SSL_VERIFY_OPTIONAL provides warnings, but doesn't stop connections.
         mbedtls_ssl_conf_authmode(&sslState::conf, MBEDTLS_SSL_VERIFY_OPTIONAL);
+        mbedtls_ssl_conf_min_tls_version(&sslState::conf, MBEDTLS_SSL_VERSION_TLS1_3);
         mbedtls_ssl_conf_ca_chain(&sslState::conf, sslState::ca_chain.get(), NULL);
         mbedtls_ssl_conf_rng(&sslState::conf, mbedtls_ctr_drbg_random, &sslState::ctr_drbg);
 
@@ -237,66 +237,6 @@ namespace xiloader
         mbedtls_ssl_conf_read_timeout(&sslState::conf, 1000);
 
         return 1;
-    }
-
-    /**
-     * @brief Creates a listening server on the given port and protocol.
-     *
-     * @param sock      The socket object to bind to.
-     * @param protocol  The protocol to use on the new listening socket.
-     * @param port      The port to bind to listen on.
-     *
-     * @return True on success, false otherwise.
-     */
-    bool network::CreateListenServer(SOCKET* sock, int protocol, const char* port)
-    {
-        sockaddr_in sin     = {};
-        sin.sin_family      = AF_INET;
-        sin.sin_addr.s_addr = inet_addr("127.0.0.1");
-        sin.sin_port        = htons(0);
-
-        /* Create the listening socket.. */
-        *sock = socket(AF_INET, protocol == IPPROTO_UDP ? SOCK_DGRAM : SOCK_STREAM, protocol);
-        if (*sock == INVALID_SOCKET)
-        {
-            xiloader::console::output(xiloader::color::error, "Failed to create listening socket.");
-
-            return false;
-        }
-
-        BOOL enable = 1;
-
-        /* Set socket option on internal server to allow sharing the port for multibox users */
-        if (setsockopt(*sock, SOL_SOCKET, SO_REUSEADDR, (char*)&enable, sizeof(BOOL)) == SOCKET_ERROR)
-        {
-            xiloader::console::output(xiloader::color::error, "Failed to set reusable address option on socket. %d", WSAGetLastError());
-            return false;
-        }
-
-        /* Bind to the local address.. */
-        if (bind(*sock, reinterpret_cast<struct sockaddr*>(&sin), sizeof(sin)) == SOCKET_ERROR)
-        {
-            xiloader::console::output(xiloader::color::error, "Failed to bind to listening socket. %d", WSAGetLastError());
-
-            closesocket(*sock);
-            *sock = INVALID_SOCKET;
-            return false;
-        }
-
-        /* Attempt to listen for clients if we are using TCP.. */
-        if (protocol == IPPROTO_TCP)
-        {
-            if (listen(*sock, SOMAXCONN) == SOCKET_ERROR)
-            {
-                xiloader::console::output(xiloader::color::error, "Failed to listen for connections, %d", WSAGetLastError());
-
-                closesocket(*sock);
-                *sock = INVALID_SOCKET;
-                return false;
-            }
-        }
-
-        return true;
     }
 
     /**
@@ -674,77 +614,6 @@ namespace xiloader
     }
 
     /**
-     * @brief Data communication between the local client and the lobby server.
-     *
-     * @param lpParam   Thread param object.
-     *
-     * @return Non-important return.
-     */
-    DWORD __stdcall network::PolDataComm(LPVOID lpParam)
-    {
-        SOCKET client = *(SOCKET*)lpParam;
-        unsigned char recvBuffer[1024] = { 0 };
-        int result = 0, x = 0;
-        time_t t = 0;
-        bool bIsNewChar = false;
-
-        do
-        {
-            /* Attempt to receive incoming data.. */
-            result = recv(client, (char*)recvBuffer, sizeof(recvBuffer), 0);
-            if (result <= 0)
-            {
-                xiloader::console::output(xiloader::color::error, "Client recv failed: %d", WSAGetLastError());
-                break;
-            }
-
-            char temp = recvBuffer[0x04];
-            memset(recvBuffer, 0x00, 32);
-
-            switch (x)
-            {
-            case 0:
-                recvBuffer[0] = 0x81;
-                t = time(NULL);
-                memcpy(recvBuffer + 0x14, &t, 4);
-                result = 24;
-                break;
-
-            case 1:
-                if (temp != 0x28)
-                    bIsNewChar = true;
-                recvBuffer[0x00] = 0x28;
-                recvBuffer[0x04] = 0x20;
-                recvBuffer[0x08] = 0x01;
-                recvBuffer[0x0B] = 0x7F;
-                result = bIsNewChar ? 144 : 24;
-                if (bIsNewChar) bIsNewChar = false;
-                break;
-            }
-
-            /* Echo back the buffer to the server.. */
-            if (send(client, (char*)recvBuffer, result, 0) == SOCKET_ERROR)
-            {
-                xiloader::console::output(xiloader::color::error, "Client send failed: %d", WSAGetLastError());
-                break;
-            }
-
-            /* Increase the current packet count.. */
-            x++;
-            if (x == 3)
-                break;
-
-        } while (result > 0);
-
-        /* Shutdown the client socket.. */
-        if (shutdown(client, SD_SEND) == SOCKET_ERROR)
-            xiloader::console::output(xiloader::color::error, "Client shutdown failed: %d", WSAGetLastError());
-        closesocket(client);
-
-        return 0;
-    }
-
-    /**
      * @brief Starts the data communication between the client and server.
      *
      * @param lpParam   Thread param object.
@@ -757,39 +626,6 @@ namespace xiloader
         CreateThread(NULL, 0, xiloader::network::FFXiDataComm, lpParam, 0, NULL);
         Sleep(200);
 
-        return 0;
-    }
-
-    /**
-     * @brief Starts the local listen server to lobby server communications.
-     *
-     * @param lpParam   Thread param object.
-     *
-     * @return Non-important return.
-     */
-    DWORD __stdcall network::PolServer(LPVOID lpParam)
-    {
-        UNREFERENCED_PARAMETER(lpParam);
-
-        SOCKET sock = *reinterpret_cast<SOCKET*>(lpParam);
-        SOCKET client;
-
-        while (globals::g_IsRunning)
-        {
-            /* Attempt to accept incoming connections.. */
-            if ((client = accept(sock, NULL, NULL)) == INVALID_SOCKET)
-            {
-                xiloader::console::output(xiloader::color::error, "Accept failed: %d", WSAGetLastError());
-
-                closesocket(sock);
-                return 1;
-            }
-
-            /* Start data communication for this client.. */
-            CreateThread(NULL, 0, xiloader::network::PolDataComm, &client, 0, NULL);
-        }
-
-        closesocket(sock);
         return 0;
     }
 
