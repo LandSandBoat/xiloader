@@ -288,6 +288,7 @@ namespace
                 }
                 else if (state == PolconState::Failed || static_cast<int>(state) < 0 || now >= reconnection.until)
                 {
+                    xiloader::console::output(xiloader::color::warning, "Failed to reconnect to the profile server (0x%X), retrying later.", static_cast<int>(state));
                     retryLater();
                 }
                 break;
@@ -365,6 +366,7 @@ namespace xiloader::playonline
         const auto found = xiloader::functions::FindPattern(module, site, "xxxxxxxxxxxxxx");
         if (!found)
         {
+            xiloader::console::output(xiloader::color::error, "Failed to locate the IRC send path in %s. This PlayOnline version is not supported, or --lang doesn't match your install.", module);
             return false;
         }
 
@@ -375,6 +377,7 @@ namespace xiloader::playonline
         DWORD protection = 0;
         if (!VirtualProtect(cipher, 5, PAGE_EXECUTE_READWRITE, &protection))
         {
+            xiloader::console::output(xiloader::color::error, "Failed to patch %s (error %lu). Security software may be blocking changes to its code.", module, GetLastError());
             return false;
         }
 

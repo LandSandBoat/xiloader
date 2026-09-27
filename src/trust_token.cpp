@@ -84,6 +84,7 @@ json readTokenStore()
     std::ifstream file(filepath, std::ios::binary | std::ios::ate);
     if (!file.is_open())
     {
+        xiloader::console::output(xiloader::color::warning, "Failed to open the saved trust tokens at %s. You may be asked for your OTP code.", filepath.c_str());
         return json::object();
     }
 
@@ -105,6 +106,7 @@ json readTokenStore()
     DATA_BLOB decryptedBlob;
     if (!CryptUnprotectData(&encryptedBlob, nullptr, nullptr, nullptr, nullptr, 0, &decryptedBlob))
     {
+        xiloader::console::output(xiloader::color::warning, "Failed to decrypt the saved trust tokens at %s (error %lu).", filepath.c_str(), GetLastError());
         return json::object();
     }
 
@@ -114,6 +116,7 @@ json readTokenStore()
     json tokenData = json::parse(jsonStr, nullptr, false);
     if (tokenData.is_discarded())
     {
+        xiloader::console::output(xiloader::color::warning, "The saved trust tokens at %s are unreadable. You may be asked for your OTP code.", filepath.c_str());
         return json::object();
     }
 
@@ -136,6 +139,14 @@ void writeTokenStore(const json& tokenData)
         file.write(reinterpret_cast<char*>(encryptedBlob.pbData), encryptedBlob.cbData);
         file.close();
         LocalFree(encryptedBlob.pbData);
+        if (file.fail())
+        {
+            xiloader::console::output(xiloader::color::warning, "Failed to save trust tokens to %s. Check that folder is writable.", filepath.c_str());
+        }
+    }
+    else
+    {
+        xiloader::console::output(xiloader::color::warning, "Failed to encrypt the trust tokens (error %lu). They were not saved.", GetLastError());
     }
 }
 

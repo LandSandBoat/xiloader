@@ -444,7 +444,10 @@ namespace xiloader
         size_t      strBufferLen = strlen(strBuffer);
 
         /* Send info to server and obtain response.. */
-        mbedtls_ssl_write(&sslState::ssl, reinterpret_cast<const unsigned char*>(strBuffer), strBufferLen);
+        if (const auto written = mbedtls_ssl_write(&sslState::ssl, reinterpret_cast<const unsigned char*>(strBuffer), strBufferLen); written < 0)
+        {
+            xiloader::console::output(xiloader::color::error, "Failed to send the login request (%s). The login server may have closed the connection.", xiloader::mbedtlsErrorText(written).c_str());
+        }
 
         std::memset(recvBuffer, 0, sizeof(recvBuffer));
 
@@ -623,7 +626,10 @@ namespace xiloader
     DWORD __stdcall network::FFXiServer(LPVOID lpParam)
     {
         /* Attempt to start data communication with the server.. */
-        CreateThread(NULL, 0, xiloader::network::FFXiDataComm, lpParam, 0, NULL);
+        if (CreateThread(NULL, 0, xiloader::network::FFXiDataComm, lpParam, 0, NULL) == NULL)
+        {
+            xiloader::console::output(xiloader::color::error, "Failed to start the login data thread (error %lu).", GetLastError());
+        }
         Sleep(200);
 
         return 0;

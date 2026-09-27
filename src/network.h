@@ -45,6 +45,14 @@ This file is part of DarkStar-server source code.
 
 namespace xiloader
 {
+    // mbedTLS error code as readable text, e.g. "SSL - The connection indicated an EOF"
+    inline std::string mbedtlsErrorText(const int ret)
+    {
+        char text[128] = {};
+        mbedtls_strerror(ret, text, sizeof(text));
+        return text;
+    }
+
     /**
      * @brief Socket object used to hold various important information.
      */

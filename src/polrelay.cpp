@@ -177,6 +177,7 @@ namespace
         const auto server = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
         if (server == INVALID_SOCKET)
         {
+            fail(connection, "no socket, winsock error " + std::to_string(WSAGetLastError()));
             return false;
         }
 
@@ -385,7 +386,13 @@ namespace
     {
         if (connection.phase == Phase::Relaying)
         {
-            return now >= connection.stalledAt;
+            const auto stalled = now >= connection.stalledAt;
+            if (stalled)
+            {
+                xiloader::console::output(xiloader::color::warning, "Closed a stalled profile server connection on port %u.", connection.serverPort);
+            }
+
+            return stalled;
         }
 
         const auto late = now >= connection.deadline;
@@ -406,8 +413,16 @@ namespace
         }
 
         // Refuse anything past what polcore needs
-        if (connections.size() >= kMaxConnections || !setNonBlocking(local))
+        if (connections.size() >= kMaxConnections)
         {
+            xiloader::console::output(xiloader::color::warning, "Refused a PlayOnline connection, %zu are already open.", connections.size());
+            closesocket(local);
+            return;
+        }
+
+        if (!setNonBlocking(local))
+        {
+            xiloader::console::output(xiloader::color::warning, "Refused a PlayOnline connection (winsock error %d).", WSAGetLastError());
             closesocket(local);
             return;
         }

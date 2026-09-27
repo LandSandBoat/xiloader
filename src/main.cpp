@@ -125,7 +125,10 @@ DWORD ApplyHairpinFixThread(LPVOID lpParam)
     } while (GetModuleHandleA("FFXiMain.dll") == NULL);
 
     /* Convert server address.. */
-    xiloader::network::ResolveHostname(globals::g_ServerAddress.c_str(), &globals::g_NewServerAddress);
+    if (!xiloader::network::ResolveHostname(globals::g_ServerAddress.c_str(), &globals::g_NewServerAddress))
+    {
+        xiloader::console::output(xiloader::color::error, "Hairpin fix failed to resolve the server address %s (winsock error %d).", globals::g_ServerAddress.c_str(), WSAGetLastError());
+    }
 
     // Locate the main hairpin location..
     //
@@ -306,6 +309,10 @@ inline DWORD FindINETMutex(void)
 {
     const char* module = (globals::g_Language == xiloader::Language::European) ? "polcoreeu.dll" : "polcore.dll";
     auto result = (DWORD)xiloader::functions::FindPattern(module, (BYTE*)"\x8B\x56\x2C\x8B\x46\x28\x8B\x4E\x24\x52\x50\x51", "xxxxxxxxxxxx");
+    if (result == 0)
+    {
+        xiloader::console::output(xiloader::color::error, "Failed to locate the INET mutex in %s. This PlayOnline version is not supported, or --lang doesn't match your install.", module);
+    }
     return (*(DWORD*)(result - 4) + (result));
 }
 
@@ -318,6 +325,10 @@ inline DWORD FindPolConn(void)
 {
     const char* module = (globals::g_Language == xiloader::Language::European) ? "polcoreeu.dll" : "polcore.dll";
     auto result = (DWORD)xiloader::functions::FindPattern(module, (BYTE*)"\x81\xC6\x38\x03\x00\x00\x83\xC4\x04\x81\xFE", "xxxxxxxxxxx");
+    if (result == 0)
+    {
+        xiloader::console::output(xiloader::color::error, "Failed to locate the PlayOnline connection in %s. This PlayOnline version is not supported, or --lang doesn't match your install.", module);
+    }
     return (*(DWORD*)(result - 10));
 }
 
@@ -375,12 +386,14 @@ std::unique_ptr<mbedtls_x509_crt> build_windows_ca_chain()
 
             if (!CertCloseStore(certificateStore, 0))
             {
+                xiloader::console::output(xiloader::color::warning, "Failed to close the Windows root certificate store (error %lu).", GetLastError());
                 return NULL;
             }
         }
     }
     else
     {
+        xiloader::console::output(xiloader::color::warning, "Failed to open the Windows root certificate store (error %lu). The server certificate can't be checked against it.", GetLastError());
         return NULL;
     }
 
@@ -503,13 +516,17 @@ int __cdecl main(int argc, char* argv[])
             {
                 globals::g_Language = xiloader::Language::Japanese;
             }
-            if (!_strnicmp(language.c_str(), "US", 2) || !_strnicmp(language.c_str(), "1", 1))
+            else if (!_strnicmp(language.c_str(), "US", 2) || !_strnicmp(language.c_str(), "1", 1))
             {
                 globals::g_Language = xiloader::Language::English;
             }
-            if (!_strnicmp(language.c_str(), "EU", 2) || !_strnicmp(language.c_str(), "2", 1))
+            else if (!_strnicmp(language.c_str(), "EU", 2) || !_strnicmp(language.c_str(), "2", 1))
             {
                 globals::g_Language = xiloader::Language::European;
+            }
+            else
+            {
+                xiloader::console::output(xiloader::color::warning, "Unknown language '%s'. Use JP, US or EU (0, 1 or 2). Keeping the current language.", language.c_str());
             }
         }
     };
@@ -713,12 +730,19 @@ int __cdecl main(int argc, char* argv[])
                 if (bUseHairpinFix)
                 {
                     // TODO: this is not terminated? Does it need to be?
-                    CreateThread(NULL, 0, (LPTHREAD_START_ROUTINE)ApplyHairpinFixThread, NULL, 0, NULL);
+                    if (CreateThread(NULL, 0, (LPTHREAD_START_ROUTINE)ApplyHairpinFixThread, NULL, 0, NULL) == NULL)
+                    {
+                        xiloader::console::output(xiloader::color::error, "Failed to start the hairpin fix thread (error %lu).", GetLastError());
+                    }
                 }
 
                 // Create lobby data thread
                 globals::g_IsRunning = true;
                 HANDLE hFFXiServer   = CreateThread(NULL, 0, xiloader::network::FFXiServer, &sock, 0, NULL);
+                if (hFFXiServer == NULL)
+                {
+                    xiloader::console::output(xiloader::color::error, "Failed to start the login data thread (error %lu).", GetLastError());
+                }
 
                 /* Attempt to create polcore instance..*/
                 IPOLCoreCom* polcore = NULL;
@@ -734,11 +758,17 @@ int __cdecl main(int argc, char* argv[])
                     // Cast to an LPSTR
                     LPSTR cmd = const_cast<char*>(polcorecmd.c_str());
                     polcore->SetAreaCode(globals::g_Language);
-                    polcore->SetParamInit(GetModuleHandle(NULL), cmd);
+                    if (const auto hr = polcore->SetParamInit(GetModuleHandle(NULL), cmd); FAILED(hr))
+                    {
+                        xiloader::console::output(xiloader::color::error, "polcore failed to initialize (0x%08lX).", hr);
+                    }
 
                     /* Obtain the common function table.. */
                     xiloader::playonline::CommandFunc** lpCommandTable;
-                    polcore->GetCommonFunctionTable((unsigned long**)&lpCommandTable);
+                    if (const auto hr = polcore->GetCommonFunctionTable((unsigned long**)&lpCommandTable); FAILED(hr))
+                    {
+                        xiloader::console::output(xiloader::color::error, "Failed to get polcore's function table (0x%08lX).", hr);
+                    }
 
                     /* Invoke the inet mutex function.. */
                     auto findMutex = (void* (*)(...))FindINETMutex();
@@ -758,7 +788,12 @@ int __cdecl main(int argc, char* argv[])
                     lpCommandTable[POLFUNC_REGISTRY_LANG](globals::g_Language);
                     lpCommandTable[POLFUNC_FFXI_LANG](xiloader::functions::GetRegistryPlayOnlineLanguage(globals::g_Language));
                     lpCommandTable[POLFUNC_REGISTRY_KEY](xiloader::functions::GetRegistryPlayOnlineKey(globals::g_Language));
-                    lpCommandTable[POLFUNC_INSTALL_FOLDER](xiloader::functions::GetRegistryPlayOnlineInstallFolder(globals::g_Language));
+                    const char* installFolder = xiloader::functions::GetRegistryPlayOnlineInstallFolder(globals::g_Language);
+                    if (installFolder[0] == '\0')
+                    {
+                        xiloader::console::output(xiloader::color::error, "PlayOnline install folder not found in the registry (HKLM\\%s\\InstallFolder). Check PlayOnline is installed and --lang matches your install.", xiloader::functions::GetRegistryPlayOnlineKey(globals::g_Language));
+                    }
+                    lpCommandTable[POLFUNC_INSTALL_FOLDER](installFolder);
                     lpCommandTable[POLFUNC_FILE_INIT](); // Initialize polcore file system
 
                     if (!xiloader::playonline::disableCipher())
