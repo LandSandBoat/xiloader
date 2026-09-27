@@ -26,8 +26,9 @@ This file is part of DarkStar-server source code.
 
 #include "defines.h"
 
-#include <ctime>
+#include <algorithm>
 #include <chrono>
+#include <ctime>
 #include <filesystem>
 #include <fstream>
 #include <intrin.h>
@@ -36,6 +37,8 @@ This file is part of DarkStar-server source code.
 #include "functions.h"
 #include "helpers.h"
 #include "network.h"
+#include "playonline.h"
+#include "polrelay.h"
 
 #include "argparse/argparse.hpp"
 #include <nlohmann/json.hpp>
@@ -47,16 +50,16 @@ namespace globals
 {
     xiloader::Language     g_Language          = xiloader::Language::English; // The language of the loader to be used for polcore.
     std::string            g_ServerAddress     = "127.0.0.1";                 // The server address to connect to.
-    uint16_t               g_ServerPort        = 51220;                       // The server lobby server port to connect to.
     uint16_t               g_LoginDataPort     = 54230;                       // Login server data port to connect to
     uint16_t               g_LoginViewPort     = 54001;                       // Login view port to connect to
     uint16_t               g_LoginAuthPort     = 54231;                       // Login auth port to connect to
+    uint16_t               g_ProfilePort       = 51220;                       // PlayOnline profile server port polcore connects to
     std::string            g_Username          = "";                          // The username being logged in with.
     std::string            g_Password          = "";                          // The password being logged in with.
     std::string            g_OtpCode           = "";                          // The OTP code the user input
     char                   g_SessionHash[16]   = {};                          // Session hash sent from auth
     std::string            g_Email             = "";                          // Email, currently unused
-    std::array<uint8_t, 3> g_VersionNumber     = { 2, 1, 2 };                 // xiloader version number sent to auth server. Must be x.x.x with single characters for 'x'. Remember to also change in xiloader.rc.in
+    std::array<uint8_t, 3> g_VersionNumber     = { 2, 2, 0 };                 // xiloader version number sent to auth server. Must be x.x.x with single characters for 'x'. Remember to also change in xiloader.rc.in
     bool                   g_FirstLogin        = false;                       // set to true when --user --pass are both set to allow for autologin
     std::string            g_TrustToken        = "";                          // trust token loaded from disk or received from server
     bool                   g_TrustThisComputer = false;                       // user checkbox / CLI flag for "trust this computer"
@@ -68,7 +71,7 @@ namespace globals
     /* Hairpin Fix Variables */
     DWORD g_NewServerAddress;     // Hairpin server address to be overriden with.
     DWORD g_HairpinReturnAddress; // Hairpin return address to allow the code cave to return properly.
-};
+}; // namespace globals
 
 namespace sslState
 {
@@ -80,7 +83,7 @@ namespace sslState
     mbedtls_ssl_config                conf      = {};
     mbedtls_x509_crt                  cacert    = {};
     std::unique_ptr<mbedtls_x509_crt> ca_chain  = {};
-};
+}; // namespace sslState
 
 /**
  * @brief Detour function definitions.
@@ -122,7 +125,10 @@ DWORD ApplyHairpinFixThread(LPVOID lpParam)
     } while (GetModuleHandleA("FFXiMain.dll") == NULL);
 
     /* Convert server address.. */
-    xiloader::network::ResolveHostname(globals::g_ServerAddress.c_str(), &globals::g_NewServerAddress);
+    if (!xiloader::network::ResolveHostname(globals::g_ServerAddress.c_str(), &globals::g_NewServerAddress))
+    {
+        xiloader::console::output(xiloader::color::error, "Hairpin fix failed to resolve the server address %s (winsock error %d).", globals::g_ServerAddress.c_str(), WSAGetLastError());
+    }
 
     // Locate the main hairpin location..
     //
@@ -186,9 +192,11 @@ hostent* __stdcall Mine_gethostbyname(const char* name)
         return Real_gethostbyname(globals::g_ServerAddress.c_str());
     }
 
-    if (!strcmp("pp000.pol.com", name))
+    // PlayOnline profile and IRC hosts (friend list and presence) go through the local TLS relay
+    constexpr std::string_view kPlayOnlineHosts[] = { "pp000.pol.com", "ci000.pol.com", "gm000.pol.com", "gd000.pol.com" };
+    if (std::ranges::find(kPlayOnlineHosts, std::string_view(name)) != std::end(kPlayOnlineHosts))
     {
-        return Real_gethostbyname("127.0.0.1");
+        return Real_gethostbyname(xiloader::polrelay::address().c_str());
     }
 
     return Real_gethostbyname(name);
@@ -277,37 +285,19 @@ int WINAPI Mine_recv(SOCKET s, char* buf, int len, int flags)
  */
 int WINAPI Mine_connect(SOCKET s, const sockaddr* name, int namelen)
 {
+    // polcore's PlayOnline connections go to this process's relay ports
+    if (name != nullptr && namelen >= static_cast<int>(sizeof(sockaddr_in)))
+    {
+        auto destination = *reinterpret_cast<const sockaddr_in*>(name);
+        if (xiloader::polrelay::redirect(destination))
+        {
+            return Real_connect(s, reinterpret_cast<const sockaddr*>(&destination), sizeof(destination));
+        }
+    }
+
     int ret = Real_connect(s, name, namelen);
 
     return ret;
-}
-
-/**
- * @brief Locates profile server port addresses and sets the profile server port
- *
- * @return Failed to find the patterns or succeeded to write
- */
-bool SetProfileServerPort(uint16_t profileServerPort)
-{
-    const char* module                   = (globals::g_Language == xiloader::Language::European) ? "polcoreeu.dll" : "polcore.dll";
-    auto        profileServerPortAddress = (DWORD)xiloader::functions::FindPattern(module, (BYTE*)"\x66\xC7\x46\x26\x14\xC8\x88\x46\x09\x8D\x46\x24", "xxxxxxxxxxx");
-    if (profileServerPortAddress == 0)
-    {
-        xiloader::console::output(xiloader::color::error, "Failed to locate profileServerPortAddress!");
-        return false;
-    }
-
-    auto profileServerPortAddress2 = (DWORD)xiloader::functions::FindPattern(module, (BYTE*)"\x66\xC7\x05\xBA\x4A\x3F\x04\x14\xC8", "xxxxx??xx"); // This pattern changed slightly on a few month old polcore, it used to be a total match but some bytes changed.
-    if (profileServerPortAddress2 == 0)
-    {
-        xiloader::console::output(xiloader::color::error, "Failed to locate profileServerPortAddress2!");
-        return false;
-    }
-
-    *((uint16_t*)(profileServerPortAddress + 4))  = profileServerPort;
-    *((uint16_t*)(profileServerPortAddress2 + 7)) = profileServerPort;
-
-    return true;
 }
 
 /**
@@ -319,6 +309,10 @@ inline DWORD FindINETMutex(void)
 {
     const char* module = (globals::g_Language == xiloader::Language::European) ? "polcoreeu.dll" : "polcore.dll";
     auto result = (DWORD)xiloader::functions::FindPattern(module, (BYTE*)"\x8B\x56\x2C\x8B\x46\x28\x8B\x4E\x24\x52\x50\x51", "xxxxxxxxxxxx");
+    if (result == 0)
+    {
+        xiloader::console::output(xiloader::color::error, "Failed to locate the INET mutex in %s. This PlayOnline version is not supported, or --lang doesn't match your install.", module);
+    }
     return (*(DWORD*)(result - 4) + (result));
 }
 
@@ -331,6 +325,10 @@ inline DWORD FindPolConn(void)
 {
     const char* module = (globals::g_Language == xiloader::Language::European) ? "polcoreeu.dll" : "polcore.dll";
     auto result = (DWORD)xiloader::functions::FindPattern(module, (BYTE*)"\x81\xC6\x38\x03\x00\x00\x83\xC4\x04\x81\xFE", "xxxxxxxxxxx");
+    if (result == 0)
+    {
+        xiloader::console::output(xiloader::color::error, "Failed to locate the PlayOnline connection in %s. This PlayOnline version is not supported, or --lang doesn't match your install.", module);
+    }
     return (*(DWORD*)(result - 10));
 }
 
@@ -388,12 +386,14 @@ std::unique_ptr<mbedtls_x509_crt> build_windows_ca_chain()
 
             if (!CertCloseStore(certificateStore, 0))
             {
+                xiloader::console::output(xiloader::color::warning, "Failed to close the Windows root certificate store (error %lu).", GetLastError());
                 return NULL;
             }
         }
     }
     else
     {
+        xiloader::console::output(xiloader::color::warning, "Failed to open the Windows root certificate store (error %lu). The server certificate can't be checked against it.", GetLastError());
         return NULL;
     }
 
@@ -435,11 +435,6 @@ int __cdecl main(int argc, char* argv[])
         .help("The email being logged in with.")
         .append();
 
-    args.add_argument("--serverport")
-        .scan<'i', uint16_t>()
-        .help("(optional) The server's lobby port to connect to.")
-        .append();
-
     args.add_argument("--dataport")
         .scan<'i', uint16_t>()
         .help("(optional) The login server data port to connect to.")
@@ -453,6 +448,11 @@ int __cdecl main(int argc, char* argv[])
     args.add_argument("--authport")
         .scan<'i', uint16_t>()
         .help("(optional) The login auth port to connect to.")
+        .append();
+
+    args.add_argument("--profileport")
+        .scan<'i', uint16_t>()
+        .help("(optional) The PlayOnline profile server port to connect to.")
         .append();
 
     args.add_argument("--lang")
@@ -490,11 +490,11 @@ int __cdecl main(int argc, char* argv[])
     }
 
     globals::g_ServerAddress = args.is_used("--server") ? args.get<std::string>("--server") : globals::g_ServerAddress;
-    globals::g_ServerPort    = args.is_used("--serverport") ? args.get<uint16_t>("--serverport") : globals::g_ServerPort;
 
     globals::g_LoginDataPort = args.is_used("--dataport") ? args.get<uint16_t>("--dataport") : globals::g_LoginDataPort;
     globals::g_LoginViewPort = args.is_used("--viewport") ? args.get<uint16_t>("--viewport") : globals::g_LoginViewPort;
     globals::g_LoginAuthPort = args.is_used("--authport") ? args.get<uint16_t>("--authport") : globals::g_LoginAuthPort;
+    globals::g_ProfilePort   = args.is_used("--profileport") ? args.get<uint16_t>("--profileport") : globals::g_ProfilePort;
 
     globals::g_Username = args.is_used("--user") ? args.get<std::string>("--user") : globals::g_Username;
     globals::g_Password = args.is_used("--pass") ? args.get<std::string>("--pass") : globals::g_Password;
@@ -516,13 +516,17 @@ int __cdecl main(int argc, char* argv[])
             {
                 globals::g_Language = xiloader::Language::Japanese;
             }
-            if (!_strnicmp(language.c_str(), "US", 2) || !_strnicmp(language.c_str(), "1", 1))
+            else if (!_strnicmp(language.c_str(), "US", 2) || !_strnicmp(language.c_str(), "1", 1))
             {
                 globals::g_Language = xiloader::Language::English;
             }
-            if (!_strnicmp(language.c_str(), "EU", 2) || !_strnicmp(language.c_str(), "2", 1))
+            else if (!_strnicmp(language.c_str(), "EU", 2) || !_strnicmp(language.c_str(), "2", 1))
             {
                 globals::g_Language = xiloader::Language::European;
+            }
+            else
+            {
+                xiloader::console::output(xiloader::color::warning, "Unknown language '%s'. Use JP, US or EU (0, 1 or 2). Keeping the current language.", language.c_str());
             }
         }
     };
@@ -576,11 +580,11 @@ int __cdecl main(int argc, char* argv[])
                 }
 
                 globals::g_ServerAddress = jsonGet<std::string>(jsonData, "server").value_or(globals::g_ServerAddress);
-                globals::g_ServerPort    = jsonGet<uint16_t>(jsonData, "serverport").value_or(globals::g_ServerPort);
 
                 globals::g_LoginDataPort = jsonGet<uint16_t>(jsonData, "dataport").value_or(globals::g_LoginDataPort);
                 globals::g_LoginViewPort = jsonGet<uint16_t>(jsonData, "viewport").value_or(globals::g_LoginViewPort);
                 globals::g_LoginAuthPort = jsonGet<uint16_t>(jsonData, "authport").value_or(globals::g_LoginAuthPort);
+                globals::g_ProfilePort   = jsonGet<uint16_t>(jsonData, "profileport").value_or(globals::g_ProfilePort);
 
                 // try string and int
                 auto maybeOtpString = jsonGet<std::string>(jsonData, "otp");
@@ -702,10 +706,8 @@ int __cdecl main(int argc, char* argv[])
 
         /* Attempt to create socket to server..*/
         xiloader::datasocket sock;
-        SOCKET               polsock;
-        std::string          authport   = std::to_string(globals::g_LoginAuthPort);
-        std::string          loginport  = std::to_string(globals::g_LoginDataPort);
-        std::string          serverport = std::to_string(globals::g_ServerPort);
+        std::string          authport  = std::to_string(globals::g_LoginAuthPort);
+        std::string          loginport = std::to_string(globals::g_LoginDataPort);
 
         if (xiloader::network::CreateAuthConnection(&sock, authport.c_str()))
         {
@@ -721,37 +723,26 @@ int __cdecl main(int argc, char* argv[])
                 xiloader::console::output(xiloader::color::error, "Failed to initialize connection to server on port %s, winsock error: %d", loginport.c_str(), err);
             }
 
-            /* Attempt to create listening server for POL thread*/
-            if (!xiloader::network::CreateListenServer(&polsock, IPPROTO_TCP, serverport.c_str()))
-            {
-                polsock = INVALID_SOCKET;
-                int err = WSAGetLastError();
-                xiloader::console::output(xiloader::color::error, "Failed to initialize listen server on port %s, winsock error: %d", serverport.c_str(), err);
-            }
-
             // Check if sockets are invalid
-            if (sock.s != INVALID_SOCKET && polsock != INVALID_SOCKET)
+            if (sock.s != INVALID_SOCKET)
             {
                 /* Start hairpin hack thread if required.. */
                 if (bUseHairpinFix)
                 {
                     // TODO: this is not terminated? Does it need to be?
-                    CreateThread(NULL, 0, (LPTHREAD_START_ROUTINE)ApplyHairpinFixThread, NULL, 0, NULL);
+                    if (CreateThread(NULL, 0, (LPTHREAD_START_ROUTINE)ApplyHairpinFixThread, NULL, 0, NULL) == NULL)
+                    {
+                        xiloader::console::output(xiloader::color::error, "Failed to start the hairpin fix thread (error %lu).", GetLastError());
+                    }
                 }
 
-                struct sockaddr_in pol_sin;
-                int                pol_len           = sizeof(pol_sin);
-                unsigned short     profileServerPort = 0;
-
-                if (getsockname(polsock, (struct sockaddr*)&pol_sin, &pol_len) == 0)
-                {
-                    profileServerPort = ntohs(pol_sin.sin_port);
-                }
-
-                /* Create listen servers.. */
+                // Create lobby data thread
                 globals::g_IsRunning = true;
                 HANDLE hFFXiServer   = CreateThread(NULL, 0, xiloader::network::FFXiServer, &sock, 0, NULL);
-                HANDLE hPolServer    = CreateThread(NULL, 0, xiloader::network::PolServer, &polsock, 0, NULL);
+                if (hFFXiServer == NULL)
+                {
+                    xiloader::console::output(xiloader::color::error, "Failed to start the login data thread (error %lu).", GetLastError());
+                }
 
                 /* Attempt to create polcore instance..*/
                 IPOLCoreCom* polcore = NULL;
@@ -767,11 +758,17 @@ int __cdecl main(int argc, char* argv[])
                     // Cast to an LPSTR
                     LPSTR cmd = const_cast<char*>(polcorecmd.c_str());
                     polcore->SetAreaCode(globals::g_Language);
-                    polcore->SetParamInit(GetModuleHandle(NULL), cmd);
+                    if (const auto hr = polcore->SetParamInit(GetModuleHandle(NULL), cmd); FAILED(hr))
+                    {
+                        xiloader::console::output(xiloader::color::error, "polcore failed to initialize (0x%08lX).", hr);
+                    }
 
                     /* Obtain the common function table.. */
-                    void* (**lpCommandTable)(...);
-                    polcore->GetCommonFunctionTable((unsigned long**)&lpCommandTable);
+                    xiloader::playonline::CommandFunc** lpCommandTable;
+                    if (const auto hr = polcore->GetCommonFunctionTable((unsigned long**)&lpCommandTable); FAILED(hr))
+                    {
+                        xiloader::console::output(xiloader::color::error, "Failed to get polcore's function table (0x%08lX).", hr);
+                    }
 
                     /* Invoke the inet mutex function.. */
                     auto findMutex = (void* (*)(...))FindINETMutex();
@@ -791,21 +788,39 @@ int __cdecl main(int argc, char* argv[])
                     lpCommandTable[POLFUNC_REGISTRY_LANG](globals::g_Language);
                     lpCommandTable[POLFUNC_FFXI_LANG](xiloader::functions::GetRegistryPlayOnlineLanguage(globals::g_Language));
                     lpCommandTable[POLFUNC_REGISTRY_KEY](xiloader::functions::GetRegistryPlayOnlineKey(globals::g_Language));
-                    lpCommandTable[POLFUNC_INSTALL_FOLDER](xiloader::functions::GetRegistryPlayOnlineInstallFolder(globals::g_Language));
+                    const char* installFolder = xiloader::functions::GetRegistryPlayOnlineInstallFolder(globals::g_Language);
+                    if (installFolder[0] == '\0')
+                    {
+                        xiloader::console::output(xiloader::color::error, "PlayOnline install folder not found in the registry (HKLM\\%s\\InstallFolder). Check PlayOnline is installed and --lang matches your install.", xiloader::functions::GetRegistryPlayOnlineKey(globals::g_Language));
+                    }
+                    lpCommandTable[POLFUNC_INSTALL_FOLDER](installFolder);
+                    lpCommandTable[POLFUNC_FILE_INIT](); // Initialize polcore file system
 
-                    // If we are set to non-japanese locale for POL, copy in the english text for invalid name on character creation
-                    // We are not properly loading in sqpolcts.bin which would normally have this (decrypted)
+                    if (!xiloader::playonline::disableCipher())
+                    {
+                        xiloader::console::output(xiloader::color::error, "Unsupported polcore version.");
+                        return 1;
+                    }
+
+                    if (!xiloader::polrelay::start(globals::g_ProfilePort, sock.AccountId))
+                    {
+                        return 1;
+                    }
+
+                    // Without the viewer, polcore keeps its built-in Japanese message texts
                     if (globals::g_Language != xiloader::Language::Japanese)
                     {
-                        lpCommandTable[1302](0x04, "The name you entered is unavailable.\nPlease choose another name.");
+                        xiloader::playonline::setEnglishMessageTexts(lpCommandTable);
                     }
 
                     lpCommandTable[POLFUNC_INET_MUTEX]();
 
-                    if (!SetProfileServerPort(profileServerPort))
+                    if (!xiloader::playonline::logIn(lpCommandTable, sock.AccountId))
                     {
                         return 1;
                     }
+
+                    xiloader::playonline::keepGameOnDisconnect(lpCommandTable);
 
                     /* Attempt to create FFXi instance..*/
                     IFFXiEntry* ffxi = NULL;
@@ -831,13 +846,8 @@ int __cdecl main(int argc, char* argv[])
                 /* Cleanup threads.. */
                 globals::g_IsRunning = false;
                 TerminateThread(hFFXiServer, 0);
-                TerminateThread(hPolServer, 0);
-
                 WaitForSingleObject(hFFXiServer, 1000);
-                WaitForSingleObject(hPolServer, 1000);
-
                 CloseHandle(hFFXiServer);
-                CloseHandle(hPolServer);
             }
         }
     }
@@ -845,6 +855,8 @@ int __cdecl main(int argc, char* argv[])
     {
         xiloader::console::output(xiloader::color::error, "Failed to resolve server hostname.");
     }
+
+    xiloader::polrelay::stop();
 
     mbedtls_net_free(&sslState::server_fd);
     mbedtls_ssl_free(&sslState::ssl);

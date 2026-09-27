@@ -31,7 +31,6 @@ namespace globals
     extern char                   g_SessionHash[16];
     extern std::string            g_Email;
     extern std::array<uint8_t, 3> g_VersionNumber;
-    extern uint16_t               g_ServerPort;
     extern uint16_t               g_LoginDataPort;
     extern uint16_t               g_LoginViewPort;
     extern uint16_t               g_LoginAuthPort;
@@ -186,7 +185,13 @@ bool handleLoginCommand(int8_t command, json& login_reply_json, uint32_t& accoun
             bool display = menus::okCancelDialog("Open QR code in my default browser");
             if (display)
             {
-                ShellExecuteA(nullptr, "open", svgFilePath.c_str(), nullptr, nullptr, SW_SHOWNORMAL);
+                // ShellExecuteA returns a value above 32 on success
+                const auto opened = reinterpret_cast<INT_PTR>(ShellExecuteA(nullptr, "open", svgFilePath.c_str(), nullptr, nullptr, SW_SHOWNORMAL));
+                if (opened <= 32)
+                {
+                    xiloader::console::output(xiloader::color::error, "Failed to open the QR code (error %d). Open %s manually.", static_cast<int>(opened), svgFilePath.c_str());
+                }
+
                 xiloader::console::output(xiloader::color::info, "Once saved please use the \"Validate 2FA OTP\" option to verify the OTP.");
             }
 
@@ -227,6 +232,11 @@ bool handleLoginCommand(int8_t command, json& login_reply_json, uint32_t& accoun
             return false;
         }
 
+        default:
+        {
+            xiloader::console::output(xiloader::color::error, "The login server sent an unknown result (0x%02X). Check this xiloader version is supported by the server.", static_cast<uint8_t>(command));
+            break;
+        }
     }
 
     return false;
