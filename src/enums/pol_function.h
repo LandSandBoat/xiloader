@@ -71,6 +71,13 @@ enum class PolFunction : uint16_t
     CheckMyStatus       = 0x0177,
     LoadGroupList       = 0x017F, // 7/12 group list
     CheckGroupList      = 0x0180,
+
+    // PlayOnline options (pub\homeNN\option.bin): FFXiMain loads and stores the file but never creates it; the viewer seeds it from the default on account creation
+    LoadOptionCheck   = 0x038C, // 0 pending, 1 done, negative failed
+    StoreOption       = 0x038D, // writes the loaded options to the user slot; the file has to exist already
+    StoreOptionCheck  = 0x038E, // 0 pending, 1 done, negative failed
+    FreeOption        = 0x038F,
+    LoadOptionDefault = 0x0396, // loads the viewer's default option.bin
 };
 
 constexpr auto tableIndex(const PolFunction function) -> std::size_t

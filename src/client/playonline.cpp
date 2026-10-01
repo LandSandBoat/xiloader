@@ -34,6 +34,7 @@
 #include <cstring>
 #include <filesystem>
 #include <format>
+#include <fstream>
 #include <random>
 #include <span>
 
@@ -130,6 +131,52 @@ void configureSession()
 {
     call(PolFunction::SetUserSlot)(session.slot);
     call(PolFunction::MessageNotices)(1);
+}
+
+// Blocking; steps one of polcore's option file state machines to completion
+auto runOptionStep(const PolFunction check) -> bool
+{
+    int result = 0;
+    while ((result = call(check)()) == 0)
+    {
+        call(PolFunction::PolconIdle)();
+        Sleep(1);
+    }
+
+    return result == 1;
+}
+
+// Seeds pub\homeNN\option.bin from the viewer's default the way account creation does.
+// FFXiMain only loads and stores an existing file, so without it in-game PlayOnline settings such as the profanity filter never persist.
+void seedOptionFile(const std::filesystem::path& slot)
+{
+    const auto file = slot / "option.bin";
+
+    // polcore opens the file for writing without creating it, so it has to exist before the store
+    if (!std::ofstream(file, std::ios::binary))
+    {
+        xiloader::console::output(xiloader::color::warning, "Failed to create the PlayOnline option file %s.", std::filesystem::path(file).make_preferred().string().c_str());
+        return;
+    }
+
+    call(PolFunction::LoadOptionDefault)();
+    auto seeded = runOptionStep(PolFunction::LoadOptionCheck);
+    if (seeded)
+    {
+        call(PolFunction::StoreOption)();
+        seeded = runOptionStep(PolFunction::StoreOptionCheck);
+    }
+
+    call(PolFunction::FreeOption)();
+
+    if (!seeded)
+    {
+        // An empty file would be loaded as the user's options
+        std::error_code error;
+        std::filesystem::remove(file, error);
+    }
+
+    xiloader::console::output(seeded ? xiloader::color::success : xiloader::color::warning, seeded ? "Created the PlayOnline option file." : "Failed to create the PlayOnline option file.");
 }
 
 void startLoads(const std::span<Load> loads)
@@ -457,7 +504,8 @@ auto logIn(CommandTable table, const uint32_t accountId, const Language language
     //
     // polcore is not capable of creating the folders directly so we have to do it ourselves.
     session.slot    = 50 + static_cast<int>(accountId % 50);
-    const auto home = std::filesystem::path(xiloader::registry::GetPlayOnlineInstallFolder(language)) / std::format("pub/home{:02}/msg", session.slot);
+    const auto slot = std::filesystem::path(xiloader::registry::GetPlayOnlineInstallFolder(language)) / std::format("pub/home{:02}", session.slot);
+    const auto home = slot / "msg";
     for (const char* folder : { "s/a", "s/b", "r/a", "r/b" })
     {
         std::error_code error;
@@ -496,6 +544,10 @@ auto logIn(CommandTable table, const uint32_t accountId, const Language language
 
     // Step 7: Apply the user slot and turn on message notices like the viewer does
     configureSession();
+    if (!std::filesystem::exists(slot / "option.bin"))
+    {
+        seedOptionFile(slot);
+    }
 
     // Step 8: Load the lists the viewer loads after login
     Load status[std::size(kStatusLoads)];
