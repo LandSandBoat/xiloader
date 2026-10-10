@@ -1,7 +1,16 @@
-cmake_minimum_required(VERSION 3.15)
-project(xiloader CXX)
+cmake_minimum_required(VERSION 3.20)
 
-set(CMAKE_CXX_STANDARD 20)
+# C is enabled here so the flag fix below reaches the C dependencies
+project(xiloader C CXX)
+
+# Parallel compiles behind sccache or ccache cannot share one PDB (/Zi), so embed the debug info in the objects (/Z7)
+if(MSVC AND (CMAKE_C_COMPILER_LAUNCHER OR CMAKE_CXX_COMPILER_LAUNCHER))
+    foreach(flags CMAKE_C_FLAGS_DEBUG CMAKE_CXX_FLAGS_DEBUG CMAKE_C_FLAGS_RELWITHDEBINFO CMAKE_CXX_FLAGS_RELWITHDEBINFO)
+        string(REPLACE "/Zi" "/Z7" ${flags} "${${flags}}")
+    endforeach()
+endif()
+
+set(CMAKE_CXX_STANDARD 23)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS ON)
 set(LINKER_LANGUAGE CXX)
@@ -32,33 +41,84 @@ configure_file(
 
 # xiloader
 add_executable(xiloader
-    src/command_handler.h
+    src/app_data.cpp
+    src/app_data.h
+    src/client/game.cpp
+    src/client/game.h
+    src/client/registry.cpp
+    src/client/registry.h
+    src/client/sdk/ffxi.h
+    src/client/sdk/polcore.h
+    src/config.cpp
+    src/config.h
     src/console.cpp
     src/console.h
-    src/defines.h
+    src/diagnostics/checks.h
+    src/diagnostics/install_checks.cpp
+    src/diagnostics/runtime_checks.cpp
+    src/enums/check_status.h
+    src/enums/console_color.h
+    src/enums/exit_code.h
+    src/enums/lobby_command.h
+    src/enums/lobby_data.h
+    src/enums/login_command.h
+    src/enums/login_outcome.h
+    src/enums/login_result.h
+    src/enums/menu_selection.h
+    src/enums/pol_function.h
+    src/enums/pol_language.h
     src/enums/polcon_state.h
-    src/FFXi.h
-    src/FFXiMain.h
-    src/functions.cpp
-    src/functions.h
+    src/enums/reconnect.h
+    src/enums/relay_phase.h
+    src/enums/server_trust.h
+    src/guards.h
+    src/hooks/hairpin_fix.cpp
+    src/hooks/hairpin_fix.h
+    src/hooks/socket_hooks.cpp
+    src/hooks/socket_hooks.h
+    src/json_get.h
+    src/lobby/data_connection.cpp
+    src/lobby/data_connection.h
+    src/login/auth_connection.cpp
+    src/login/auth_connection.h
+    src/login/known_servers.cpp
+    src/login/known_servers.h
+    src/login/login.cpp
+    src/login/login.h
+    src/login/session.h
+    src/login/verify_server.cpp
     src/main.cpp
-    src/menus.h
-    src/network.cpp
-    src/network.h
-    src/polcore.h
-    src/playonline.cpp
-    src/playonline.h
-    src/polrelay.cpp
-    src/polrelay.h
-    src/trust_token.cpp
-    src/trust_token.h
+    src/net/resolve.cpp
+    src/net/resolve.h
+    src/net/tls_client_config.cpp
+    src/net/tls_client_config.h
+    src/otp/qr_code.cpp
+    src/otp/qr_code.h
+    src/otp/trust_token_manager.cpp
+    src/otp/trust_token_manager.h
+    src/client/pattern_scan.cpp
+    src/client/pattern_scan.h
+    src/client/playonline.cpp
+    src/client/playonline.h
+    src/client/polcore_ids.h
+    src/client/polrelay.cpp
+    src/client/polrelay.h
+    src/ui/ftxui_menu.cpp
+    src/ui/menu.cpp
+    src/ui/menu.h
+    src/ui/plain_menu.cpp
+    src/ui/prompts.cpp
+    src/ui/prompts.h
     ${CMAKE_CURRENT_BINARY_DIR}/src/xiloader.rc
     xiloader.manifest
 )
 
 set_target_properties(xiloader PROPERTIES LINK_FLAGS "/LARGEADDRESSAWARE")
 
-target_include_directories(xiloader PUBLIC ${PROJECT_SOURCE_DIR}/xiloader)
+# Keeps windows.h from defining min/max and from pulling in winsock.h, so include order does not matter
+target_compile_definitions(xiloader PRIVATE NOMINMAX WIN32_LEAN_AND_MEAN)
+
+target_include_directories(xiloader PRIVATE ${PROJECT_SOURCE_DIR}/src)
 
 target_link_libraries(xiloader PUBLIC
     detours
@@ -66,7 +126,6 @@ target_link_libraries(xiloader PUBLIC
     crypt32
     psapi
     ws2_32
-    iphlpapi
     MbedTLS::mbedtls
     MbedTLS::mbedcrypto
     MbedTLS::mbedx509    
@@ -75,6 +134,25 @@ target_link_libraries(xiloader PUBLIC
     ftxui::dom
     ftxui::component
     qr-code-generator)
+
+# Assert-based checks for the parts that run without the game
+add_executable(xiloader_check
+    src/app_data.cpp
+    src/client/pattern_scan.cpp
+    src/config.cpp
+    src/client/registry.cpp
+    src/console.cpp
+    src/diagnostics/install_checks.cpp
+    src/lobby/data_connection.cpp
+    src/login/known_servers.cpp
+    src/otp/trust_token_manager.cpp
+    src/ui/plain_menu.cpp
+    tests/check.cpp
+)
+
+target_include_directories(xiloader_check PRIVATE ${PROJECT_SOURCE_DIR}/src)
+target_compile_definitions(xiloader_check PRIVATE NOMINMAX WIN32_LEAN_AND_MEAN)
+target_link_libraries(xiloader_check PRIVATE crypt32 argparse nlohmann_json::nlohmann_json psapi ws2_32)
 
 message(STATUS "CMAKE_VERSION: ${CMAKE_VERSION}")
 message(STATUS "CMAKE_BUILD_TYPE: ${CMAKE_BUILD_TYPE}")
