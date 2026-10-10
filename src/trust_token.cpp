@@ -26,7 +26,9 @@ along with this program.  If not, see http://www.gnu.org/licenses/
 #endif
 
 #include <winsock2.h>
+
 #include <windows.h>
+
 #include <wincrypt.h>
 
 #include <ctime>
@@ -45,8 +47,8 @@ namespace
 
 std::string getTrustTokenDir()
 {
-    char* appdata = nullptr;
-    size_t len    = 0;
+    char*  appdata = nullptr;
+    size_t len     = 0;
     _dupenv_s(&appdata, &len, "APPDATA");
     std::string dir;
     if (appdata)
@@ -180,8 +182,7 @@ std::string loadTrustToken(const std::string& server, const std::string& usernam
     return entry["token"].get<std::string>();
 }
 
-void saveTrustToken(const std::string& server, const std::string& username,
-                    const std::string& token, int64_t expiresEpoch)
+void saveTrustToken(const std::string& server, const std::string& username, const std::string& token, int64_t expiresEpoch)
 {
     json tokenData = readTokenStore();
 

@@ -34,78 +34,81 @@
 
 namespace xiloader
 {
-    // Relays polcore's PlayOnline connections (IRC and profile server) to the server over TLS.
-    // PlayOnline hosts resolve to a placeholder address that Mine_connect redirects to the relay's local ports.
-    // A single thread runs every connection, since mbedTLS isn't built thread-safe.
-    namespace polrelay
-    {
-        // A local listener, the port polcore dials for it, and the server port it forwards to
-        struct Listener
-        {
-            SOCKET   socket     = INVALID_SOCKET;
-            uint16_t dialedPort = 0;
-            uint16_t serverPort = 0;
-            uint16_t localPort  = 0;
-        };
 
-        // Shared by all relay connections
-        struct Tls
-        {
-            mbedtls_entropy_context  entropy;
-            mbedtls_ctr_drbg_context random;
-            mbedtls_ssl_config       config;
-        };
+// Relays polcore's PlayOnline connections (IRC and profile server) to the server over TLS.
+// PlayOnline hosts resolve to a placeholder address that Mine_connect redirects to the relay's local ports.
+// A single thread runs every connection, since mbedTLS isn't built thread-safe.
+namespace polrelay
+{
 
-        enum class Phase
-        {
-            Connecting,
-            Handshaking,
-            Relaying,
-        };
+// A local listener, the port polcore dials for it, and the server port it forwards to
+struct Listener
+{
+    SOCKET   socket     = INVALID_SOCKET;
+    uint16_t dialedPort = 0;
+    uint16_t serverPort = 0;
+    uint16_t localPort  = 0;
+};
 
-        // One polcore connection: plain on the loopback side, TLS to the server
-        struct Connection
-        {
-            SOCKET              local      = INVALID_SOCKET;
-            uint16_t            serverPort = 0;
-            mbedtls_net_context server;
-            mbedtls_ssl_context ssl;
-            Phase               phase = Phase::Connecting;
+// Shared by all relay connections
+struct Tls
+{
+    mbedtls_entropy_context  entropy;
+    mbedtls_ctr_drbg_context random;
+    mbedtls_ssl_config       config;
+};
 
-            // Bytes read from one side and not yet written to the other
-            std::vector<unsigned char> toServer;
-            std::vector<unsigned char> toLocal;
+enum class Phase
+{
+    Connecting,
+    Handshaking,
+    Relaying,
+};
 
-            // The pending TLS operation needs the server socket writable
-            bool wantsWrite = false;
+// One polcore connection: plain on the loopback side, TLS to the server
+struct Connection
+{
+    SOCKET              local      = INVALID_SOCKET;
+    uint16_t            serverPort = 0;
+    mbedtls_net_context server;
+    mbedtls_ssl_context ssl;
+    Phase               phase = Phase::Connecting;
 
-            // The server closed; the connection ends once toLocal is flushed
-            bool serverClosed = false;
+    // Bytes read from one side and not yet written to the other
+    std::vector<unsigned char> toServer;
+    std::vector<unsigned char> toLocal;
 
-            // Connect and handshake must finish by deadline; pending bytes must move before stalledAt
-            ULONGLONG deadline  = 0;
-            ULONGLONG stalledAt = 0;
+    // The pending TLS operation needs the server socket writable
+    bool wantsWrite = false;
 
-            Connection(SOCKET local, uint16_t serverPort);
-            ~Connection();
+    // The server closed; the connection ends once toLocal is flushed
+    bool serverClosed = false;
 
-            Connection(const Connection&)            = delete;
-            Connection& operator=(const Connection&) = delete;
-        };
+    // Connect and handshake must finish by deadline; pending bytes must move before stalledAt
+    ULONGLONG deadline  = 0;
+    ULONGLONG stalledAt = 0;
 
-        // Starts the relay thread, listening on free local ports for the IRC port and the profile port polcore dials.
-        // Every connection to the server opens with the account id and session hash, which is how the server knows who it is.
-        // Returns true once both listeners are up.
-        auto start(uint16_t profilePort, uint32_t accountId) -> bool;
+    Connection(SOCKET local, uint16_t serverPort);
+    ~Connection();
 
-        // Closes every relay connection and joins the relay thread; call before removing the socket hooks
-        void stop();
+    Connection(const Connection&)            = delete;
+    Connection& operator=(const Connection&) = delete;
+};
 
-        // The placeholder address the PlayOnline host names should resolve to
-        auto address() -> const std::string&;
+// Starts the relay thread, listening on free local ports for the IRC port and the profile port polcore dials.
+// Every connection to the server opens with the account id and session hash, which is how the server knows who it is.
+// Returns true once both listeners are up.
+auto start(uint16_t profilePort, uint32_t accountId) -> bool;
 
-        // Points a connection to the placeholder address at the matching relay listener, rewriting destination in place.
-        // Returns true when it was a PlayOnline connection.
-        auto redirect(sockaddr_in& destination) -> bool;
-    } // namespace polrelay
+// Closes every relay connection and joins the relay thread; call before removing the socket hooks
+void stop();
+
+// The placeholder address the PlayOnline host names should resolve to
+auto address() -> const std::string&;
+
+// Points a connection to the placeholder address at the matching relay listener, rewriting destination in place.
+// Returns true when it was a PlayOnline connection.
+auto redirect(sockaddr_in& destination) -> bool;
+
+} // namespace polrelay
 } // namespace xiloader

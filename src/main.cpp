@@ -26,6 +26,8 @@ This file is part of DarkStar-server source code.
 
 #include "defines.h"
 
+#include <wincrypt.h>
+
 #include <algorithm>
 #include <chrono>
 #include <ctime>
@@ -48,41 +50,45 @@ using json = nlohmann::json;
 /* Global Variables */
 namespace globals
 {
-    xiloader::Language     g_Language          = xiloader::Language::English; // The language of the loader to be used for polcore.
-    std::string            g_ServerAddress     = "127.0.0.1";                 // The server address to connect to.
-    uint16_t               g_LoginDataPort     = 54230;                       // Login server data port to connect to
-    uint16_t               g_LoginViewPort     = 54001;                       // Login view port to connect to
-    uint16_t               g_LoginAuthPort     = 54231;                       // Login auth port to connect to
-    uint16_t               g_ProfilePort       = 51220;                       // PlayOnline profile server port polcore connects to
-    std::string            g_Username          = "";                          // The username being logged in with.
-    std::string            g_Password          = "";                          // The password being logged in with.
-    std::string            g_OtpCode           = "";                          // The OTP code the user input
-    char                   g_SessionHash[16]   = {};                          // Session hash sent from auth
-    std::string            g_Email             = "";                          // Email, currently unused
-    std::array<uint8_t, 3> g_VersionNumber     = { 2, 2, 0 };                 // xiloader version number sent to auth server. Must be x.x.x with single characters for 'x'. Remember to also change in xiloader.rc.in
-    bool                   g_FirstLogin        = false;                       // set to true when --user --pass are both set to allow for autologin
-    std::string            g_TrustToken        = "";                          // trust token loaded from disk or received from server
-    bool                   g_TrustThisComputer = false;                       // user checkbox / CLI flag for "trust this computer"
 
-    char* g_CharacterList = NULL;  // Pointer to the character list data being sent from the server.
-    bool  g_IsRunning     = false; // Flag to determine if the network threads should hault.
-    bool  g_Hide          = false; // Determines whether or not to hide the console window after FFXI starts.
+xiloader::Language     g_Language          = xiloader::Language::English; // The language of the loader to be used for polcore.
+std::string            g_ServerAddress     = "127.0.0.1";                 // The server address to connect to.
+uint16_t               g_LoginDataPort     = 54230;                       // Login server data port to connect to
+uint16_t               g_LoginViewPort     = 54001;                       // Login view port to connect to
+uint16_t               g_LoginAuthPort     = 54231;                       // Login auth port to connect to
+uint16_t               g_ProfilePort       = 51220;                       // PlayOnline profile server port polcore connects to
+std::string            g_Username          = "";                          // The username being logged in with.
+std::string            g_Password          = "";                          // The password being logged in with.
+std::string            g_OtpCode           = "";                          // The OTP code the user input
+char                   g_SessionHash[16]   = {};                          // Session hash sent from auth
+std::string            g_Email             = "";                          // Email, currently unused
+std::array<uint8_t, 3> g_VersionNumber     = { 2, 2, 0 };                 // xiloader version number sent to auth server. Must be x.x.x with single characters for 'x'. Remember to also change in xiloader.rc.in
+bool                   g_FirstLogin        = false;                       // set to true when --user --pass are both set to allow for autologin
+std::string            g_TrustToken        = "";                          // trust token loaded from disk or received from server
+bool                   g_TrustThisComputer = false;                       // user checkbox / CLI flag for "trust this computer"
 
-    /* Hairpin Fix Variables */
-    DWORD g_NewServerAddress;     // Hairpin server address to be overriden with.
-    DWORD g_HairpinReturnAddress; // Hairpin return address to allow the code cave to return properly.
+char* g_CharacterList = NULL;  // Pointer to the character list data being sent from the server.
+bool  g_IsRunning     = false; // Flag to determine if the network threads should hault.
+bool  g_Hide          = false; // Determines whether or not to hide the console window after FFXI starts.
+
+/* Hairpin Fix Variables */
+DWORD g_NewServerAddress;     // Hairpin server address to be overriden with.
+DWORD g_HairpinReturnAddress; // Hairpin return address to allow the code cave to return properly.
+
 }; // namespace globals
 
 namespace sslState
 {
-    // mbed tls state
-    mbedtls_net_context               server_fd = {};
-    mbedtls_entropy_context           entropy   = {};
-    mbedtls_ctr_drbg_context          ctr_drbg  = {};
-    mbedtls_ssl_context               ssl       = {};
-    mbedtls_ssl_config                conf      = {};
-    mbedtls_x509_crt                  cacert    = {};
-    std::unique_ptr<mbedtls_x509_crt> ca_chain  = {};
+
+// mbed tls state
+mbedtls_net_context               server_fd = {};
+mbedtls_entropy_context           entropy   = {};
+mbedtls_ctr_drbg_context          ctr_drbg  = {};
+mbedtls_ssl_context               ssl       = {};
+mbedtls_ssl_config                conf      = {};
+mbedtls_x509_crt                  cacert    = {};
+std::unique_ptr<mbedtls_x509_crt> ca_chain  = {};
+
 }; // namespace sslState
 
 /**
@@ -99,12 +105,8 @@ extern "C"
 /**
  * @brief Hairpin fix codecave.
  */
-__declspec(naked) void HairpinFixCave(void)
-{
-    __asm mov eax, globals::g_NewServerAddress
-    __asm mov [edx + 0x012E90], eax
-    __asm mov [edx], eax
-    __asm jmp globals::g_HairpinReturnAddress
+__declspec(naked) void HairpinFixCave(void){
+    __asm mov eax, globals::g_NewServerAddress __asm mov[edx + 0x012E90], eax __asm mov[edx], eax __asm jmp globals::g_HairpinReturnAddress
 }
 
 /**
@@ -160,7 +162,7 @@ DWORD ApplyHairpinFixThread(LPVOID lpParam)
     }
 
     /* Apply the hairpin fix.. */
-    auto caveDest = ((int)HairpinFixCave - ((int)hairpinAddress)) - 5;
+    auto caveDest                   = ((int)HairpinFixCave - ((int)hairpinAddress)) - 5;
     globals::g_HairpinReturnAddress = hairpinAddress + 0x08;
 
     *(BYTE*)(hairpinAddress + 0x00) = 0xE9; // jmp
@@ -230,16 +232,15 @@ bool isLobbyCommand(const char* buffer, SOCKET socket)
     // 0x26: Send version information to login, login replies with expansion/features bitmask: "Setting up connection."
     // 0x28: Client sending character rename information if character was renamed by a GM (Not yet implemented in login)
     // 0x2B: GM command to move character to a new world? See https://github.com/atom0s/XiPackets/blob/main/lobby/C2S_0x002B_RequestMoveGMChr.md
-    if
-        (command == 0x07 ||
-         command == 0x14 ||
-         command == 0x1F ||
-         command == 0x21 ||
-         command == 0x22 ||
-         command == 0x24 ||
-         command == 0x26 ||
-         command == 0x28 ||
-         command == 0x2B)
+    if (command == 0x07 ||
+        command == 0x14 ||
+        command == 0x1F ||
+        command == 0x21 ||
+        command == 0x22 ||
+        command == 0x24 ||
+        command == 0x26 ||
+        command == 0x28 ||
+        command == 0x2B)
     {
         // Check for magic numbers (XIFF command)
         if (buffer[4] == 0x49 && buffer[5] == 0x58 && buffer[6] == 0x46 && buffer[7] == 0x46)
@@ -257,7 +258,7 @@ bool isLobbyCommand(const char* buffer, SOCKET socket)
 int WINAPI Mine_send(SOCKET s, const char* buf, int len, int flags)
 {
     const auto ret = _ReturnAddress();
-    std::ignore = ret;
+    std::ignore    = ret;
 
     // check for lobby specific commands
     if (isLobbyCommand(buf, s))
@@ -275,11 +276,12 @@ int WINAPI Mine_send(SOCKET s, const char* buf, int len, int flags)
 int WINAPI Mine_recv(SOCKET s, char* buf, int len, int flags)
 {
     const auto ret = _ReturnAddress();
-    std::ignore = ret;
+    std::ignore    = ret;
 
     // xiloader::console::output(xiloader::color::lightblue, "recv %i", len);
     return Real_recv(s, buf, len, flags);
 }
+
 /**
  * @brief connect detour callback. https://man7.org/linux/man-pages/man2/connect.2.html
  */
@@ -308,7 +310,7 @@ int WINAPI Mine_connect(SOCKET s, const sockaddr* name, int namelen)
 inline DWORD FindINETMutex(void)
 {
     const char* module = (globals::g_Language == xiloader::Language::European) ? "polcoreeu.dll" : "polcore.dll";
-    auto result = (DWORD)xiloader::functions::FindPattern(module, (BYTE*)"\x8B\x56\x2C\x8B\x46\x28\x8B\x4E\x24\x52\x50\x51", "xxxxxxxxxxxx");
+    auto        result = (DWORD)xiloader::functions::FindPattern(module, (BYTE*)"\x8B\x56\x2C\x8B\x46\x28\x8B\x4E\x24\x52\x50\x51", "xxxxxxxxxxxx");
     if (result == 0)
     {
         xiloader::console::output(xiloader::color::error, "Failed to locate the INET mutex in %s. This PlayOnline version is not supported, or --lang doesn't match your install.", module);
@@ -324,7 +326,7 @@ inline DWORD FindINETMutex(void)
 inline DWORD FindPolConn(void)
 {
     const char* module = (globals::g_Language == xiloader::Language::European) ? "polcoreeu.dll" : "polcore.dll";
-    auto result = (DWORD)xiloader::functions::FindPattern(module, (BYTE*)"\x81\xC6\x38\x03\x00\x00\x83\xC4\x04\x81\xFE", "xxxxxxxxxxx");
+    auto        result = (DWORD)xiloader::functions::FindPattern(module, (BYTE*)"\x81\xC6\x38\x03\x00\x00\x83\xC4\x04\x81\xFE", "xxxxxxxxxxx");
     if (result == 0)
     {
         xiloader::console::output(xiloader::color::error, "Failed to locate the PlayOnline connection in %s. This PlayOnline version is not supported, or --lang doesn't match your install.", module);
@@ -357,8 +359,8 @@ std::unique_ptr<mbedtls_x509_crt> extract_cert(PCCERT_CONTEXT certificateContext
 // Source: https://curl.se/mail/lib-2019-06/0057.html
 std::unique_ptr<mbedtls_x509_crt> build_windows_ca_chain()
 {
-    std::unique_ptr<mbedtls_x509_crt> ca_chain = NULL;
-    HCERTSTORE        certificateStore         = NULL;
+    std::unique_ptr<mbedtls_x509_crt> ca_chain         = NULL;
+    HCERTSTORE                        certificateStore = NULL;
 
     if (certificateStore = CertOpenStore(CERT_STORE_PROV_SYSTEM, 0, NULL, CERT_SYSTEM_STORE_CURRENT_USER, L"Root"))
     {
@@ -501,7 +503,7 @@ int __cdecl main(int argc, char* argv[])
     globals::g_OtpCode  = args.is_used("--otp") ? args.get<std::string>("--otp") : globals::g_OtpCode;
     globals::g_Email    = args.is_used("--email") ? args.get<std::string>("--email") : globals::g_Email;
 
-    std::string jsonFilename = args.is_used("--json") ? args.get<std::string>("--json") : std::string {};
+    std::string jsonFilename = args.is_used("--json") ? args.get<std::string>("--json") : std::string{};
 
     if (args.is_used("--user") && args.is_used("--pass"))
     {
@@ -622,7 +624,7 @@ int __cdecl main(int argc, char* argv[])
 
     /* Output the banner.. */
     time_t currentTime = time(NULL);
-    int currentYear = localtime(&currentTime)->tm_year + 1900;  // Year is returned as the number of years since 1900.
+    int    currentYear = localtime(&currentTime)->tm_year + 1900; // Year is returned as the number of years since 1900.
     xiloader::console::output(xiloader::color::lightred, "==========================================================");
     xiloader::console::output(xiloader::color::lightgreen, "DarkStar Boot Loader (c) 2015 DarkStar Team");
     xiloader::console::output(xiloader::color::lightgreen, "LandSandBoat Boot Loader (c) 2021-%d LandSandBoat Team (v%u.%u.%u)", currentYear, version[0], version[1], version[2]);
@@ -638,7 +640,7 @@ int __cdecl main(int argc, char* argv[])
 
     /* Initialize Winsock */
     WSADATA wsaData = { 0 };
-    auto ret = WSAStartup(MAKEWORD(2, 2), &wsaData);
+    auto    ret     = WSAStartup(MAKEWORD(2, 2), &wsaData);
     if (ret != 0)
     {
         xiloader::console::output(xiloader::color::error, "Failed to initialize winsock, error code: %d", ret);
@@ -683,9 +685,7 @@ int __cdecl main(int argc, char* argv[])
 
     const char* pers = "xiloader";
 
-    if ((ret = mbedtls_ctr_drbg_seed(&sslState::ctr_drbg, mbedtls_entropy_func, &sslState::entropy,
-                                     (const unsigned char*)pers,
-                                     strlen(pers))) != 0)
+    if ((ret = mbedtls_ctr_drbg_seed(&sslState::ctr_drbg, mbedtls_entropy_func, &sslState::entropy, (const unsigned char*)pers, strlen(pers))) != 0)
     {
         xiloader::console::output(xiloader::color::error, "mbedtls_ctr_drbg_seed failed!");
         return 1;

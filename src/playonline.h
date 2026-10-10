@@ -25,51 +25,54 @@
 
 namespace xiloader
 {
-    // The PlayOnline login xiloader performs in place of the viewer, against the server's xi_profile
-    namespace playonline
-    {
-        // One entry of polcore's common function table
-        using CommandFunc = void*(...);
 
-        // polcore's common function table, read but never modified
-        using CommandTable = CommandFunc* const*;
+// The PlayOnline login xiloader performs in place of the viewer, against the server's xi_profile
+namespace playonline
+{
 
-        // What POLCON_OPEN reads: a connection kind, then five dial-up fields xiloader leaves empty
-        struct ConnectionData
-        {
-            uint32_t kind;
-            void*    dialUp[5];
-            uint32_t unused[2];
-        };
+// One entry of polcore's common function table
+using CommandFunc = void*(...);
 
-        static_assert(sizeof(ConnectionData) == 0x20, "polcore reads 8 dwords");
+// polcore's common function table, read but never modified
+using CommandTable = CommandFunc* const*;
 
-        // One profile list load: a table entry starts it and returns a ticket, another polls the ticket
-        struct Load
-        {
-            const char* name;
-            int         setup; // returns the ticket
-            int         check; // 0 pending, 1 done, negative failed
-            int         ticket;
-            int         result;
-        };
+// What POLCON_OPEN reads: a connection kind, then five dial-up fields xiloader leaves empty
+struct ConnectionData
+{
+    uint32_t kind;
+    void*    dialUp[5];
+    uint32_t unused[2];
+};
 
-        // Replaces polcore's PlayOnline cipher with a plain copy; the relay encrypts the traffic instead.
-        // The cipher is located through its call on the IRC send path.
-        // Returns false when that call isn't found.
-        auto disableCipher() -> bool;
+static_assert(sizeof(ConnectionData) == 0x20, "polcore reads 8 dwords");
 
-        // Sets the English friend, group and character-name message texts the viewer normally loads from its StringTable.bin
-        void setEnglishMessageTexts(CommandTable table);
+// One profile list load: a table entry starts it and returns a ticket, another polls the ticket
+struct Load
+{
+    const char* name;
+    int         setup; // returns the ticket
+    int         check; // 0 pending, 1 done, negative failed
+    int         ticket;
+    int         result;
+};
 
-        // Logs in to PlayOnline the way the viewer does: POL id and password, IRC session, then the lists FFXiMain expects.
-        // A list that fails to load is retried in game.
-        // Returns false when the profile server can't be reached; the game can't start without it.
-        auto logIn(CommandTable table, uint32_t accountId) -> bool;
+// Replaces polcore's PlayOnline cipher with a plain copy; the relay encrypts the traffic instead.
+// The cipher is located through its call on the IRC send path.
+// Returns false when that call isn't found.
+auto disableCipher() -> bool;
 
-        // Keeps the game running when the PlayOnline connection drops, e.g. when xi_profile restarts.
-        // FFXiMain's per-frame poll would end the game with POL-0008; the error is hidden, and the session reopens every 15 to 45 seconds and reloads the lists.
-        // Rewrites two table entries.
-        void keepGameOnDisconnect(CommandFunc** table);
-    } // namespace playonline
+// Sets the English friend, group and character-name message texts the viewer normally loads from its StringTable.bin
+void setEnglishMessageTexts(CommandTable table);
+
+// Logs in to PlayOnline the way the viewer does: POL id and password, IRC session, then the lists FFXiMain expects.
+// A list that fails to load is retried in game.
+// Returns false when the profile server can't be reached; the game can't start without it.
+auto logIn(CommandTable table, uint32_t accountId) -> bool;
+
+// Keeps the game running when the PlayOnline connection drops, e.g. when xi_profile restarts.
+// FFXiMain's per-frame poll would end the game with POL-0008; the error is hidden, and the session reopens every 15 to 45 seconds and reloads the lists.
+// Rewrites two table entries.
+void keepGameOnDisconnect(CommandFunc** table);
+
+} // namespace playonline
 } // namespace xiloader

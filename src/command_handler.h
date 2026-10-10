@@ -24,27 +24,31 @@
 /* Externals */
 namespace globals
 {
-    extern std::string            g_ServerAddress;
-    extern std::string            g_Username;
-    extern std::string            g_Password;
-    extern std::string            g_OtpCode;
-    extern char                   g_SessionHash[16];
-    extern std::string            g_Email;
-    extern std::array<uint8_t, 3> g_VersionNumber;
-    extern uint16_t               g_LoginDataPort;
-    extern uint16_t               g_LoginViewPort;
-    extern uint16_t               g_LoginAuthPort;
-    extern char*                  g_CharacterList;
-    extern bool                   g_IsRunning;
-    extern bool                   g_FirstLogin;
-    extern std::string            g_TrustToken;
-    extern bool                   g_TrustThisComputer;
+
+extern std::string            g_ServerAddress;
+extern std::string            g_Username;
+extern std::string            g_Password;
+extern std::string            g_OtpCode;
+extern char                   g_SessionHash[16];
+extern std::string            g_Email;
+extern std::array<uint8_t, 3> g_VersionNumber;
+extern uint16_t               g_LoginDataPort;
+extern uint16_t               g_LoginViewPort;
+extern uint16_t               g_LoginAuthPort;
+extern char*                  g_CharacterList;
+extern bool                   g_IsRunning;
+extern bool                   g_FirstLogin;
+extern std::string            g_TrustToken;
+extern bool                   g_TrustThisComputer;
+
 } // namespace globals
 
 #include "defines.h"
 #include "helpers.h"
 #include "network.h"
 #include "trust_token.h"
+
+#include <shellapi.h>
 
 #include <nlohmann/json.hpp>
 #include <qrcodegen.hpp>
@@ -89,11 +93,9 @@ bool handleLoginCommand(int8_t command, json& login_reply_json, uint32_t& accoun
                 // Use server-provided expiry; fall back to 30 days if absent
                 int64_t expires = jsonGet<int64_t>(login_reply_json, "trust_expires")
                                       .value_or(static_cast<int64_t>(time(nullptr)) + (30 * 24 * 60 * 60));
-                saveTrustToken(globals::g_ServerAddress, globals::g_Username,
-                               maybeTrustToken.value(), expires);
+                saveTrustToken(globals::g_ServerAddress, globals::g_Username, maybeTrustToken.value(), expires);
                 int64_t days = (expires - static_cast<int64_t>(time(nullptr))) / (24 * 60 * 60);
-                xiloader::console::output(xiloader::color::info, "This computer is now trusted for %lld day%s.",
-                    days, days == 1 ? "" : "s");
+                xiloader::console::output(xiloader::color::info, "This computer is now trusted for %lld day%s.", days, days == 1 ? "" : "s");
             }
 
             shutdown(sock, SD_BOTH);
@@ -133,7 +135,7 @@ bool handleLoginCommand(int8_t command, json& login_reply_json, uint32_t& accoun
             return false;
         }
 
-        // Commands 0x0008 through 0x0008 are currently unused
+            // Commands 0x0008 through 0x0008 are currently unused
 
         case 0x000A:
         {

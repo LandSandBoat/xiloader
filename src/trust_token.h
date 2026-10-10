@@ -25,6 +25,5 @@ along with this program.  If not, see http://www.gnu.org/licenses/
 #include <string>
 
 std::string loadTrustToken(const std::string& server, const std::string& username);
-void saveTrustToken(const std::string& server, const std::string& username,
-                    const std::string& token, int64_t expiresEpoch);
-void removeTrustToken(const std::string& server, const std::string& username);
+void        saveTrustToken(const std::string& server, const std::string& username, const std::string& token, int64_t expiresEpoch);
+void        removeTrustToken(const std::string& server, const std::string& username);

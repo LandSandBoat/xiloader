@@ -24,114 +24,118 @@ This file is part of DarkStar-server source code.
 #ifndef __XILOADER_NETWORK_H_INCLUDED__
 #define __XILOADER_NETWORK_H_INCLUDED__
 
-#if defined (_MSC_VER) && (_MSC_VER >= 1020)
+#if defined(_MSC_VER) && (_MSC_VER >= 1020)
 #pragma once
 #endif
 
+#include <conio.h>
+#include <string>
+#include <windows.h>
 #include <winsock2.h>
 #include <ws2tcpip.h>
-#include <windows.h>
-#include <string>
-#include <conio.h>
 
 #include "console.h"
 
-#include "mbedtls/net_sockets.h"
-#include "mbedtls/debug.h"
-#include "mbedtls/ssl.h"
-#include "mbedtls/entropy.h"
 #include "mbedtls/ctr_drbg.h"
+#include "mbedtls/debug.h"
+#include "mbedtls/entropy.h"
 #include "mbedtls/error.h"
+#include "mbedtls/net_sockets.h"
+#include "mbedtls/ssl.h"
 
 namespace xiloader
 {
-    // mbedTLS error code as readable text, e.g. "SSL - The connection indicated an EOF"
-    inline std::string mbedtlsErrorText(const int ret)
+
+// mbedTLS error code as readable text, e.g. "SSL - The connection indicated an EOF"
+inline std::string mbedtlsErrorText(const int ret)
+{
+    char text[128] = {};
+    mbedtls_strerror(ret, text, sizeof(text));
+    return text;
+}
+
+/**
+ * @brief Socket object used to hold various important information.
+ */
+typedef struct datasocket_t
+{
+    datasocket_t()
+    : s(INVALID_SOCKET)
+    , AccountId(0)
+    , LocalAddress((ULONG)-1)
+    , ServerAddress((ULONG)-1)
     {
-        char text[128] = {};
-        mbedtls_strerror(ret, text, sizeof(text));
-        return text;
     }
 
+    SOCKET s;
+    UINT32 AccountId;
+    ULONG  LocalAddress;
+    ULONG  ServerAddress;
+} datasocket;
+
+/**
+ * @brief Network class containing functions related to networking.
+ */
+class network
+{
     /**
-     * @brief Socket object used to hold various important information.
+     * @brief Data communication between the local client and the game server.
+     *
+     * @param lpParam       Thread param object.
+     *
+     * @return Non-important return.
      */
-    typedef struct datasocket_t
-    {
-        datasocket_t() : s(INVALID_SOCKET), AccountId(0), LocalAddress((ULONG)-1), ServerAddress((ULONG)-1)
-        {}
+    static DWORD __stdcall FFXiDataComm(LPVOID lpParam);
 
-        SOCKET s;
-        UINT32 AccountId;
-        ULONG LocalAddress;
-        ULONG ServerAddress;
-    } datasocket;
+public:
+    /**
+     * @brief Creates a connection on the given port.
+     *
+     * @param sock          The datasocket object to store information within.
+     * @param port          The port to create the connection on.
+     *
+     * @return True on success, false otherwise.
+     */
+    static bool CreateConnection(datasocket* sock, const char* port);
 
     /**
-     * @brief Network class containing functions related to networking.
+     * @brief Creates a connection to the auth server on the given port.
+     *
+     * @param sock          The datasocket object to store information within.
+     * @param port          The port to create the connection on.
+     *
+     * @return True on success, false otherwise.
      */
-    class network
-    {
-        /**
-         * @brief Data communication between the local client and the game server.
-         *
-         * @param lpParam       Thread param object.
-         *
-         * @return Non-important return.
-         */
-        static DWORD __stdcall FFXiDataComm(LPVOID lpParam);
+    static bool CreateAuthConnection(datasocket* sock, const char* port);
 
-    public:
+    /**
+     * @brief Resolves the given hostname to its long ip format.
+     *
+     * @param host          The host name to resolve.
+     * @param lpOutput      Pointer to a ULONG to store the result.
+     *
+     * @return True on success, false otherwise.
+     */
+    static bool ResolveHostname(const char* host, PULONG lpOutput);
 
-        /**
-         * @brief Creates a connection on the given port.
-         *
-         * @param sock          The datasocket object to store information within.
-         * @param port          The port to create the connection on.
-         *
-         * @return True on success, false otherwise.
-         */
-        static bool CreateConnection(datasocket* sock, const char* port);
+    /**
+     * @brief Verifies the players login information; also handles creating new accounts.
+     *
+     * @param sock          The datasocket object with the connection socket.
+     *
+     * @return True on success, false otherwise.
+     */
+    static bool VerifyAccount(datasocket* sock);
 
-
-        /**
-         * @brief Creates a connection to the auth server on the given port.
-         *
-         * @param sock          The datasocket object to store information within.
-         * @param port          The port to create the connection on.
-         *
-         * @return True on success, false otherwise.
-         */
-        static bool CreateAuthConnection(datasocket* sock, const char* port);
-
-        /**
-         * @brief Resolves the given hostname to its long ip format.
-         *
-         * @param host          The host name to resolve.
-         * @param lpOutput      Pointer to a ULONG to store the result.
-         *
-         * @return True on success, false otherwise.
-         */
-        static bool ResolveHostname(const char* host, PULONG lpOutput);
-
-        /**
-         * @brief Verifies the players login information; also handles creating new accounts.
-         *
-         * @param sock          The datasocket object with the connection socket.
-         *
-         * @return True on success, false otherwise.
-         */
-        static bool VerifyAccount(datasocket* sock);
-
-        /**
-         * @brief Starts the data communication between the client and server.
-         *
-         * @param lpParam       Thread param object.
-         *
-         * @return Non-important return.
-         */
-        static DWORD __stdcall FFXiServer(LPVOID lpParam);
-    };
+    /**
+     * @brief Starts the data communication between the client and server.
+     *
+     * @param lpParam       Thread param object.
+     *
+     * @return Non-important return.
+     */
+    static DWORD __stdcall FFXiServer(LPVOID lpParam);
+};
 
 }; // namespace xiloader
 

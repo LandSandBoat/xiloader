@@ -45,14 +45,15 @@ enum class MenuSelection : uint8_t
 
 namespace menus
 {
-    using namespace ftxui;
 
-    MenuSelection twoFactorSubMenu()
-    {
-        auto screen   = ScreenInteractive::TerminalOutput();
-        int  selected = 0; // Container::Vertical requires `int` input
+using namespace ftxui;
 
-        // clang-format off
+MenuSelection twoFactorSubMenu()
+{
+    auto screen   = ScreenInteractive::TerminalOutput();
+    int  selected = 0; // Container::Vertical requires `int` input
+
+    // clang-format off
         auto menu = Container::Vertical(
         {
             MenuEntry("1) Register 2FA OTP"),
@@ -112,47 +113,47 @@ namespace menus
 
             return false;
         });
-        // clang-format on
+    // clang-format on
 
-        screen.Loop(menu);
+    screen.Loop(menu);
 
-        // Because ftxui is rigid with its input, return a menu selection here
-        switch (selected)
+    // Because ftxui is rigid with its input, return a menu selection here
+    switch (selected)
+    {
+        case 0:
         {
-            case 0:
-            {
-                return MenuSelection::RegisterTwoFactorOTP;
-            }
-            case 1:
-            {
-                return MenuSelection::RemoveTwoFactorOTP;
-            }
-            case 2:
-            {
-                return MenuSelection::RegenerateTwoFactorRemovalCode;
-            }
-            case 3:
-            {
-                return MenuSelection::ValidateTwoFactorOTP;
-            }
-            case 4:
-            {
-                return MenuSelection::RevokeComputerTrust;
-            }
-            case 5:
-            default:
-            {
-                return MenuSelection::None; // In this instance, the caller will replay the main menu
-            }
+            return MenuSelection::RegisterTwoFactorOTP;
+        }
+        case 1:
+        {
+            return MenuSelection::RemoveTwoFactorOTP;
+        }
+        case 2:
+        {
+            return MenuSelection::RegenerateTwoFactorRemovalCode;
+        }
+        case 3:
+        {
+            return MenuSelection::ValidateTwoFactorOTP;
+        }
+        case 4:
+        {
+            return MenuSelection::RevokeComputerTrust;
+        }
+        case 5:
+        default:
+        {
+            return MenuSelection::None; // In this instance, the caller will replay the main menu
         }
     }
+}
 
-    MenuSelection mainMenu()
-    {
-        auto screen   = ScreenInteractive::TerminalOutput();
-        int  selected = 0; // Container::Vertical requires `int` input
+MenuSelection mainMenu()
+{
+    auto screen   = ScreenInteractive::TerminalOutput();
+    int  selected = 0; // Container::Vertical requires `int` input
 
-        // clang-format off
+    // clang-format off
         auto menu = Container::Vertical(
         {
             MenuEntry("1) Login"),
@@ -206,70 +207,70 @@ namespace menus
 
             return false;
         });
-        // clang-format on
+    // clang-format on
 
-        screen.Loop(menu);
+    screen.Loop(menu);
 
-        // Because ftxui is rigid with its input, get a menu selection here
-        switch (selected)
+    // Because ftxui is rigid with its input, get a menu selection here
+    switch (selected)
+    {
+        case 0:
         {
-            case 0:
-            {
-                return MenuSelection::Login;
-            }
-            case 1:
-            {
-                return MenuSelection::CreateAccount;
-            }
-            case 2:
-            {
-                return MenuSelection::ChangePassword;
-            }
-            case 3:
-            {
-                return MenuSelection::TwoFactorSubmenu;
-            }
-            case 4:
-            {
-                return MenuSelection::Exit;
-            }
-                [[fallthrough]];
-            default:
-            {
-                return MenuSelection::None; // In this instance, we will exit
-            }
+            return MenuSelection::Login;
         }
-
-        return MenuSelection::None;
+        case 1:
+        {
+            return MenuSelection::CreateAccount;
+        }
+        case 2:
+        {
+            return MenuSelection::ChangePassword;
+        }
+        case 3:
+        {
+            return MenuSelection::TwoFactorSubmenu;
+        }
+        case 4:
+        {
+            return MenuSelection::Exit;
+        }
+            [[fallthrough]];
+        default:
+        {
+            return MenuSelection::None; // In this instance, we will exit
+        }
     }
 
-    void enterCredentialsWithOTP(std::string& username, std::string& password, std::string& OTP, bool* trustThisComputer = nullptr, const std::string& serverAddress = "")
+    return MenuSelection::None;
+}
+
+void enterCredentialsWithOTP(std::string& username, std::string& password, std::string& OTP, bool* trustThisComputer = nullptr, const std::string& serverAddress = "")
+{
+    ftxui::InputOption password_option;
+    password_option.password = true;
+
+    ftxui::Component input_username = ftxui::Input(&username, "");
+    ftxui::Component input_password = ftxui::Input(&password, "", password_option);
+    ftxui::Component input_otp      = ftxui::Input(&OTP, "");
+
+    std::vector<ftxui::Component> components = { input_username, input_password, input_otp };
+
+    ftxui::Component checkbox_trust;
+    if (trustThisComputer)
     {
-        ftxui::InputOption password_option;
-        password_option.password = true;
+        checkbox_trust = ftxui::Checkbox("Trust this computer", trustThisComputer);
+        components.push_back(checkbox_trust);
+    }
 
-        ftxui::Component input_username = ftxui::Input(&username, "");
-        ftxui::Component input_password = ftxui::Input(&password, "", password_option);
-        ftxui::Component input_otp      = ftxui::Input(&OTP, "");
+    auto component = ftxui::Container::Vertical(components);
 
-        std::vector<ftxui::Component> components = { input_username, input_password, input_otp };
+    auto screen = ftxui::ScreenInteractive::TerminalOutput();
 
-        ftxui::Component checkbox_trust;
-        if (trustThisComputer)
-        {
-            checkbox_trust = ftxui::Checkbox("Trust this computer", trustThisComputer);
-            components.push_back(checkbox_trust);
-        }
+    // Trust token cache — only re-check when username changes
+    std::string lastCheckedUser;
+    bool        isTrusted = false;
 
-        auto component = ftxui::Container::Vertical(components);
-
-        auto screen = ftxui::ScreenInteractive::TerminalOutput();
-
-        // Trust token cache — only re-check when username changes
-        std::string lastCheckedUser;
-        bool        isTrusted = false;
-
-        // clang-format off
+    // clang-format off
         component |= ftxui::CatchEvent([&](ftxui::Event event)
         {
             if (event == event.Return)
@@ -308,10 +309,10 @@ namespace menus
             }
             return false;
         });
-        // clang-format on
+    // clang-format on
 
-        // Tweak how the component tree is rendered:
-        // clang-format off
+    // Tweak how the component tree is rendered:
+    // clang-format off
         auto renderer = ftxui::Renderer(component, [&]
         {
                 // Check trust status when username changes
@@ -346,28 +347,28 @@ namespace menus
 
                 return ftxui::vbox(elements) | ftxui::border;
         });
-        // clang-format on
+    // clang-format on
 
-        screen.Loop(renderer);
-    }
+    screen.Loop(renderer);
+}
 
-    void enterCredentialsNoOTP(std::string& username, std::string& password)
-    {
-        ftxui::InputOption password_option;
-        password_option.password = true;
+void enterCredentialsNoOTP(std::string& username, std::string& password)
+{
+    ftxui::InputOption password_option;
+    password_option.password = true;
 
-        ftxui::Component input_username = ftxui::Input(&username, "");
-        ftxui::Component input_password = ftxui::Input(&password, "", password_option);
+    ftxui::Component input_username = ftxui::Input(&username, "");
+    ftxui::Component input_password = ftxui::Input(&password, "", password_option);
 
-        // The component tree:
-        auto component = ftxui::Container::Vertical({
-            input_username,
-            input_password,
-        });
+    // The component tree:
+    auto component = ftxui::Container::Vertical({
+        input_username,
+        input_password,
+    });
 
-        auto screen = ftxui::ScreenInteractive::TerminalOutput();
+    auto screen = ftxui::ScreenInteractive::TerminalOutput();
 
-        // clang-format off
+    // clang-format off
         component |= ftxui::CatchEvent([&](ftxui::Event event)
         {
             if (event == event.Return)
@@ -384,41 +385,41 @@ namespace menus
             }
             return false;
         });
-        // clang-format on
+    // clang-format on
 
-        // Tweak how the component tree is rendered:
-        // clang-format off
+    // Tweak how the component tree is rendered:
+    // clang-format off
         auto renderer = ftxui::Renderer(component, [&]
         {
                 return ftxui::vbox({    ftxui::hbox(ftxui::text("  Username: "), input_username->Render()),
                                         ftxui::hbox(ftxui::text("  Password: "), input_password->Render()),
                                    }) | ftxui::border;
         });
-        // clang-format on
+    // clang-format on
 
-        screen.Loop(renderer);
-    }
+    screen.Loop(renderer);
+}
 
-    bool confirmNewPassword(std::string& confirmed_password)
-    {
-        ftxui::InputOption password_option;
-        password_option.password = true;
+bool confirmNewPassword(std::string& confirmed_password)
+{
+    ftxui::InputOption password_option;
+    password_option.password = true;
 
-        std::string new_password = "";
-        confirmed_password = "";
+    std::string new_password = "";
+    confirmed_password       = "";
 
-        ftxui::Component input_password           = ftxui::Input(&new_password, "", password_option);
-        ftxui::Component input_confirmed_password = ftxui::Input(&confirmed_password, "", password_option);
+    ftxui::Component input_password           = ftxui::Input(&new_password, "", password_option);
+    ftxui::Component input_confirmed_password = ftxui::Input(&confirmed_password, "", password_option);
 
-        // The component tree:
-        auto component = ftxui::Container::Vertical({
-            input_password,
-            input_confirmed_password,
-        });
+    // The component tree:
+    auto component = ftxui::Container::Vertical({
+        input_password,
+        input_confirmed_password,
+    });
 
-        auto screen = ftxui::ScreenInteractive::TerminalOutput();
+    auto screen = ftxui::ScreenInteractive::TerminalOutput();
 
-        // clang-format off
+    // clang-format off
         component |= ftxui::CatchEvent([&](ftxui::Event event)
         {
             if (event == event.Return)
@@ -435,34 +436,34 @@ namespace menus
             }
             return false;
         });
-        // clang-format on
+    // clang-format on
 
-        // Tweak how the component tree is rendered:
-        // clang-format off
+    // Tweak how the component tree is rendered:
+    // clang-format off
         auto renderer = ftxui::Renderer(component, [&]
         {
                 return ftxui::vbox({    ftxui::hbox(ftxui::text("  Password        : "), input_password->Render()),
                                         ftxui::hbox(ftxui::text("  Confirm Password: "), input_confirmed_password->Render())
                                     }) | ftxui::border;
         });
-        // clang-format on
+    // clang-format on
 
-        screen.Loop(renderer);
+    screen.Loop(renderer);
 
-        if (confirmed_password != new_password)
-        {
-            return false;
-        }
-
-        return true;
+    if (confirmed_password != new_password)
+    {
+        return false;
     }
 
-    bool okCancelDialog(std::string input)
-    {
-        auto screen   = ScreenInteractive::TerminalOutput();
-        int  selected = 0;
+    return true;
+}
 
-        // clang-format off
+bool okCancelDialog(std::string input)
+{
+    auto screen   = ScreenInteractive::TerminalOutput();
+    int  selected = 0;
+
+    // clang-format off
         auto menu = Container::Vertical(
         {
             MenuEntry("1) " + input ),
@@ -495,35 +496,36 @@ namespace menus
 
             return false;
         });
-        // clang-format on
+    // clang-format on
 
-        screen.Loop(menu);
+    screen.Loop(menu);
 
-        return selected == 0;
-    }
-    bool createNewAccount(std::string& username, std::string& confirmed_password)
-    {
-        ftxui::InputOption password_option;
-        password_option.password = true;
+    return selected == 0;
+}
 
-        std::string password = "";
-        username             = "";
-        confirmed_password   = "";
+bool createNewAccount(std::string& username, std::string& confirmed_password)
+{
+    ftxui::InputOption password_option;
+    password_option.password = true;
 
-        ftxui::Component input_username           = ftxui::Input(&username, "");
-        ftxui::Component input_password           = ftxui::Input(&password, "", password_option);
-        ftxui::Component input_confirmed_password = ftxui::Input(&confirmed_password, "", password_option);
+    std::string password = "";
+    username             = "";
+    confirmed_password   = "";
 
-        // The component tree:
-        auto component = ftxui::Container::Vertical({
-            input_username,
-            input_password,
-            input_confirmed_password,
-        });
+    ftxui::Component input_username           = ftxui::Input(&username, "");
+    ftxui::Component input_password           = ftxui::Input(&password, "", password_option);
+    ftxui::Component input_confirmed_password = ftxui::Input(&confirmed_password, "", password_option);
 
-        auto screen = ftxui::ScreenInteractive::TerminalOutput();
+    // The component tree:
+    auto component = ftxui::Container::Vertical({
+        input_username,
+        input_password,
+        input_confirmed_password,
+    });
 
-        // clang-format off
+    auto screen = ftxui::ScreenInteractive::TerminalOutput();
+
+    // clang-format off
         component |= ftxui::CatchEvent([&](ftxui::Event event)
         {
             if (event == event.Return)
@@ -544,10 +546,10 @@ namespace menus
             }
             return false;
         });
-        // clang-format on
+    // clang-format on
 
-        // Tweak how the component tree is rendered:
-        // clang-format off
+    // Tweak how the component tree is rendered:
+    // clang-format off
         auto renderer = ftxui::Renderer(component, [&]
         {
             return ftxui::vbox(
@@ -557,28 +559,29 @@ namespace menus
                 ftxui::hbox(ftxui::text("  Confirm Password: "), input_confirmed_password->Render())
             }) | ftxui::border;
         });
-        // clang-format on
+    // clang-format on
 
-        screen.Loop(renderer);
+    screen.Loop(renderer);
 
-        if (confirmed_password != password)
-        {
-            return false;
-        }
-
-        return true;
-    }
-    void enterUsernameOnly(std::string& username)
+    if (confirmed_password != password)
     {
-        ftxui::Component input_username = ftxui::Input(&username, "");
+        return false;
+    }
 
-        auto component = ftxui::Container::Vertical({
-            input_username,
-        });
+    return true;
+}
 
-        auto screen = ftxui::ScreenInteractive::TerminalOutput();
+void enterUsernameOnly(std::string& username)
+{
+    ftxui::Component input_username = ftxui::Input(&username, "");
 
-        // clang-format off
+    auto component = ftxui::Container::Vertical({
+        input_username,
+    });
+
+    auto screen = ftxui::ScreenInteractive::TerminalOutput();
+
+    // clang-format off
         component |= ftxui::CatchEvent([&](ftxui::Event event)
         {
             if (event == event.Return)
@@ -588,16 +591,17 @@ namespace menus
             }
             return false;
         });
-        // clang-format on
+    // clang-format on
 
-        // clang-format off
+    // clang-format off
         auto renderer = ftxui::Renderer(component, [&]
         {
                 return ftxui::vbox({    ftxui::hbox(ftxui::text("  Username: "), input_username->Render()),
                                    }) | ftxui::border;
         });
-        // clang-format on
+    // clang-format on
 
-        screen.Loop(renderer);
-    }
+    screen.Loop(renderer);
+}
+
 } // namespace menus

@@ -28,79 +28,82 @@ This file is part of DarkStar-server source code.
 /* Global Externs */
 namespace globals
 {
-    extern bool g_Hide;
+
+extern bool g_Hide;
+
 };
 
 namespace xiloader
 {
-    /**
-     * @brief Prints a text fragment with the specified color to the console.
-     * 
-     * @param c         The color to print the fragment with.
-     * @param message   The fragment to print.
-     */
-    void console::print(xiloader::color c, std::string const& message)
+
+/**
+ * @brief Prints a text fragment with the specified color to the console.
+ *
+ * @param c         The color to print the fragment with.
+ * @param message   The fragment to print.
+ */
+void console::print(xiloader::color c, const std::string& message)
+{
+    auto                         stdout_handle = ::GetStdHandle(STD_OUTPUT_HANDLE);
+    ::CONSOLE_SCREEN_BUFFER_INFO info;
+    ::GetConsoleScreenBufferInfo(stdout_handle, &info);
+    auto attributes = info.wAttributes & 0xFFF0 | static_cast<::WORD>(c);
+    ::SetConsoleTextAttribute(stdout_handle, static_cast<::WORD>(attributes));
+    std::cout << message;
+    ::SetConsoleTextAttribute(stdout_handle, info.wAttributes);
+}
+
+/**
+ * @brief Shows or hides the console based on the provided argument.
+ *
+ * @param visible   "true" to show the console, "false" to hide it.
+ */
+void console::visible(bool visible)
+{
+    if (!globals::g_Hide)
+        return;
+
+    auto console = ::GetConsoleWindow();
+
+    // Adjust the task bar
+    ::ITaskbarList* taskbar = nullptr;
+    auto            hr      = ::CoCreateInstance(
+        CLSID_TaskbarList,
+        nullptr,
+        ::CLSCTX_INPROC_SERVER,
+        IID_ITaskbarList,
+        reinterpret_cast<void**>(&taskbar));
+    if (SUCCEEDED(hr))
     {
-        auto stdout_handle = ::GetStdHandle(STD_OUTPUT_HANDLE);
-        ::CONSOLE_SCREEN_BUFFER_INFO info;
-        ::GetConsoleScreenBufferInfo(stdout_handle, &info);
-        auto attributes = info.wAttributes & 0xFFF0 | static_cast<::WORD>(c);
-        ::SetConsoleTextAttribute(stdout_handle, static_cast<::WORD>(attributes));
-        std::cout << message;
-        ::SetConsoleTextAttribute(stdout_handle, info.wAttributes);
-    }
-
-    /**
-     * @brief Shows or hides the console based on the provided argument.
-     *
-     * @param visible   "true" to show the console, "false" to hide it.
-     */
-    void console::visible(bool visible)
-    {
-        if (!globals::g_Hide)
-            return;
-
-        auto console = ::GetConsoleWindow();
-
-        // Adjust the task bar
-        ::ITaskbarList* taskbar = nullptr;
-        auto hr = ::CoCreateInstance(
-            CLSID_TaskbarList,
-            nullptr,
-            ::CLSCTX_INPROC_SERVER,
-            IID_ITaskbarList,
-            reinterpret_cast<void**>(&taskbar));
-        if (SUCCEEDED(hr))
+        if (visible)
         {
-            if (visible)
-            {
-                taskbar->AddTab(console);
-            }
-            else
-            {
-                taskbar->DeleteTab(console);
-            }
-            taskbar->Release();
+            taskbar->AddTab(console);
         }
-
-        // Adjust the window's visibility
-        ::ShowWindow(console, visible ? SW_SHOW : SW_HIDE);
+        else
+        {
+            taskbar->DeleteTab(console);
+        }
+        taskbar->Release();
     }
 
-    /**
-     * @brief Hides the console window.
-     */
-    void console::hide()
-    {
-        visible(false);
-    }
+    // Adjust the window's visibility
+    ::ShowWindow(console, visible ? SW_SHOW : SW_HIDE);
+}
 
-    /**
-     * @brief Shows the console window.
-     */
-    void console::show()
-    {
-        visible(true);
-    }
+/**
+ * @brief Hides the console window.
+ */
+void console::hide()
+{
+    visible(false);
+}
+
+/**
+ * @brief Shows the console window.
+ */
+void console::show()
+{
+    visible(true);
+}
 
 }; // namespace xiloader

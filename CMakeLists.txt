@@ -66,6 +66,9 @@ add_executable(xiloader
 
 set_target_properties(xiloader PROPERTIES LINK_FLAGS "/LARGEADDRESSAWARE")
 
+# Keeps windows.h from defining min/max and from pulling in winsock.h, so include order does not matter
+target_compile_definitions(xiloader PRIVATE NOMINMAX WIN32_LEAN_AND_MEAN)
+
 target_include_directories(xiloader PUBLIC ${PROJECT_SOURCE_DIR}/xiloader)
 
 target_link_libraries(xiloader PUBLIC
