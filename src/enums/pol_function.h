@@ -23,6 +23,7 @@
 
 #include <cstddef>
 #include <cstdint>
+#include <utility>
 
 namespace xiloader
 {
@@ -82,7 +83,7 @@ enum class PolFunction : uint16_t
 
 constexpr auto tableIndex(const PolFunction function) -> std::size_t
 {
-    return static_cast<std::size_t>(function);
+    return std::to_underlying(function);
 }
 
 } // namespace xiloader

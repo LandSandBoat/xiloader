@@ -87,8 +87,8 @@ void checkPlainMenu()
     assert(username == "user" && password == "secret");
     assert(otp == "untouched");
     assert(trust && trusted);
-    assert(output.str().find("OTP") == std::string::npos);
-    assert(output.str().find("noted") != std::string::npos);
+    assert(!output.str().contains("OTP"));
+    assert(output.str().contains("noted"));
 }
 
 auto loadConfig(std::vector<const char*> argv) -> xiloader::Config

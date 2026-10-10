@@ -24,6 +24,7 @@
 #include <windows.h>
 
 #include <iostream>
+#include <print>
 
 namespace
 {
@@ -63,7 +64,7 @@ public:
 
         for (const auto& entry : entries)
         {
-            std::cout << "  " << entry << std::endl;
+            std::println(std::cout, "  {}", entry);
         }
 
         while (std::cin)
@@ -98,9 +99,15 @@ public:
             }
         }
 
-        if (const auto text = note ? note() : std::string(); !text.empty())
+        std::string text;
+        if (note)
         {
-            std::cout << "  " << text << std::endl;
+            text = note();
+        }
+
+        if (!text.empty())
+        {
+            std::println(std::cout, "  {}", text);
         }
     }
 };

@@ -65,7 +65,13 @@ void console::visible(const bool visible)
     }
 
     // Adjust the window's visibility
-    ::ShowWindow(console, visible ? SW_SHOW : SW_HIDE);
+    int command = SW_HIDE;
+    if (visible)
+    {
+        command = SW_SHOW;
+    }
+
+    ::ShowWindow(console, command);
 }
 
 void console::hide()

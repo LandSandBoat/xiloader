@@ -222,14 +222,22 @@ void TrustTokenManager::acceptLoginReply(const json& reply, const std::string& u
     // Use server-provided expiry; fall back to 30 days if absent
     const auto now     = static_cast<int64_t>(time(nullptr));
     const auto expiry  = reply.find("trust_expires");
-    const auto expires = expiry != reply.end() && expiry->is_number_integer()
-                             ? expiry->get<int64_t>()
-                             : now + (30 * kSecondsPerDay);
+    auto       expires = now + (30 * kSecondsPerDay);
+    if (expiry != reply.end() && expiry->is_number_integer())
+    {
+        expires = expiry->get<int64_t>();
+    }
 
     save(username, token->get<std::string>(), expires);
 
-    const auto days = (expires - now) / kSecondsPerDay;
-    xiloader::console::output(xiloader::color::info, "This computer is now trusted for %lld day%s.", days, days == 1 ? "" : "s");
+    const auto  days   = (expires - now) / kSecondsPerDay;
+    const char* plural = "s";
+    if (days == 1)
+    {
+        plural = "";
+    }
+
+    xiloader::console::output(xiloader::color::info, "This computer is now trusted for %lld day%s.", days, plural);
 }
 
 void TrustTokenManager::revoke(const std::string& username) const

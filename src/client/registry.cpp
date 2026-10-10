@@ -24,6 +24,7 @@
 #include <windows.h>
 
 #include <cstdio>
+#include <utility>
 
 namespace
 {
@@ -41,7 +42,7 @@ namespace xiloader
 
 auto registry::GetPlayOnlineKey(const xiloader::Language language) -> const char*
 {
-    int lang = static_cast<int>(language);
+    int lang = std::to_underlying(language);
 
     if (lang < 0)
         lang = 0;
@@ -53,9 +54,13 @@ auto registry::GetPlayOnlineKey(const xiloader::Language language) -> const char
 
 auto registry::GetPlayOnlineLanguage(const xiloader::Language language) -> int
 {
-    int lang = static_cast<int>(language);
+    int lang = std::to_underlying(language);
 
-    const char* const SquareEnix = (lang == 0 /*xiloader::Japanese*/) ? "Square" : "SquareEnix";
+    const char* SquareEnix = "SquareEnix";
+    if (language == xiloader::Language::Japanese)
+    {
+        SquareEnix = "Square";
+    }
 
     char szRegistryPath[MAX_PATH];
     sprintf_s(szRegistryPath, MAX_PATH, "%s\\%s\\PlayOnlineViewer\\Settings", registry::GetPlayOnlineKey(language), SquareEnix);
@@ -104,6 +109,16 @@ auto registry::GetPlayOnlineInstallFolder(const xiloader::Language language) -> 
         InstallFolder[0] = '\0';
 
     return InstallFolder;
+}
+
+auto registry::GetPolcoreModule(const xiloader::Language language) -> const char*
+{
+    if (language == xiloader::Language::European)
+    {
+        return "polcoreeu.dll";
+    }
+
+    return "polcore.dll";
 }
 
 } // namespace xiloader

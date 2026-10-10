@@ -34,6 +34,7 @@
 #include "enums/login_result.h"
 
 #include <optional>
+#include <utility>
 
 namespace
 {
@@ -172,7 +173,7 @@ auto toJson(const Request& request, const Config& config, const TrustTokenManage
     login_json["otp"]          = config.otpCode;
     login_json["new_password"] = request.newPassword;
     login_json["version"]      = xiloader::Config::versionNumber;
-    login_json["command"]      = static_cast<int8_t>(request.command);
+    login_json["command"]      = std::to_underlying(request.command);
 
     if (request.command == LoginCommand::Login) // Only send trust fields for login
     {

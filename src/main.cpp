@@ -35,6 +35,7 @@ This file is part of DarkStar-server source code.
 #include <ctime>
 #include <filesystem>
 #include <fstream>
+#include <print>
 
 #include "client/game.h"
 #include "console.h"
@@ -150,7 +151,7 @@ auto __cdecl main(const int argc, char* argv[]) -> int
     }
     catch (const std::exception& err)
     {
-        std::cerr << err.what() << std::endl;
+        std::println(std::cerr, "{}", err.what());
         return 1;
     }
 

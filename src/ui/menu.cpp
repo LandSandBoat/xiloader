@@ -31,7 +31,12 @@ auto makeMenu(const bool plain) -> std::unique_ptr<Menu>
     // Wine's console doesn't interpret VT sequences, so FTXUI output shows up as raw escape codes.
     const bool isWine = ::GetProcAddress(::GetModuleHandleA("ntdll.dll"), "wine_get_version") != nullptr;
 
-    return plain || isWine ? makePlainMenu() : makeFtxuiMenu();
+    if (plain || isWine)
+    {
+        return makePlainMenu();
+    }
+
+    return makeFtxuiMenu();
 }
 
 } // namespace xiloader::ui

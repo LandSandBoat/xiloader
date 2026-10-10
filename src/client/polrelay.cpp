@@ -467,7 +467,13 @@ void run(const std::stop_token stop)
             buffered = buffered || (connection->toLocal.empty() && mbedtls_ssl_check_pending(&connection->ssl) != 0);
         }
 
-        const timeval timeout = { .tv_sec = 0, .tv_usec = buffered ? 0 : kTickMs * 1000 };
+        long wait = kTickMs * 1000;
+        if (buffered)
+        {
+            wait = 0;
+        }
+
+        const timeval timeout = { .tv_sec = 0, .tv_usec = wait };
         if (select(0, &readable, &writable, &failed, &timeout) == SOCKET_ERROR)
         {
             xiloader::console::output(xiloader::color::error, "The profile server relay stopped (%d).", WSAGetLastError());

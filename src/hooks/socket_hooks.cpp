@@ -69,7 +69,7 @@ auto __stdcall Mine_gethostbyname(const char* name) -> hostent*
     }
 
     // PlayOnline profile and IRC hosts (friend list and presence) go through the local TLS relay
-    if (std::ranges::find(kPlayOnlineHosts, std::string_view(name)) != std::end(kPlayOnlineHosts))
+    if (std::ranges::contains(kPlayOnlineHosts, std::string_view(name)))
     {
         return Real_gethostbyname(xiloader::polrelay::address().c_str());
     }

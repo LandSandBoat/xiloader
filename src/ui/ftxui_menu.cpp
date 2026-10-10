@@ -92,7 +92,14 @@ public:
             }
             else
             {
-                inputs.push_back(field.hidden ? Input(field.text, "", hiddenOption) : Input(field.text, ""));
+                if (field.hidden)
+                {
+                    inputs.push_back(Input(field.text, "", hiddenOption));
+                }
+                else
+                {
+                    inputs.push_back(Input(field.text, ""));
+                }
             }
         }
 
@@ -137,14 +144,27 @@ public:
                                      Elements rows;
                                      for (std::size_t i = 0; i < fields.size(); ++i)
                                      {
-                                         const auto row = fields[i].checked
-                                                              ? hbox(text("  "), inputs[i]->Render())
-                                                              : hbox(text("  " + fields[i].label + ": "), inputs[i]->Render());
+                                         auto row = hbox(text("  " + fields[i].label + ": "), inputs[i]->Render());
+                                         if (fields[i].checked)
+                                         {
+                                             row = hbox(text("  "), inputs[i]->Render());
+                                         }
 
-                                         rows.push_back(skipped(i) ? row | color(Color::GrayDark) : row);
+                                         if (skipped(i))
+                                         {
+                                             row = row | color(Color::GrayDark);
+                                         }
+
+                                         rows.push_back(row);
                                      }
 
-                                     if (const auto message = note ? note() : std::string(); !message.empty())
+                                     std::string message;
+                                     if (note)
+                                     {
+                                         message = note();
+                                     }
+
+                                     if (!message.empty())
                                      {
                                          rows.push_back(text("  " + message) | color(Color::Green));
                                      }

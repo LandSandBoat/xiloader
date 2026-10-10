@@ -36,6 +36,8 @@
 
 #include <wrl/client.h>
 
+#include <utility>
+
 namespace
 {
 
@@ -45,7 +47,7 @@ constexpr size_t kEncBufferSize = 0x1000;
 // Returns the pointer to the function call, 0 when it is not found.
 inline auto FindINETMutex(const xiloader::Language language) -> DWORD
 {
-    const char* const module = (language == xiloader::Language::European) ? "polcoreeu.dll" : "polcore.dll";
+    const char* const module = xiloader::registry::GetPolcoreModule(language);
     const auto        result = (DWORD)xiloader::memory::FindPattern(module, (BYTE*)"\x8B\x56\x2C\x8B\x46\x28\x8B\x4E\x24\x52\x50\x51", "xxxxxxxxxxxx");
     if (result == 0)
     {
@@ -59,7 +61,7 @@ inline auto FindINETMutex(const xiloader::Language language) -> DWORD
 // Returns pointer to the pol connection object, 0 when it is not found.
 inline auto FindPolConn(const xiloader::Language language) -> DWORD
 {
-    const char* const module = (language == xiloader::Language::European) ? "polcoreeu.dll" : "polcore.dll";
+    const char* const module = xiloader::registry::GetPolcoreModule(language);
     const auto        result = (DWORD)xiloader::memory::FindPattern(module, (BYTE*)"\x81\xC6\x38\x03\x00\x00\x83\xC4\x04\x81\xFE", "xxxxxxxxxxx");
     if (result == 0)
     {
@@ -86,7 +88,7 @@ namespace xiloader
 auto runGame(const Config& config, const Session& session, LobbyDataConnection& lobbyData) -> int
 {
     // Attempt to create polcore instance..
-    const auto                          languageId = static_cast<int>(config.language);
+    const int                           languageId = std::to_underlying(config.language);
     Microsoft::WRL::ComPtr<IPOLCoreCom> polcore;
     if (CoCreateInstance(xiloader::CLSID_POLCoreCom[languageId], NULL, 0x17, xiloader::IID_IPOLCoreCom[languageId], (LPVOID*)polcore.GetAddressOf()) != S_OK)
     {

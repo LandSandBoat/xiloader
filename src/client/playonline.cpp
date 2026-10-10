@@ -37,6 +37,7 @@
 #include <fstream>
 #include <random>
 #include <span>
+#include <utility>
 
 namespace
 {
@@ -178,7 +179,14 @@ void seedOptionFile(const std::filesystem::path& slot)
         std::filesystem::remove(file, error);
     }
 
-    xiloader::console::output(seeded ? xiloader::color::success : xiloader::color::warning, seeded ? "Created the PlayOnline option file." : "Failed to create the PlayOnline option file.");
+    if (seeded)
+    {
+        xiloader::console::output(xiloader::color::success, "Created the PlayOnline option file.");
+    }
+    else
+    {
+        xiloader::console::output(xiloader::color::warning, "Failed to create the PlayOnline option file.");
+    }
 }
 
 void startLoads(const std::span<Load> loads)
@@ -186,7 +194,7 @@ void startLoads(const std::span<Load> loads)
     for (auto& load : loads)
     {
         load.ticket = call(load.setup)();
-        load.result = load.ticket < 0 ? load.ticket : 0;
+        load.result = std::min(load.ticket, 0);
     }
 }
 
@@ -325,9 +333,9 @@ void stepReconnect(const int pollResult)
                 xiloader::console::output(xiloader::color::success, "Reconnected to the profile server.");
                 startStatusLoads();
             }
-            else if (state == PolconState::Failed || static_cast<int>(state) < 0 || now >= reconnection.until)
+            else if (state == PolconState::Failed || std::to_underlying(state) < 0 || now >= reconnection.until)
             {
-                xiloader::console::output(xiloader::color::warning, "Failed to reconnect to the profile server (0x%X), retrying later.", static_cast<int>(state));
+                xiloader::console::output(xiloader::color::warning, "Failed to reconnect to the profile server (0x%X), retrying later.", std::to_underlying(state));
                 retryLater();
             }
             break;
@@ -389,7 +397,7 @@ auto __cdecl pollIgnoringDisconnect() -> int
 {
     const auto result = polconPoll();
     stepReconnect(result);
-    return result < 0 ? 0 : result;
+    return std::max(result, 0);
 }
 
 } // namespace
@@ -399,7 +407,7 @@ namespace xiloader::playonline
 
 auto disableCipher(const Language language) -> bool
 {
-    const char* const module = (language == Language::European) ? "polcoreeu.dll" : "polcore.dll";
+    const char* const module = xiloader::registry::GetPolcoreModule(language);
 
     // The IRC send path: push 1; push edx; lea eax,[ebx+8]; push edi; lea ecx,[esp+0x1c]; push eax; push ecx; call cipher
     const unsigned char site[] = { 0x6A, 0x01, 0x52, 0x8D, 0x43, 0x08, 0x57, 0x8D, 0x4C, 0x24, 0x1C, 0x50, 0x51, 0xE8 };
@@ -527,7 +535,7 @@ auto logIn(const CommandTable table, const uint32_t accountId, const Language la
     while (GetTickCount64() < deadline)
     {
         state = static_cast<PolconState>(call(PolFunction::PolconStep)());
-        if (state == PolconState::Connected || state == PolconState::Failed || static_cast<int>(state) < 0)
+        if (state == PolconState::Connected || state == PolconState::Failed || std::to_underlying(state) < 0)
         {
             break;
         }
@@ -538,7 +546,7 @@ auto logIn(const CommandTable table, const uint32_t accountId, const Language la
 
     if (state != PolconState::Connected)
     {
-        xiloader::console::output(xiloader::color::error, "Failed to connect to the profile server (0x%X).", static_cast<int>(state));
+        xiloader::console::output(xiloader::color::error, "Failed to connect to the profile server (0x%X).", std::to_underlying(state));
         return false;
     }
 

@@ -100,7 +100,12 @@ void enterCredentialsWithOTP(Menu& menu, std::string& username, std::string& pas
 
     menu.form(fields, [&]
               {
-                  return trusted() ? std::string("Computer is trusted") : std::string();
+                  if (trusted())
+                  {
+                      return std::string("Computer is trusted");
+                  }
+
+                  return std::string();
               });
 }
 

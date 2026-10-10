@@ -40,4 +40,7 @@ auto GetPlayOnlineLanguage(xiloader::Language language) -> int;
 // Returns installation folder path.
 auto GetPlayOnlineInstallFolder(xiloader::Language language) -> const char*;
 
+// polcore's module name for the language
+auto GetPolcoreModule(xiloader::Language language) -> const char*;
+
 } // namespace xiloader::registry

@@ -23,6 +23,7 @@ This file is part of DarkStar-server source code.
 
 #pragma once
 
+#include <algorithm>
 #include <ctime>
 #include <iostream>
 #include <string>
@@ -78,7 +79,7 @@ public:
 
         // Parse the incoming message
         const auto  length = ::snprintf(nullptr, 0, format, args...);
-        std::string buffer(length > 0 ? length : 0, '\0');
+        std::string buffer(std::max(length, 0), '\0');
         ::snprintf(buffer.data(), buffer.size() + 1, format, args...);
         // Output the message
 
