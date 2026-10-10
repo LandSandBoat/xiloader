@@ -29,6 +29,7 @@
 
 #include <algorithm>
 #include <cstring>
+#include <vector>
 
 namespace
 {
@@ -37,8 +38,27 @@ namespace
 constexpr int kListEntrySize   = 0x68;
 constexpr int kPacketEntrySize = 0x10;
 
-// Character slots an account can have
-constexpr int kMaxCharacters = 20;
+// The server's packets carry no length; a request is this long and the character list that long
+constexpr std::size_t kRequestSize = 5;
+constexpr std::size_t kListSize    = 0x148;
+
+// Characters the list packet has room for
+constexpr int kMaxCharacters = (kListSize - 8) / kPacketEntrySize;
+
+auto packetSize(const xiloader::LobbyDataRequest type) -> std::size_t
+{
+    switch (type)
+    {
+        case xiloader::LobbyDataRequest::AccountId:
+        case xiloader::LobbyDataRequest::Key:
+        case xiloader::LobbyDataRequest::KeyAlternate:
+            return kRequestSize;
+        case xiloader::LobbyDataRequest::CharacterList:
+            return kListSize;
+    }
+
+    return 0;
+}
 
 } // namespace
 
@@ -122,7 +142,6 @@ void LobbyDataConnection::setCharacterList(char* const list)
 
 void LobbyDataConnection::run(const std::stop_token stop, const Session session)
 {
-    int  sendSize         = 0;
     char recvBuffer[4096] = { 0 };
     char sendBuffer[4096] = { 0 };
 
@@ -137,6 +156,9 @@ void LobbyDataConnection::run(const std::stop_token stop, const Session session)
     }
     memset(sendBuffer, 0, 28);
 
+    // What was read and not yet handled; a read can end mid-packet or hold several
+    std::vector<char> pending;
+
     while (!stop.stop_requested())
     {
         /* Attempt to receive the incoming data.. */
@@ -147,69 +169,90 @@ void LobbyDataConnection::run(const std::stop_token stop, const Session session)
             return;
         }
 
-        switch (static_cast<xiloader::LobbyDataRequest>(recvBuffer[0]))
+        pending.insert(pending.end(), recvBuffer, recvBuffer + received);
+
+        while (!pending.empty())
         {
-            case xiloader::LobbyDataRequest::AccountId:
-                sendBuffer[0] = static_cast<char>(xiloader::LobbyDataReply::AccountId);
-                memcpy(sendBuffer + 0x01, &session.accountId, 4);
-                memcpy(sendBuffer + 0x05, &serverAddress, 4);
-                memcpy(sendBuffer + 12, session.hash, 16);
-
-                xiloader::console::output(xiloader::color::warning, "Sending account id..");
-                sendSize = 28;
-                break;
-
-            case xiloader::LobbyDataRequest::Key:
-            case xiloader::LobbyDataRequest::KeyAlternate:
-                // The packet starts with LobbyDataReply::Key
-                memcpy(sendBuffer, (char*)"\xA2\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x58\xE0\x5D\xAD\x00\x00\x00\x00", 25);
-
-                xiloader::console::output(xiloader::color::warning, "Sending key..");
-                sendSize = 28;
-                break;
-
-            case xiloader::LobbyDataRequest::CharacterList:
+            const auto type = static_cast<xiloader::LobbyDataRequest>(pending[0]);
+            const auto size = packetSize(type);
+            if (size == 0)
             {
-                xiloader::console::output(xiloader::color::warning, "Receiving character list..");
-
-                const auto list = characterList.load();
-                if (list == nullptr || received < 2)
-                {
-                    break;
-                }
-
-                // No more than the packet holds, and no more than an account can have
-                const auto inPacket = (received - 8) / kPacketEntrySize;
-                const auto count    = std::min({ static_cast<int>(static_cast<uint8_t>(recvBuffer[1])), inPacket, kMaxCharacters });
-
-                for (auto x = 0; x < count; x++)
-                {
-                    list[0x00 + (x * kListEntrySize)] = 1;
-                    list[0x02 + (x * kListEntrySize)] = 1;
-                    list[0x10 + (x * kListEntrySize)] = (char)x;
-                    list[0x11 + (x * kListEntrySize)] = 0x80u;
-                    list[0x18 + (x * kListEntrySize)] = 0x20;
-                    list[0x28 + (x * kListEntrySize)] = 0x20;
-
-                    memcpy(list + 0x04 + (x * kListEntrySize), recvBuffer + kPacketEntrySize * (x + 1) + 0x04, 4); // Character Id
-                    memcpy(list + 0x08 + (x * kListEntrySize), recvBuffer + kPacketEntrySize * (x + 1), 4);        // Content Id
-                }
+                // Not a packet this knows the length of, so there is no telling where the next one starts
+                pending.clear();
                 break;
             }
+
+            if (pending.size() < size)
+            {
+                break;
+            }
+
+            const char* packet   = pending.data();
+            int         sendSize = 0;
+
+            switch (type)
+            {
+                case xiloader::LobbyDataRequest::AccountId:
+                    sendBuffer[0] = static_cast<char>(xiloader::LobbyDataReply::AccountId);
+                    memcpy(sendBuffer + 0x01, &session.accountId, 4);
+                    memcpy(sendBuffer + 0x05, &serverAddress, 4);
+                    memcpy(sendBuffer + 12, session.hash, 16);
+
+                    xiloader::console::output(xiloader::color::warning, "Sending account id..");
+                    sendSize = 28;
+                    break;
+
+                case xiloader::LobbyDataRequest::Key:
+                case xiloader::LobbyDataRequest::KeyAlternate:
+                    // The packet starts with LobbyDataReply::Key
+                    memcpy(sendBuffer, (char*)"\xA2\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x58\xE0\x5D\xAD\x00\x00\x00\x00", 25);
+
+                    xiloader::console::output(xiloader::color::warning, "Sending key..");
+                    sendSize = 28;
+                    break;
+
+                case xiloader::LobbyDataRequest::CharacterList:
+                {
+                    xiloader::console::output(xiloader::color::warning, "Receiving character list..");
+
+                    const auto list = characterList.load();
+                    if (list == nullptr)
+                    {
+                        break;
+                    }
+
+                    const auto count = std::min(static_cast<int>(static_cast<uint8_t>(packet[1])), kMaxCharacters);
+
+                    for (auto x = 0; x < count; x++)
+                    {
+                        list[0x00 + (x * kListEntrySize)] = 1;
+                        list[0x02 + (x * kListEntrySize)] = 1;
+                        list[0x10 + (x * kListEntrySize)] = (char)x;
+                        list[0x11 + (x * kListEntrySize)] = 0x80u;
+                        list[0x18 + (x * kListEntrySize)] = 0x20;
+                        list[0x28 + (x * kListEntrySize)] = 0x20;
+
+                        memcpy(list + 0x04 + (x * kListEntrySize), packet + kPacketEntrySize * (x + 1) + 0x04, 4); // Character Id
+                        memcpy(list + 0x08 + (x * kListEntrySize), packet + kPacketEntrySize * (x + 1), 4);        // Content Id
+                    }
+                    break;
+                }
+            }
+
+            pending.erase(pending.begin(), pending.begin() + size);
+
+            if (sendSize == 0)
+                continue;
+
+            /* Send the response buffer to the server.. */
+            if (send(socket, sendBuffer, sendSize, 0) == SOCKET_ERROR)
+            {
+                xiloader::console::output("Server connection done; disconnecting!");
+                return;
+            }
+
+            Sleep(100);
         }
-
-        if (sendSize == 0)
-            continue;
-
-        /* Send the response buffer to the server.. */
-        if (send(socket, sendBuffer, sendSize, 0) == SOCKET_ERROR)
-        {
-            xiloader::console::output("Server connection done; disconnecting!");
-            return;
-        }
-
-        sendSize = 0;
-        Sleep(100);
     }
 }
 

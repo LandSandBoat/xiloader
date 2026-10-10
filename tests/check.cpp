@@ -218,48 +218,47 @@ void checkLobbyData()
         assert(static_cast<uint8_t>(hello[0]) == 0xFE && hello[12] == 0x5A && hello[27] == 0x5A);
 
         // A list that arrives before polcore's buffer is known is dropped
-        char early[0x30] = { 0x03, 2 };
+        char early[0x148] = { 0x03, 2 };
         send(server.client, early, sizeof(early), 0);
 
-        // The connection treats each read as one packet, so keep the next send out of it
-        std::this_thread::sleep_for(std::chrono::milliseconds(200));
+        // Two requests in one segment are answered one after the other
+        const char requests[10] = { 0x01, 0, 0, 0, 0, 0x02 };
+        send(server.client, requests, sizeof(requests), 0);
 
-        const char accountRequest[1] = { 0x01 };
-        send(server.client, accountRequest, 1, 0);
         const auto account = server.read(28);
         assert(static_cast<uint8_t>(account[0]) == 0xA1);
         assert(std::memcmp(account.data() + 1, "\x44\x33\x22\x11", 4) == 0);
         assert(account[12] == 0x5A);
 
-        const char keyRequest[1] = { 0x02 };
-        send(server.client, keyRequest, 1, 0);
         const auto key = server.read(28);
         assert(static_cast<uint8_t>(key[0]) == 0xA2 && static_cast<uint8_t>(key[17]) == 0x58);
 
         connection.setCharacterList(list.data());
 
-        // Claims 200 characters but only carries two
-        char           packet[0x30]   = { 0x03, static_cast<char>(200) };
-        const uint32_t contentIds[]   = { 0xAAAA0001, 0xAAAA0002 };
-        const uint32_t characterIds[] = { 0xBBBB0001, 0xBBBB0002 };
-        for (int i = 0; i < 2; ++i)
+        // Claims 200 characters; the packet has room for 20
+        char packet[0x148] = { 0x03, static_cast<char>(200) };
+        for (uint32_t i = 0; i < 20; ++i)
         {
-            std::memcpy(packet + 0x10 * (i + 1), &contentIds[i], 4);
-            std::memcpy(packet + 0x10 * (i + 1) + 4, &characterIds[i], 4);
+            const uint32_t contentId   = 0xAAAA0000 + i;
+            const uint32_t characterId = 0xBBBB0000 + i;
+            std::memcpy(packet + 0x10 * (i + 1), &contentId, 4);
+            std::memcpy(packet + 0x10 * (i + 1) + 4, &characterId, 4);
         }
-        send(server.client, packet, sizeof(packet), 0);
 
-        std::this_thread::sleep_for(std::chrono::milliseconds(200));
+        // Delivered in two pieces, with a request right behind it
+        send(server.client, packet, 0x100, 0);
+        std::this_thread::sleep_for(std::chrono::milliseconds(100));
+        send(server.client, packet + 0x100, sizeof(packet) - 0x100, 0);
+        send(server.client, requests + 5, 5, 0);
 
-        // The key round trip proves the list packet before it was handled
-        send(server.client, keyRequest, 1, 0);
+        // The reply to the request proves the list before it was handled
         server.read(28);
     }
 
-    assert(list[0] == 1 && list[kEntry] == 1 && list[kEntry + 0x10] == 1);
-    assert(std::memcmp(list.data() + kEntry + 0x04, "\x02\x00\xBB\xBB", 4) == 0);
-    assert(std::memcmp(list.data() + kEntry + 0x08, "\x02\x00\xAA\xAA", 4) == 0);
-    assert(list[kEntry * 2] == 0x77);
+    assert(list[0] == 1 && list[kEntry * 19] == 1 && list[kEntry * 19 + 0x10] == 19);
+    assert(std::memcmp(list.data() + kEntry + 0x04, "\x01\x00\xBB\xBB", 4) == 0);
+    assert(std::memcmp(list.data() + kEntry * 19 + 0x08, "\x13\x00\xAA\xAA", 4) == 0);
+    assert(list[kEntry * 20] == 0x77);
 
     WSACleanup();
 }
