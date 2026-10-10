@@ -85,7 +85,7 @@ auto xiloader::ApplyHairpinFixThread(const LPVOID lpParam) -> DWORD
     if (!VirtualProtect((LPVOID)hairpinAddress, 8, PAGE_EXECUTE_READWRITE, &hairpinProtection) ||
         !VirtualProtect((LPVOID)(zoneChangeAddress + 0x06), 2, PAGE_EXECUTE_READWRITE, &zoneProtection))
     {
-        xiloader::console::output(xiloader::color::error, "Failed to apply the hairpin fix (error %lu). Security software may be blocking changes to the game's code.", GetLastError());
+        xiloader::console::output(xiloader::color::error, "Failed to apply the hairpin fix (error {}). Security software may be blocking changes to the game's code.", GetLastError());
         return 0;
     }
 

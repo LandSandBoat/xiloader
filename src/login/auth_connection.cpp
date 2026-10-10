@@ -52,14 +52,14 @@ auto AuthConnection::connect(const std::string& address, const uint16_t port) ->
 
     if ((ret = config.setUp()) != 0)
     {
-        xiloader::console::output(xiloader::color::error, "Failed to set up TLS (%s).", mbedtlsErrorText(ret).c_str());
+        xiloader::console::output(xiloader::color::error, "Failed to set up TLS ({}).", mbedtlsErrorText(ret));
         return false;
     }
 
     ret = mbedtls_net_connect(&server, address.c_str(), std::to_string(port).c_str(), MBEDTLS_NET_PROTO_TCP);
     if (ret != 0)
     {
-        xiloader::console::output(xiloader::color::error, "mbedtls_net_connect failed, (%s)", mbedtlsErrorText(ret).c_str());
+        xiloader::console::output(xiloader::color::error, "mbedtls_net_connect failed, ({})", mbedtlsErrorText(ret));
         return false;
     }
 
@@ -69,7 +69,7 @@ auto AuthConnection::connect(const std::string& address, const uint16_t port) ->
 
     if ((ret = mbedtls_ssl_setup(&ssl, config.get())) != 0)
     {
-        xiloader::console::output(xiloader::color::error, "mbedtls_ssl_setup failed, (%s)", mbedtlsErrorText(ret).c_str());
+        xiloader::console::output(xiloader::color::error, "mbedtls_ssl_setup failed, ({})", mbedtlsErrorText(ret));
         return false;
     }
 
@@ -79,7 +79,7 @@ auto AuthConnection::connect(const std::string& address, const uint16_t port) ->
     {
         if (ret != MBEDTLS_ERR_SSL_WANT_READ && ret != MBEDTLS_ERR_SSL_WANT_WRITE)
         {
-            xiloader::console::output(xiloader::color::error, "mbedtls_ssl_handshake returned -0x%x", (unsigned int)-ret);
+            xiloader::console::output(xiloader::color::error, "mbedtls_ssl_handshake returned -0x{:x}", (unsigned int)-ret);
             return false;
         }
     }
@@ -105,7 +105,7 @@ auto AuthConnection::connect(const std::string& address, const uint16_t port) ->
     }
     else
     {
-        xiloader::console::output(xiloader::color::info, "Remote server (%s) certificate is valid.", address.c_str());
+        xiloader::console::output(xiloader::color::info, "Remote server ({}) certificate is valid.", address);
     }
 
     mbedtls_ssl_conf_read_timeout(config.get(), kReadTimeoutMs);
@@ -117,7 +117,7 @@ auto AuthConnection::exchange(const std::string& request) -> std::optional<std::
 {
     if (const auto written = mbedtls_ssl_write(&ssl, reinterpret_cast<const unsigned char*>(request.data()), request.size()); written < 0)
     {
-        xiloader::console::output(xiloader::color::error, "Failed to send the login request (%s). The login server may have closed the connection.", xiloader::mbedtlsErrorText(written).c_str());
+        xiloader::console::output(xiloader::color::error, "Failed to send the login request ({}). The login server may have closed the connection.", xiloader::mbedtlsErrorText(written));
         return std::nullopt;
     }
 
@@ -132,7 +132,7 @@ auto AuthConnection::exchange(const std::string& request) -> std::optional<std::
 
     if (received <= 0)
     {
-        xiloader::console::output(xiloader::color::error, "Failed to read the login reply (%s). The login server may have closed the connection.", xiloader::mbedtlsErrorText(received).c_str());
+        xiloader::console::output(xiloader::color::error, "Failed to read the login reply ({}). The login server may have closed the connection.", xiloader::mbedtlsErrorText(received));
         return std::nullopt;
     }
 

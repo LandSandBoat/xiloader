@@ -61,7 +61,7 @@ extern "C"
 // Returns hostname information object.
 auto __stdcall Mine_gethostbyname(const char* name) -> hostent*
 {
-    xiloader::console::output(xiloader::color::debug, "Resolving host: %s", name);
+    xiloader::console::output(xiloader::color::debug, "Resolving host: {}", name);
 
     if (!strcmp("ffxi00.pol.com", name))
     {
@@ -135,7 +135,7 @@ auto WINAPI Mine_recv(SOCKET s, char* buf, int len, int flags) -> int
     const auto ret = _ReturnAddress();
     std::ignore    = ret;
 
-    // xiloader::console::output(xiloader::color::lightblue, "recv %i", len);
+    // xiloader::console::output(xiloader::color::lightblue, "recv {}", len);
     return Real_recv(s, buf, len, flags);
 }
 

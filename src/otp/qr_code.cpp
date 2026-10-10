@@ -113,7 +113,7 @@ void openQrCode(const std::string& path)
     const auto opened = reinterpret_cast<INT_PTR>(ShellExecuteA(nullptr, "open", path.c_str(), nullptr, nullptr, SW_SHOWNORMAL));
     if (opened <= 32)
     {
-        xiloader::console::output(xiloader::color::error, "Failed to open the QR code (error %d). Open %s manually.", static_cast<int>(opened), path.c_str());
+        xiloader::console::output(xiloader::color::error, "Failed to open the QR code (error {}). Open {} manually.", static_cast<int>(opened), path);
     }
 }
 

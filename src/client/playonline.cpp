@@ -158,7 +158,7 @@ void seedOptionFile(const std::filesystem::path& slot)
     // polcore opens the file for writing without creating it, so it has to exist before the store
     if (!std::ofstream(file, std::ios::binary))
     {
-        xiloader::console::output(xiloader::color::warning, "Failed to create the PlayOnline option file %s.", std::filesystem::path(file).make_preferred().string().c_str());
+        xiloader::console::output(xiloader::color::warning, "Failed to create the PlayOnline option file {}.", std::filesystem::path(file).make_preferred().string());
         return;
     }
 
@@ -222,7 +222,7 @@ auto reportLoads(const std::span<const Load> loads) -> bool
     {
         if (load.result != 1)
         {
-            xiloader::console::output(xiloader::color::warning, "Failed to load the %s list (0x%X).", load.name, load.result);
+            xiloader::console::output(xiloader::color::warning, "Failed to load the {} list (0x{:X}).", load.name, static_cast<uint32_t>(load.result));
         }
     }
 
@@ -280,7 +280,7 @@ void retryLater()
 
 void reconnectAfter(const int pollResult)
 {
-    xiloader::console::output(xiloader::color::warning, "Lost connection to the profile server (0x%X), reconnecting...", pollResult);
+    xiloader::console::output(xiloader::color::warning, "Lost connection to the profile server (0x{:X}), reconnecting...", static_cast<uint32_t>(pollResult));
     retryLater();
 }
 
@@ -335,7 +335,7 @@ void stepReconnect(const int pollResult)
             }
             else if (state == PolconState::Failed || std::to_underlying(state) < 0 || now >= reconnection.until)
             {
-                xiloader::console::output(xiloader::color::warning, "Failed to reconnect to the profile server (0x%X), retrying later.", std::to_underlying(state));
+                xiloader::console::output(xiloader::color::warning, "Failed to reconnect to the profile server (0x{:X}), retrying later.", static_cast<uint32_t>(std::to_underlying(state)));
                 retryLater();
             }
             break;
@@ -415,7 +415,7 @@ auto disableCipher(const Language language) -> bool
     const auto found = xiloader::memory::FindPattern(module, site, "xxxxxxxxxxxxxx");
     if (!found)
     {
-        xiloader::console::output(xiloader::color::error, "Failed to locate the IRC send path in %s. This PlayOnline version is not supported, or --lang doesn't match your install.", module);
+        xiloader::console::output(xiloader::color::error, "Failed to locate the IRC send path in {}. This PlayOnline version is not supported, or --lang doesn't match your install.", module);
         return false;
     }
 
@@ -426,7 +426,7 @@ auto disableCipher(const Language language) -> bool
     DWORD protection = 0;
     if (!VirtualProtect(cipher, 5, PAGE_EXECUTE_READWRITE, &protection))
     {
-        xiloader::console::output(xiloader::color::error, "Failed to patch %s (error %lu). Security software may be blocking changes to its code.", module, GetLastError());
+        xiloader::console::output(xiloader::color::error, "Failed to patch {} (error {}). Security software may be blocking changes to its code.", module, GetLastError());
         return false;
     }
 
@@ -522,7 +522,7 @@ auto logIn(const CommandTable table, const uint32_t accountId, const Language la
         std::filesystem::create_directories(home / folder, error);
         if (error)
         {
-            xiloader::console::output(xiloader::color::warning, "Failed to create the message folder %s (%s).", (home / folder).string().c_str(), error.message().c_str());
+            xiloader::console::output(xiloader::color::warning, "Failed to create the message folder {} ({}).", (home / folder).string(), error.message());
         }
     }
 
@@ -546,7 +546,7 @@ auto logIn(const CommandTable table, const uint32_t accountId, const Language la
 
     if (state != PolconState::Connected)
     {
-        xiloader::console::output(xiloader::color::error, "Failed to connect to the profile server (0x%X).", std::to_underlying(state));
+        xiloader::console::output(xiloader::color::error, "Failed to connect to the profile server (0x{:X}).", static_cast<uint32_t>(std::to_underlying(state)));
         return false;
     }
 

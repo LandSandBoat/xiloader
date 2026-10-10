@@ -144,7 +144,7 @@ auto wouldBlock(const int ret) -> bool
 
 void fail(const Connection& connection, const std::string& reason)
 {
-    xiloader::console::output(xiloader::color::error, "Failed to reach the profile server on port %u (%s).", connection.serverPort, reason.c_str());
+    xiloader::console::output(xiloader::color::error, "Failed to reach the profile server on port {} ({}).", connection.serverPort, reason);
 }
 
 // Non-blocking connect; select reports the result as writable or failed
@@ -365,7 +365,7 @@ auto expired(const Connection& connection, const ULONGLONG now) -> bool
         const auto stalled = now >= connection.stalledAt;
         if (stalled)
         {
-            xiloader::console::output(xiloader::color::warning, "Closed a stalled profile server connection on port %u.", connection.serverPort);
+            xiloader::console::output(xiloader::color::warning, "Closed a stalled profile server connection on port {}.", connection.serverPort);
         }
 
         return stalled;
@@ -391,14 +391,14 @@ void accept(const Listener& listener)
     // Refuse anything past what polcore needs
     if (connections.size() >= kMaxConnections)
     {
-        xiloader::console::output(xiloader::color::warning, "Refused a PlayOnline connection, %zu are already open.", connections.size());
+        xiloader::console::output(xiloader::color::warning, "Refused a PlayOnline connection, {} are already open.", connections.size());
         closesocket(local);
         return;
     }
 
     if (!setNonBlocking(local))
     {
-        xiloader::console::output(xiloader::color::warning, "Refused a PlayOnline connection (winsock error %d).", WSAGetLastError());
+        xiloader::console::output(xiloader::color::warning, "Refused a PlayOnline connection (winsock error {}).", WSAGetLastError());
         closesocket(local);
         return;
     }
@@ -476,7 +476,7 @@ void run(const std::stop_token stop)
         const timeval timeout = { .tv_sec = 0, .tv_usec = wait };
         if (select(0, &readable, &writable, &failed, &timeout) == SOCKET_ERROR)
         {
-            xiloader::console::output(xiloader::color::error, "The profile server relay stopped (%d).", WSAGetLastError());
+            xiloader::console::output(xiloader::color::error, "The profile server relay stopped ({}).", WSAGetLastError());
             break;
         }
 
@@ -561,13 +561,13 @@ auto start(const std::string& server, const uint16_t profilePort, const Session&
 
     if (inet_pton(AF_INET, server.c_str(), &serverAddress) != 1)
     {
-        xiloader::console::output(xiloader::color::error, "The profile server relay needs a resolved server address (%s).", server.c_str());
+        xiloader::console::output(xiloader::color::error, "The profile server relay needs a resolved server address ({}).", server);
         return false;
     }
 
     const auto abort = [](const std::string& reason)
     {
-        xiloader::console::output(xiloader::color::error, "Failed to start the profile server relay (%s).", reason.c_str());
+        xiloader::console::output(xiloader::color::error, "Failed to start the profile server relay ({}).", reason);
         closeListeners();
         freeTls();
         return false;

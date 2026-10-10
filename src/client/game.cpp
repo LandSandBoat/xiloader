@@ -51,7 +51,7 @@ inline auto FindINETMutex(const xiloader::Language language) -> DWORD
     const auto        result = (DWORD)xiloader::memory::FindPattern(module, (BYTE*)"\x8B\x56\x2C\x8B\x46\x28\x8B\x4E\x24\x52\x50\x51", "xxxxxxxxxxxx");
     if (result == 0)
     {
-        xiloader::console::output(xiloader::color::error, "Failed to locate the INET mutex in %s. This PlayOnline version is not supported, or --lang doesn't match your install.", module);
+        xiloader::console::output(xiloader::color::error, "Failed to locate the INET mutex in {}. This PlayOnline version is not supported, or --lang doesn't match your install.", module);
         return 0;
     }
     return (*(DWORD*)(result - 4) + (result));
@@ -65,7 +65,7 @@ inline auto FindPolConn(const xiloader::Language language) -> DWORD
     const auto        result = (DWORD)xiloader::memory::FindPattern(module, (BYTE*)"\x81\xC6\x38\x03\x00\x00\x83\xC4\x04\x81\xFE", "xxxxxxxxxxx");
     if (result == 0)
     {
-        xiloader::console::output(xiloader::color::error, "Failed to locate the PlayOnline connection in %s. This PlayOnline version is not supported, or --lang doesn't match your install.", module);
+        xiloader::console::output(xiloader::color::error, "Failed to locate the PlayOnline connection in {}. This PlayOnline version is not supported, or --lang doesn't match your install.", module);
         return 0;
     }
     return (*(DWORD*)(result - 10));
@@ -104,14 +104,14 @@ auto runGame(const Config& config, const Session& session, LobbyDataConnection& 
     polcore->SetAreaCode(languageId);
     if (const auto hr = polcore->SetParamInit(GetModuleHandle(NULL), cmd); FAILED(hr))
     {
-        xiloader::console::output(xiloader::color::error, "polcore failed to initialize (0x%08lX).", hr);
+        xiloader::console::output(xiloader::color::error, "polcore failed to initialize (0x{:08X}).", static_cast<unsigned long>(hr));
     }
 
     // Obtain the common function table..
     xiloader::playonline::CommandFunc** lpCommandTable = nullptr;
     if (const auto hr = polcore->GetCommonFunctionTable((unsigned long**)&lpCommandTable); FAILED(hr) || lpCommandTable == nullptr)
     {
-        xiloader::console::output(xiloader::color::error, "Failed to get polcore's function table (0x%08lX).", hr);
+        xiloader::console::output(xiloader::color::error, "Failed to get polcore's function table (0x{:08X}).", static_cast<unsigned long>(hr));
         return 1;
     }
 
@@ -144,7 +144,7 @@ auto runGame(const Config& config, const Session& session, LobbyDataConnection& 
     const char* const installFolder = xiloader::registry::GetPlayOnlineInstallFolder(config.language);
     if (installFolder[0] == '\0')
     {
-        xiloader::console::output(xiloader::color::error, "PlayOnline install folder not found in the registry (HKLM\\%s\\InstallFolder). Check PlayOnline is installed and --lang matches your install.", xiloader::registry::GetPlayOnlineKey(config.language));
+        xiloader::console::output(xiloader::color::error, "PlayOnline install folder not found in the registry (HKLM\\{}\\InstallFolder). Check PlayOnline is installed and --lang matches your install.", xiloader::registry::GetPlayOnlineKey(config.language));
     }
     lpCommandTable[xiloader::tableIndex(xiloader::PolFunction::InstallFolder)](installFolder);
     lpCommandTable[xiloader::tableIndex(xiloader::PolFunction::FileInit)](); // Initialize polcore file system

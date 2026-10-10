@@ -23,10 +23,11 @@ This file is part of DarkStar-server source code.
 
 #pragma once
 
-#include <algorithm>
 #include <ctime>
+#include <format>
 #include <iostream>
 #include <string>
+#include <utility>
 #include <windows.h>
 
 #include "enums/console_color.h"
@@ -47,9 +48,9 @@ public:
 
     // Prints the given message to the console.
     template <typename... Args>
-    static void output(const char* const format, const Args... args)
+    static void output(const std::format_string<Args...> format, Args&&... args)
     {
-        output(xiloader::color::white, format, args...);
+        output(xiloader::color::white, format, std::forward<Args>(args)...);
     }
 
     static auto getTimestamp() -> std::string
@@ -70,20 +71,13 @@ public:
 
     // Prints the given message to the console with the specific color.
     template <typename... Args>
-    static void output(const xiloader::color c, const char* const format, const Args... args)
+    static void output(const xiloader::color c, const std::format_string<Args...> format, Args&&... args)
     {
-        const std::string timestamp = getTimestamp();
-
         // Output the timestamp
-        print(xiloader::color::lightyelllow, timestamp.c_str());
+        print(xiloader::color::lightyelllow, getTimestamp());
 
-        // Parse the incoming message
-        const auto  length = ::snprintf(nullptr, 0, format, args...);
-        std::string buffer(std::max(length, 0), '\0');
-        ::snprintf(buffer.data(), buffer.size() + 1, format, args...);
         // Output the message
-
-        print(c, buffer);
+        print(c, std::format(format, std::forward<Args>(args)...));
 
         std::cout << std::endl;
     }
@@ -94,13 +88,13 @@ public:
 
         while (pos != -1)
         {
-            xiloader::console::output(color, "%s", msg.substr(0, pos).c_str());
+            xiloader::console::output(color, "{}", msg.substr(0, pos));
             msg.erase(0, pos + delimiter.length());
 
             pos = msg.find(delimiter);
         }
 
-        xiloader::console::output(color, "%s", msg.c_str());
+        xiloader::console::output(color, "{}", msg);
     }
 
     // Hides the console window.

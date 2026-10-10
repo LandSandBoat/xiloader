@@ -152,7 +152,7 @@ auto promptRequest(const MenuSelection selected, Config& config, Menu& menu, con
             xiloader::console::output("Enter the username to revoke trust for:");
             xiloader::ui::enterUsernameOnly(menu, revokeUsername);
             trustTokens.revoke(revokeUsername);
-            xiloader::console::output(xiloader::color::info, "Computer trust revoked for '%s'.", revokeUsername.c_str());
+            xiloader::console::output(xiloader::color::info, "Computer trust revoked for '{}'.", revokeUsername);
 
             return std::nullopt;
         }
@@ -202,7 +202,7 @@ auto onLoginSuccess(const json& reply, Session& session, const Config& config, c
     session.accountId = maybeAccountId.value();
     std::memcpy(&session.hash, maybeSessionHash.value().data(), maybeSessionHash.value().size());
 
-    xiloader::console::output(xiloader::color::success, "Successfully logged in as %s!", config.username.c_str());
+    xiloader::console::output(xiloader::color::success, "Successfully logged in as {}!", config.username);
 
     trustTokens.acceptLoginReply(reply, config.username);
 
@@ -238,7 +238,7 @@ void onVerifyTotpSuccess(const json& reply)
     const auto maybeRecoveryCode = jsonGet<std::string>(reply, "recovery_code");
     if (maybeRecoveryCode.has_value())
     {
-        xiloader::console::output(xiloader::color::info, "Your recovery code is '%s'. Please write this down!", maybeRecoveryCode.value().c_str());
+        xiloader::console::output(xiloader::color::info, "Your recovery code is '{}'. Please write this down!", maybeRecoveryCode.value());
         xiloader::console::output(xiloader::color::info, "Tip: Try using shift + leftclick to select the text if it doesn't work.");
         xiloader::console::output(xiloader::color::info, "You may remove your TOTP with this recovery code.");
     }
@@ -342,7 +342,7 @@ auto handleReply(const std::string& text, Session& session, Config& config, cons
         }
         default:
         {
-            xiloader::console::output(xiloader::color::error, "The login server sent an unknown result (0x%02X). Check this xiloader version is supported by the server.", static_cast<uint8_t>(maybeResult.value()));
+            xiloader::console::output(xiloader::color::error, "The login server sent an unknown result (0x{:02X}). Check this xiloader version is supported by the server.", static_cast<uint8_t>(maybeResult.value()));
             break;
         }
     }

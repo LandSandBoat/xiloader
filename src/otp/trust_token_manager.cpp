@@ -79,8 +79,8 @@ auto readTokenStore(const std::string& filepath) -> json
     if (!file.is_open())
     {
         xiloader::console::output(xiloader::color::warning,
-                                  "Failed to open the saved trust tokens at %s. You may be asked for your OTP code.",
-                                  filepath.c_str());
+                                  "Failed to open the saved trust tokens at {}. You may be asked for your OTP code.",
+                                  filepath);
         return json::object();
     }
 
@@ -103,8 +103,8 @@ auto readTokenStore(const std::string& filepath) -> json
     if (!CryptUnprotectData(&encryptedBlob, nullptr, nullptr, nullptr, nullptr, 0, &decryptedBlob))
     {
         xiloader::console::output(xiloader::color::warning,
-                                  "Failed to decrypt the saved trust tokens at %s (error %lu).",
-                                  filepath.c_str(),
+                                  "Failed to decrypt the saved trust tokens at {} (error {}).",
+                                  filepath,
                                   GetLastError());
         return json::object();
     }
@@ -116,8 +116,8 @@ auto readTokenStore(const std::string& filepath) -> json
     if (tokenData.is_discarded())
     {
         xiloader::console::output(xiloader::color::warning,
-                                  "The saved trust tokens at %s are unreadable. You may be asked for your OTP code.",
-                                  filepath.c_str());
+                                  "The saved trust tokens at {} are unreadable. You may be asked for your OTP code.",
+                                  filepath);
         return json::object();
     }
 
@@ -142,14 +142,14 @@ void writeTokenStore(const std::string& filepath, const json& tokenData)
         if (file.fail())
         {
             xiloader::console::output(xiloader::color::warning,
-                                      "Failed to save trust tokens to %s. Check that folder is writable.",
-                                      filepath.c_str());
+                                      "Failed to save trust tokens to {}. Check that folder is writable.",
+                                      filepath);
         }
     }
     else
     {
         xiloader::console::output(xiloader::color::warning,
-                                  "Failed to encrypt the trust tokens (error %lu). They were not saved.",
+                                  "Failed to encrypt the trust tokens (error {}). They were not saved.",
                                   GetLastError());
     }
 }
@@ -237,7 +237,7 @@ void TrustTokenManager::acceptLoginReply(const json& reply, const std::string& u
         plural = "";
     }
 
-    xiloader::console::output(xiloader::color::info, "This computer is now trusted for %lld day%s.", days, plural);
+    xiloader::console::output(xiloader::color::info, "This computer is now trusted for {} day{}.", days, plural);
 }
 
 void TrustTokenManager::revoke(const std::string& username) const

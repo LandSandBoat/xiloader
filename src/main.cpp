@@ -62,7 +62,7 @@ auto run(xiloader::Config& config) -> int
     const xiloader::Winsock winsock;
     if (winsock.error != 0)
     {
-        xiloader::console::output(xiloader::color::error, "Failed to initialize winsock, error code: %d", winsock.error);
+        xiloader::console::output(xiloader::color::error, "Failed to initialize winsock, error code: {}", winsock.error);
         return 1;
     }
 
@@ -70,7 +70,7 @@ auto run(xiloader::Config& config) -> int
     const xiloader::Com com;
     if (com.result != S_OK && com.result != S_FALSE)
     {
-        xiloader::console::output(xiloader::color::error, "Failed to initialize COM, error code: %d", com.result);
+        xiloader::console::output(xiloader::color::error, "Failed to initialize COM, error code: {}", com.result);
         return 1;
     }
 
@@ -88,7 +88,7 @@ auto run(xiloader::Config& config) -> int
     // Attempt to resolve the server address..
     ULONG ulAddress = 0;
 
-    xiloader::console::output(xiloader::color::info, "Resolving '%s' ...", config.serverAddress.c_str());
+    xiloader::console::output(xiloader::color::info, "Resolving '{}' ...", config.serverAddress);
 
     if (!xiloader::resolveHostname(config.serverAddress.c_str(), &ulAddress))
     {
@@ -98,7 +98,7 @@ auto run(xiloader::Config& config) -> int
 
     config.serverAddress = inet_ntoa(*((struct in_addr*)&ulAddress));
 
-    xiloader::console::output(xiloader::color::info, "Resolved server address to '%s:%d'", config.serverAddress.c_str(), config.loginAuthPort);
+    xiloader::console::output(xiloader::color::info, "Resolved server address to '{}:{}'", config.serverAddress, config.loginAuthPort);
 
     // Attempt to verify the users account info..
     if (!auth.connect(config.serverAddress, config.loginAuthPort))
@@ -119,7 +119,7 @@ auto run(xiloader::Config& config) -> int
     if (!lobbyData.connect(config.serverAddress, config.loginDataPort))
     {
         const int err = WSAGetLastError();
-        xiloader::console::output(xiloader::color::error, "Failed to initialize connection to server on port %u, winsock error: %d", config.loginDataPort, err);
+        xiloader::console::output(xiloader::color::error, "Failed to initialize connection to server on port {}, winsock error: {}", config.loginDataPort, err);
         return ERROR_SUCCESS;
     }
 
@@ -129,7 +129,7 @@ auto run(xiloader::Config& config) -> int
         // TODO: this is not terminated? Does it need to be?
         if (CreateThread(NULL, 0, (LPTHREAD_START_ROUTINE)xiloader::ApplyHairpinFixThread, reinterpret_cast<LPVOID>(static_cast<DWORD_PTR>(ulAddress)), 0, NULL) == NULL)
         {
-            xiloader::console::output(xiloader::color::error, "Failed to start the hairpin fix thread (error %lu).", GetLastError());
+            xiloader::console::output(xiloader::color::error, "Failed to start the hairpin fix thread (error {}).", GetLastError());
         }
     }
 
@@ -162,8 +162,8 @@ auto __cdecl main(const int argc, char* argv[]) -> int
     const int    currentYear = localtime(&currentTime)->tm_year + 1900; // Year is returned as the number of years since 1900.
     xiloader::console::output(xiloader::color::lightred, "==========================================================");
     xiloader::console::output(xiloader::color::lightgreen, "DarkStar Boot Loader (c) 2015 DarkStar Team");
-    xiloader::console::output(xiloader::color::lightgreen, "LandSandBoat Boot Loader (c) 2021-%d LandSandBoat Team (v%u.%u.%u)", currentYear, version[0], version[1], version[2]);
-    xiloader::console::output(xiloader::color::lightblue, "Using %s", MBEDTLS_VERSION_STRING_FULL); // this prints "Using Mbed TLS #.#.#"
+    xiloader::console::output(xiloader::color::lightgreen, "LandSandBoat Boot Loader (c) 2021-{} LandSandBoat Team (v{}.{}.{})", currentYear, version[0], version[1], version[2]);
+    xiloader::console::output(xiloader::color::lightblue, "Using {}", MBEDTLS_VERSION_STRING_FULL); // this prints "Using Mbed TLS #.#.#"
     xiloader::console::output(xiloader::color::lightpurple, "Git Repo   : https://github.com/LandSandBoat/xiloader");
     xiloader::console::output(xiloader::color::lightpurple, "Bug Reports: https://github.com/LandSandBoat/xiloader/issues");
     xiloader::console::output(xiloader::color::lightred, "==========================================================");
