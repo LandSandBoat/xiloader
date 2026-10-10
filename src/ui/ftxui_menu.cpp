@@ -137,9 +137,9 @@ public:
                                      Elements rows;
                                      for (std::size_t i = 0; i < fields.size(); ++i)
                                      {
-                                         auto row = fields[i].checked
-                                                        ? hbox(text("  "), inputs[i]->Render())
-                                                        : hbox(text("  " + fields[i].label + ": "), inputs[i]->Render());
+                                         const auto row = fields[i].checked
+                                                              ? hbox(text("  "), inputs[i]->Render())
+                                                              : hbox(text("  " + fields[i].label + ": "), inputs[i]->Render());
 
                                          rows.push_back(skipped(i) ? row | color(Color::GrayDark) : row);
                                      }

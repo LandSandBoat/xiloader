@@ -35,9 +35,11 @@ along with this program.  If not, see http://www.gnu.org/licenses/
 namespace
 {
 
+constexpr const char* kQrCodeFileName = "temp.svg";
+
 // from https://github.com/nayuki/QR-Code-generator/blob/master/cpp/QrCodeGeneratorDemo.cpp
 // Slightly modified
-std::string qrToSvgString(const qrcodegen::QrCode& qr, int border)
+auto qrToSvgString(const qrcodegen::QrCode& qr, const int border) -> std::string
 {
     if (border < 0)
     {
@@ -73,14 +75,14 @@ std::string qrToSvgString(const qrcodegen::QrCode& qr, int border)
     return sb.str();
 }
 
-std::string getTemporaryPath()
+auto getTemporaryPath() -> std::string
 {
     return std::filesystem::temp_directory_path().generic_string();
 }
 
 // Return filename for later deletion
 // Only input filename as "name.ext" and don't include the path
-std::string writeSvgToDisk(std::string filename, std::string contents)
+auto writeSvgToDisk(std::string filename, const std::string contents) -> std::string
 {
     filename = getTemporaryPath() + filename;
     std::ofstream svg(filename, std::ios::out | std::ios::trunc);
@@ -100,9 +102,9 @@ namespace xiloader::otp
 
 auto writeQrCode(const std::string& uri) -> std::string
 {
-    qrcodegen::QrCode qrCode = qrcodegen::QrCode::encodeText(uri.c_str(), qrcodegen::QrCode::Ecc::LOW);
+    const qrcodegen::QrCode qrCode = qrcodegen::QrCode::encodeText(uri.c_str(), qrcodegen::QrCode::Ecc::LOW);
 
-    return writeSvgToDisk("temp.svg", qrToSvgString(qrCode, 4));
+    return writeSvgToDisk(kQrCodeFileName, qrToSvgString(qrCode, 4));
 }
 
 void openQrCode(const std::string& path)
@@ -117,7 +119,7 @@ void openQrCode(const std::string& path)
 
 void removeQrCode()
 {
-    std::string svgFilePath = getTemporaryPath() + "temp.svg";
+    const std::string svgFilePath = getTemporaryPath() + kQrCodeFileName;
     if (std::filesystem::exists(svgFilePath))
     {
         std::filesystem::remove(svgFilePath);

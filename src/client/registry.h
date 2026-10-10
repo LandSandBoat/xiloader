@@ -26,33 +26,18 @@
 namespace xiloader::registry
 {
 
-/**
- * @brief Obtains the PlayOnline registry key.
- *  "SOFTWARE\PlayOnlineXX"
- *
- * @param lang      The language id the loader was started with.
- *
- * @return registry pathname.
- */
-const char* GetPlayOnlineKey(xiloader::Language language);
+// Obtains the PlayOnline registry key.
+//  "SOFTWARE\PlayOnlineXX"
+// Returns registry pathname.
+auto GetPlayOnlineKey(xiloader::Language language) -> const char*;
 
-/**
- * @brief Obtains the PlayOnline language id from the system registry.
- *
- * @param lang      The language id the loader was started with.
- *
- * @return The language id from the registry, 1 otherwise.
- */
-int GetPlayOnlineLanguage(xiloader::Language language);
+// Obtains the PlayOnline language id from the system registry.
+// Returns the language id from the registry, 1 otherwise.
+auto GetPlayOnlineLanguage(xiloader::Language language) -> int;
 
-/**
- * @brief Obtains the PlayOnlineViewer folder from the system registry.
- *  "C:\Program Files\PlayOnline\PlayOnlineViewer"
- *
- * @param lang      The language id the loader was started with.
- *
- * @return installation folder path.
- */
-const char* GetPlayOnlineInstallFolder(xiloader::Language language);
+// Obtains the PlayOnlineViewer folder from the system registry.
+//  "C:\Program Files\PlayOnline\PlayOnlineViewer"
+// Returns installation folder path.
+auto GetPlayOnlineInstallFolder(xiloader::Language language) -> const char*;
 
 } // namespace xiloader::registry

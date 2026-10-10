@@ -46,11 +46,18 @@ This file is part of DarkStar-server source code.
 #include "login/login.h"
 #include "net/resolve.h"
 
+namespace
+{
+
+constexpr DWORD kCloseDelayMs = 2000;
+
+} // namespace
+
 // Everything between the banner and "Closing...": logs in, then hosts polcore and the game until it exits.
 // Whatever was set up is torn down in reverse order on every way out.
-int run(xiloader::Config& config)
+auto run(xiloader::Config& config) -> int
 {
-    /* Initialize Winsock */
+    // Initialize Winsock
     const xiloader::Winsock winsock;
     if (winsock.error != 0)
     {
@@ -58,7 +65,7 @@ int run(xiloader::Config& config)
         return 1;
     }
 
-    /* Initialize COM */
+    // Initialize COM
     const xiloader::Com com;
     if (com.result != S_OK && com.result != S_FALSE)
     {
@@ -66,7 +73,7 @@ int run(xiloader::Config& config)
         return 1;
     }
 
-    /* Attach detour for gethostbyname.. */
+    // Attach detour for gethostbyname..
     xiloader::SocketHooks hooks(config);
     if (!hooks.attached)
     {
@@ -77,7 +84,7 @@ int run(xiloader::Config& config)
     xiloader::AuthConnection  auth;
     const xiloader::RelayStop relayStop;
 
-    /* Attempt to resolve the server address.. */
+    // Attempt to resolve the server address..
     ULONG ulAddress = 0;
 
     xiloader::console::output(xiloader::color::info, "Resolving '%s' ...", config.serverAddress.c_str());
@@ -92,7 +99,7 @@ int run(xiloader::Config& config)
 
     xiloader::console::output(xiloader::color::info, "Resolved server address to '%s:%d'", config.serverAddress.c_str(), config.loginAuthPort);
 
-    /* Attempt to verify the users account info.. */
+    // Attempt to verify the users account info..
     if (!auth.connect(config.serverAddress, config.loginAuthPort))
     {
         return ERROR_SUCCESS;
@@ -106,16 +113,16 @@ int run(xiloader::Config& config)
 
     hooks.useSession(*session);
 
-    /* Attempt to create connection to the login server.. */
+    // Attempt to create connection to the login server..
     xiloader::LobbyDataConnection lobbyData;
     if (!lobbyData.connect(config.serverAddress, config.loginDataPort))
     {
-        int err = WSAGetLastError();
+        const int err = WSAGetLastError();
         xiloader::console::output(xiloader::color::error, "Failed to initialize connection to server on port %u, winsock error: %d", config.loginDataPort, err);
         return ERROR_SUCCESS;
     }
 
-    /* Start hairpin hack thread if required.. */
+    // Start hairpin hack thread if required..
     if (config.hairpin)
     {
         // TODO: this is not terminated? Does it need to be?
@@ -131,15 +138,9 @@ int run(xiloader::Config& config)
     return xiloader::runGame(config, *session, lobbyData);
 }
 
-/**
- * @brief Main program entrypoint.
- *
- * @param argc      The count of arguments being passed to this application on launch.
- * @param argv      Pointer to array of argument data.
- *
- * @return 1 on error, 0 on success.
- */
-int __cdecl main(int argc, char* argv[])
+// Main program entrypoint.
+// Returns 1 on error, 0 on success.
+auto __cdecl main(const int argc, char* argv[]) -> int
 {
     xiloader::Config config;
 
@@ -153,11 +154,11 @@ int __cdecl main(int argc, char* argv[])
         return 1;
     }
 
-    std::array<uint8_t, 3> version = xiloader::Config::versionNumber;
+    const std::array<uint8_t, 3> version = xiloader::Config::versionNumber;
 
-    /* Output the banner.. */
-    time_t currentTime = time(NULL);
-    int    currentYear = localtime(&currentTime)->tm_year + 1900; // Year is returned as the number of years since 1900.
+    // Output the banner..
+    const time_t currentTime = time(NULL);
+    const int    currentYear = localtime(&currentTime)->tm_year + 1900; // Year is returned as the number of years since 1900.
     xiloader::console::output(xiloader::color::lightred, "==========================================================");
     xiloader::console::output(xiloader::color::lightgreen, "DarkStar Boot Loader (c) 2015 DarkStar Team");
     xiloader::console::output(xiloader::color::lightgreen, "LandSandBoat Boot Loader (c) 2021-%d LandSandBoat Team (v%u.%u.%u)", currentYear, version[0], version[1], version[2]);
@@ -169,7 +170,7 @@ int __cdecl main(int argc, char* argv[])
     const int result = run(config);
 
     xiloader::console::output(xiloader::color::error, "Closing...");
-    Sleep(2000);
+    Sleep(kCloseDelayMs);
 
     return result;
 }

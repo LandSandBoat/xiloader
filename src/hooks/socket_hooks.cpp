@@ -39,15 +39,16 @@
 namespace
 {
 
+constexpr size_t           kSessionHashSize   = 16;
+constexpr std::string_view kPlayOnlineHosts[] = { "pp000.pol.com", "ci000.pol.com", "gm000.pol.com", "gd000.pol.com" };
+
 // The detours can't take arguments, so what they need is kept here
-const xiloader::Config* config          = nullptr;
-char                    sessionHash[16] = {};
+const xiloader::Config* config                        = nullptr;
+char                    sessionHash[kSessionHashSize] = {};
 
 } // namespace
 
-/**
- * @brief Detour function definitions.
- */
+// Detour function definitions.
 extern "C"
 {
     hostent*(WINAPI __stdcall* Real_gethostbyname)(const char* name)       = gethostbyname;
@@ -56,14 +57,9 @@ extern "C"
     int(WINAPI* Real_connect)(SOCKET s, const sockaddr* name, int namelen) = connect;
 }
 
-/**
- * @brief gethostbyname detour callback.
- *
- * @param name The hostname to obtain information of.
- *
- * @return Hostname information object.
- */
-hostent* __stdcall Mine_gethostbyname(const char* name)
+// gethostbyname detour callback.
+// Returns hostname information object.
+auto __stdcall Mine_gethostbyname(const char* name) -> hostent*
 {
     xiloader::console::output(xiloader::color::debug, "Resolving host: %s", name);
 
@@ -73,7 +69,6 @@ hostent* __stdcall Mine_gethostbyname(const char* name)
     }
 
     // PlayOnline profile and IRC hosts (friend list and presence) go through the local TLS relay
-    constexpr std::string_view kPlayOnlineHosts[] = { "pp000.pol.com", "ci000.pol.com", "gm000.pol.com", "gd000.pol.com" };
     if (std::ranges::find(kPlayOnlineHosts, std::string_view(name)) != std::end(kPlayOnlineHosts))
     {
         return Real_gethostbyname(xiloader::polrelay::address().c_str());
@@ -84,14 +79,14 @@ hostent* __stdcall Mine_gethostbyname(const char* name)
 
 // This function's purpose is to identify a command byte and identify if it is meant for the lobby dataport or not.
 // This way, we know we want to send.
-static bool isLobbyCommand(const char* buffer, SOCKET socket)
+static auto isLobbyCommand(const char* const buffer, const SOCKET socket) -> bool
 {
     struct sockaddr_in sin;
     int                addrlen = sizeof(sin);
 
     getpeername(socket, reinterpret_cast<struct sockaddr*>(&sin), &addrlen);
 
-    auto port = ntohs(sin.sin_port);
+    const auto port = ntohs(sin.sin_port);
 
     if (port != config->loginDataPort && port != config->loginViewPort)
     {
@@ -118,10 +113,8 @@ static bool isLobbyCommand(const char* buffer, SOCKET socket)
     return buffer[4] == 0x49 && buffer[5] == 0x58 && buffer[6] == 0x46 && buffer[7] == 0x46;
 }
 
-/**
- * @brief send detour callback. https://man7.org/linux/man-pages/man2/send.2.html
- */
-int WINAPI Mine_send(SOCKET s, const char* buf, int len, int flags)
+// send detour callback. https://man7.org/linux/man-pages/man2/send.2.html
+auto WINAPI Mine_send(SOCKET s, const char* buf, int len, int flags) -> int
 {
     const auto ret = _ReturnAddress();
     std::ignore    = ret;
@@ -130,16 +123,14 @@ int WINAPI Mine_send(SOCKET s, const char* buf, int len, int flags)
     if (isLobbyCommand(buf, s))
     {
         // always send server provided session hash in packets with XIFF commands and is a lobby command
-        std::memcpy((char*)buf + 12, sessionHash, 16);
+        std::memcpy((char*)buf + 12, sessionHash, kSessionHashSize);
     }
 
     return Real_send(s, buf, len, flags);
 }
 
-/**
- * @brief recv detour callback. https://man7.org/linux/man-pages/man2/recv.2.html
- */
-int WINAPI Mine_recv(SOCKET s, char* buf, int len, int flags)
+// recv detour callback. https://man7.org/linux/man-pages/man2/recv.2.html
+auto WINAPI Mine_recv(SOCKET s, char* buf, int len, int flags) -> int
 {
     const auto ret = _ReturnAddress();
     std::ignore    = ret;
@@ -148,10 +139,8 @@ int WINAPI Mine_recv(SOCKET s, char* buf, int len, int flags)
     return Real_recv(s, buf, len, flags);
 }
 
-/**
- * @brief connect detour callback. https://man7.org/linux/man-pages/man2/connect.2.html
- */
-int WINAPI Mine_connect(SOCKET s, const sockaddr* name, int namelen)
+// connect detour callback. https://man7.org/linux/man-pages/man2/connect.2.html
+auto WINAPI Mine_connect(SOCKET s, const sockaddr* name, int namelen) -> int
 {
     // polcore's PlayOnline connections go to this process's relay ports
     if (name != nullptr && namelen >= static_cast<int>(sizeof(sockaddr_in)))
@@ -163,7 +152,7 @@ int WINAPI Mine_connect(SOCKET s, const sockaddr* name, int namelen)
         }
     }
 
-    int ret = Real_connect(s, name, namelen);
+    const int ret = Real_connect(s, name, namelen);
 
     return ret;
 }

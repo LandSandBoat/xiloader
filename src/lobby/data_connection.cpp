@@ -45,6 +45,10 @@ constexpr std::size_t kListSize    = 0x148;
 // Characters the list packet has room for
 constexpr int kMaxCharacters = (kListSize - 8) / kPacketEntrySize;
 
+constexpr std::size_t kBufferSize     = 4096;
+constexpr int         kReplySize      = 28;
+constexpr DWORD       kSendIntervalMs = 100;
+
 auto packetSize(const xiloader::LobbyDataRequest type) -> std::size_t
 {
     switch (type)
@@ -105,7 +109,7 @@ auto LobbyDataConnection::connect(const std::string& server, const uint16_t port
     hints.ai_socktype = SOCK_STREAM;
     hints.ai_protocol = IPPROTO_TCP;
 
-    /* Attempt to get the server information. */
+    // Attempt to get the server information.
     struct addrinfo* addr = NULL;
     if (getaddrinfo(server.c_str(), std::to_string(port).c_str(), &hints, &addr))
     {
@@ -113,7 +117,7 @@ auto LobbyDataConnection::connect(const std::string& server, const uint16_t port
         return false;
     }
 
-    /* Determine which address is valid to connect.. */
+    // Determine which address is valid to connect..
     for (auto ptr = addr; ptr != NULL && socket == INVALID_SOCKET; ptr = ptr->ai_next)
     {
         const auto candidate = ::socket(ptr->ai_family, ptr->ai_socktype, ptr->ai_protocol);
@@ -169,26 +173,26 @@ void LobbyDataConnection::setCharacterList(char* const list)
 
 void LobbyDataConnection::run(const std::stop_token stop, const Session session)
 {
-    char recvBuffer[4096] = { 0 };
-    char sendBuffer[4096] = { 0 };
+    char recvBuffer[kBufferSize] = { 0 };
+    char sendBuffer[kBufferSize] = { 0 };
 
     // send session hash
     sendBuffer[0] = static_cast<char>(xiloader::LobbyDataReply::SessionHash);
     memcpy(sendBuffer + 12, session.hash, 16);
 
-    if (send(socket, sendBuffer, 28, 0) == SOCKET_ERROR)
+    if (send(socket, sendBuffer, kReplySize, 0) == SOCKET_ERROR)
     {
         xiloader::console::output("Failed to send session hash for data to server; disconnecting!");
         return;
     }
-    memset(sendBuffer, 0, 28);
+    memset(sendBuffer, 0, kReplySize);
 
     // What was read and not yet handled; a read can end mid-packet or hold several
     std::vector<char> pending;
 
     while (!stop.stop_requested())
     {
-        /* Attempt to receive the incoming data.. */
+        // Attempt to receive the incoming data..
         const auto received = recv(socket, recvBuffer, sizeof(recvBuffer), 0);
         if (received <= 0)
         {
@@ -214,8 +218,8 @@ void LobbyDataConnection::run(const std::stop_token stop, const Session session)
                 break;
             }
 
-            const char* packet   = pending.data();
-            int         sendSize = 0;
+            const char* const packet   = pending.data();
+            int               sendSize = 0;
 
             switch (type)
             {
@@ -226,7 +230,7 @@ void LobbyDataConnection::run(const std::stop_token stop, const Session session)
                     memcpy(sendBuffer + 12, session.hash, 16);
 
                     xiloader::console::output(xiloader::color::warning, "Sending account id..");
-                    sendSize = 28;
+                    sendSize = kReplySize;
                     break;
 
                 case xiloader::LobbyDataRequest::Key:
@@ -235,7 +239,7 @@ void LobbyDataConnection::run(const std::stop_token stop, const Session session)
                     memcpy(sendBuffer, (char*)"\xA2\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x58\xE0\x5D\xAD\x00\x00\x00\x00", 25);
 
                     xiloader::console::output(xiloader::color::warning, "Sending key..");
-                    sendSize = 28;
+                    sendSize = kReplySize;
                     break;
 
                 case xiloader::LobbyDataRequest::CharacterList:
@@ -262,14 +266,14 @@ void LobbyDataConnection::run(const std::stop_token stop, const Session session)
             if (sendSize == 0)
                 continue;
 
-            /* Send the response buffer to the server.. */
+            // Send the response buffer to the server..
             if (send(socket, sendBuffer, sendSize, 0) == SOCKET_ERROR)
             {
                 xiloader::console::output("Server connection done; disconnecting!");
                 return;
             }
 
-            Sleep(100);
+            Sleep(kSendIntervalMs);
         }
     }
 }

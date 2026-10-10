@@ -23,10 +23,17 @@
 
 #include <ws2tcpip.h>
 
+namespace
+{
+
+constexpr const char* kServiceName = "1000";
+
+} // namespace
+
 namespace xiloader
 {
 
-bool resolveHostname(const char* host, PULONG lpOutput)
+auto resolveHostname(const char* const host, const PULONG lpOutput) -> bool
 {
     struct addrinfo hints, *info = 0;
     memset(&hints, 0, sizeof(hints));
@@ -35,7 +42,7 @@ bool resolveHostname(const char* host, PULONG lpOutput)
     hints.ai_socktype = SOCK_STREAM;
     hints.ai_protocol = IPPROTO_TCP;
 
-    if (getaddrinfo(host, "1000", &hints, &info))
+    if (getaddrinfo(host, kServiceName, &hints, &info))
         return false;
 
     *lpOutput = ((struct sockaddr_in*)info->ai_addr)->sin_addr.S_un.S_addr;

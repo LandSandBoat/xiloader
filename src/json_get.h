@@ -40,7 +40,7 @@ template <typename T>
 inline constexpr bool always_false_v = always_false<T>::value;
 
 template <typename T>
-inline std::optional<T> jsonGet(const json& jsonInput, std::string key)
+inline auto jsonGet(const json& jsonInput, const std::string key) -> std::optional<T>
 {
     if (!jsonInput.contains(key))
     {
@@ -104,7 +104,7 @@ inline std::optional<T> jsonGet(const json& jsonInput, std::string key)
 
 // Required partial specialization for size arg
 template <typename T, uint32_t size>
-inline typename std::optional<std::array<T, size>> jsonGet(const json& jsonInput, std::string key)
+inline auto jsonGet(const json& jsonInput, const std::string key) -> std::optional<std::array<T, size>>
 {
     if (!jsonInput.contains(key))
     {

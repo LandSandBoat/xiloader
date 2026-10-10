@@ -23,12 +23,19 @@
 
 #include <mbedtls/error.h>
 
+namespace
+{
+
+constexpr std::size_t kErrorTextSize = 128;
+
+} // namespace
+
 namespace xiloader
 {
 
 auto mbedtlsErrorText(const int ret) -> std::string
 {
-    char text[128] = {};
+    char text[kErrorTextSize] = {};
     mbedtls_strerror(ret, text, sizeof(text));
     return text;
 }

@@ -179,7 +179,7 @@ struct DataServer
         closesocket(listener);
     }
 
-    auto read(const int size) -> std::string
+    auto read(const int size) const -> std::string
     {
         std::string data(size, '\0');
         int         total = 0;
@@ -218,7 +218,7 @@ void checkLobbyData()
         assert(static_cast<uint8_t>(hello[0]) == 0xFE && hello[12] == 0x5A && hello[27] == 0x5A);
 
         // A list that arrives before polcore's buffer is known is kept for later
-        char early[0x148] = { 0x03, 2 };
+        const char early[0x148] = { 0x03, 2 };
         send(server.client, early, sizeof(early), 0);
 
         // Two requests in one segment are answered one after the other

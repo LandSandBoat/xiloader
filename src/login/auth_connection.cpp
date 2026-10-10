@@ -23,6 +23,14 @@
 
 #include "console.h"
 
+namespace
+{
+
+constexpr uint32_t    kReadTimeoutMs  = 1000;
+constexpr std::size_t kRecvBufferSize = 8192;
+
+} // namespace
+
 namespace xiloader
 {
 
@@ -84,8 +92,8 @@ auto AuthConnection::connect(const std::string& address, const uint16_t port) ->
         // If this is the only warning, just don't print it.
         if (flags != MBEDTLS_X509_BADCERT_NOT_TRUSTED)
         {
-            char        vrfy_buf[1024] = {};
-            std::string timestamp      = xiloader::console::getTimestamp();
+            char              vrfy_buf[1024] = {};
+            const std::string timestamp      = xiloader::console::getTimestamp();
 
             flags &= ~MBEDTLS_X509_BADCERT_NOT_TRUSTED; // Don't report the cert isn't trusted -- we don't care.
 
@@ -100,7 +108,7 @@ auto AuthConnection::connect(const std::string& address, const uint16_t port) ->
         xiloader::console::output(xiloader::color::info, "Remote server (%s) certificate is valid.", address.c_str());
     }
 
-    mbedtls_ssl_conf_read_timeout(config.get(), 1000);
+    mbedtls_ssl_conf_read_timeout(config.get(), kReadTimeoutMs);
 
     return true;
 }
@@ -113,7 +121,7 @@ auto AuthConnection::exchange(const std::string& request) -> std::optional<std::
         return std::nullopt;
     }
 
-    unsigned char recvBuffer[8192] = { 0 };
+    unsigned char recvBuffer[kRecvBufferSize] = { 0 };
 
     const auto received = mbedtls_ssl_read(&ssl, recvBuffer, sizeof(recvBuffer));
     if (received == MBEDTLS_ERR_SSL_TIMEOUT)

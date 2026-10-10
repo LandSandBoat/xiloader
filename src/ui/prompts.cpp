@@ -28,7 +28,7 @@ namespace xiloader::ui
 
 auto mainMenu(Menu& menu) -> MenuSelection
 {
-    constexpr MenuSelection selections[] = {
+    constexpr MenuSelection kSelections[] = {
         MenuSelection::Login,
         MenuSelection::CreateAccount,
         MenuSelection::ChangePassword,
@@ -36,7 +36,7 @@ auto mainMenu(Menu& menu) -> MenuSelection
         MenuSelection::Exit,
     };
 
-    return selections[menu.pick({
+    return kSelections[menu.pick({
         "1) Login",
         "2) Create New Account",
         "3) Change Account Password",
@@ -47,7 +47,7 @@ auto mainMenu(Menu& menu) -> MenuSelection
 
 auto twoFactorSubMenu(Menu& menu) -> MenuSelection
 {
-    constexpr MenuSelection selections[] = {
+    constexpr MenuSelection kSelections[] = {
         MenuSelection::RegisterTwoFactorOTP,
         MenuSelection::RemoveTwoFactorOTP,
         MenuSelection::RegenerateTwoFactorRemovalCode,
@@ -56,7 +56,7 @@ auto twoFactorSubMenu(Menu& menu) -> MenuSelection
         MenuSelection::None, // In this instance, the caller will replay the main menu
     };
 
-    return selections[menu.pick({
+    return kSelections[menu.pick({
         "1) Register 2FA OTP",
         "2) Remove 2FA OTP",
         "3) Regenerate 2FA OTP removal code",

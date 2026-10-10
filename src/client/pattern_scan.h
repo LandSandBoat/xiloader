@@ -26,15 +26,8 @@
 namespace xiloader::memory
 {
 
-/**
- * @brief Locates a signature of bytes using the given mask within the given module.
- *
- * @param moduleName    The name of the module to scan within.
- * @param lpPattern     The pattern of bytes to compare with.
- * @param pszMask       The mask to compare against.
- *
- * @return Start address of where the pattern was found, NULL otherwise.
- */
-DWORD FindPattern(const char* moduleName, const unsigned char* lpPattern, const char* pszMask);
+// Locates a signature of bytes using the given mask within the given module.
+// Returns start address of where the pattern was found, NULL otherwise.
+auto FindPattern(const char* moduleName, const unsigned char* lpPattern, const char* pszMask) -> DWORD;
 
 } // namespace xiloader::memory

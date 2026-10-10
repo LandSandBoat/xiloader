@@ -26,13 +26,8 @@
 namespace xiloader
 {
 
-/**
- * @brief Applies the hairpin fix modifications.
- *
- * @param lpParam       The server address to route to, as inet_addr returns it.
- *
- * @return Non-important return.
- */
-DWORD ApplyHairpinFixThread(LPVOID lpParam);
+// Applies the hairpin fix modifications.
+// lpParam: The server address to route to, as inet_addr returns it.
+auto ApplyHairpinFixThread(LPVOID lpParam) -> DWORD;
 
 } // namespace xiloader

@@ -28,16 +28,9 @@
 namespace xiloader
 {
 
-/**
- * @brief Compares a pattern against a given memory pointer.
- *
- * @param lpDataPtr     The live data to compare with.
- * @param lpPattern     The pattern of bytes to compare with.
- * @param pszMask       The mask to compare against.
- *
- * @return True if pattern was found, false otherwise.
- */
-static bool MaskCompare(const unsigned char* lpDataPtr, const unsigned char* lpPattern, const char* pszMask)
+// Compares a pattern against a given memory pointer.
+// Returns true if pattern was found, false otherwise.
+static auto MaskCompare(const unsigned char* lpDataPtr, const unsigned char* lpPattern, const char* pszMask) -> bool
 {
     for (; *pszMask; ++pszMask, ++lpDataPtr, ++lpPattern)
     {
@@ -47,16 +40,7 @@ static bool MaskCompare(const unsigned char* lpDataPtr, const unsigned char* lpP
     return (*pszMask) == NULL;
 }
 
-/**
- * @brief Locates a signature of bytes using the given mask within the given module.
- *
- * @param moduleName    The name of the module to scan within.
- * @param lpPattern     The pattern of bytes to compare with.
- * @param pszMask       The mask to compare against.
- *
- * @return Start address of where the pattern was found, NULL otherwise.
- */
-DWORD memory::FindPattern(const char* moduleName, const unsigned char* lpPattern, const char* pszMask)
+auto memory::FindPattern(const char* const moduleName, const unsigned char* const lpPattern, const char* const pszMask) -> DWORD
 {
     MODULEINFO mod = { 0 };
     if (!GetModuleInformation(GetCurrentProcess(), GetModuleHandleA(moduleName), &mod, sizeof(MODULEINFO)))

@@ -32,8 +32,8 @@ using xiloader::ui::Field;
 
 auto promptLine(const std::string& label, const bool hidden = false) -> std::string
 {
-    auto  stdinHandle = ::GetStdHandle(STD_INPUT_HANDLE);
-    DWORD mode        = 0;
+    const auto stdinHandle = ::GetStdHandle(STD_INPUT_HANDLE);
+    DWORD      mode        = 0;
     if (hidden)
     {
         ::GetConsoleMode(stdinHandle, &mode);

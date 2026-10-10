@@ -61,6 +61,8 @@ constexpr ULONGLONG kConnectDeadlineMs = 60000;
 constexpr ULONGLONG kRetryDelayMinMs   = 15000;
 constexpr ULONGLONG kRetryDelayMaxMs   = 45000;
 
+constexpr DWORD kPollIntervalMs = 1;
+
 // Lists the viewer loads after login; status first, then the rest in parallel (polcore has 4 profile slots)
 constexpr Load kStatusLoads[] = {
     { .name = "status", .setup = PolFunction::LoadMyStatus, .check = PolFunction::CheckMyStatus },
@@ -98,7 +100,7 @@ struct Reconnection
 } reconnection;
 
 // Replaces polcore's PlayOnline cipher; the relay encrypts the traffic instead
-void __cdecl PlainCrypt(const uint8_t* source, uint8_t* destination, const int32_t length, [[maybe_unused]] void* context, [[maybe_unused]] const int32_t reset)
+void __cdecl PlainCrypt(const uint8_t* const source, uint8_t* const destination, const int32_t length, [[maybe_unused]] void* const context, [[maybe_unused]] const int32_t reset)
 {
     if (length > 0 && source != destination)
     {
@@ -140,7 +142,7 @@ auto runOptionStep(const PolFunction check) -> bool
     while ((result = call(check)()) == 0)
     {
         call(PolFunction::PolconIdle)();
-        Sleep(1);
+        Sleep(kPollIntervalMs);
     }
 
     return result == 1;
@@ -230,13 +232,13 @@ auto runLoads(const std::span<Load> loads) -> bool
     while (!checkLoads(loads))
     {
         call(PolFunction::PolconIdle)();
-        Sleep(1);
+        Sleep(kPollIntervalMs);
     }
 
     return reportLoads(loads);
 }
 
-auto __cdecl recordEventHandler(void* handler) -> int
+auto __cdecl recordEventHandler(void* const handler) -> int
 {
     gameEventHandler = handler;
     return setEventHandler(handler);
@@ -427,7 +429,7 @@ auto disableCipher(const Language language) -> bool
     return true;
 }
 
-void setEnglishMessageTexts(CommandTable table)
+void setEnglishMessageTexts(const CommandTable table)
 {
     const char* const titles[] = {
         "Let's be friends!",
@@ -469,7 +471,7 @@ void setEnglishMessageTexts(CommandTable table)
     }
 }
 
-auto logIn(CommandTable table, const uint32_t accountId, const Language language) -> bool
+auto logIn(const CommandTable table, const uint32_t accountId, const Language language) -> bool
 {
     session.table = table;
 
@@ -506,7 +508,7 @@ auto logIn(CommandTable table, const uint32_t accountId, const Language language
     session.slot    = 50 + static_cast<int>(accountId % 50);
     const auto slot = std::filesystem::path(xiloader::registry::GetPlayOnlineInstallFolder(language)) / std::format("pub/home{:02}", session.slot);
     const auto home = slot / "msg";
-    for (const char* folder : { "s/a", "s/b", "r/a", "r/b" })
+    for (const char* const folder : { "s/a", "s/b", "r/a", "r/b" })
     {
         std::error_code error;
         std::filesystem::create_directories(home / folder, error);
@@ -531,7 +533,7 @@ auto logIn(CommandTable table, const uint32_t accountId, const Language language
         }
 
         call(PolFunction::PolconIdle)();
-        Sleep(1);
+        Sleep(kPollIntervalMs);
     }
 
     if (state != PolconState::Connected)
@@ -567,7 +569,7 @@ auto logIn(CommandTable table, const uint32_t accountId, const Language language
     return true;
 }
 
-void keepGameOnDisconnect(CommandFunc** table)
+void keepGameOnDisconnect(CommandFunc** const table)
 {
     polconPoll                                 = reinterpret_cast<Command>(table[tableIndex(PolFunction::PolconPoll)]);
     table[tableIndex(PolFunction::PolconPoll)] = reinterpret_cast<CommandFunc*>(&pollIgnoringDisconnect);

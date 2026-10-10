@@ -353,7 +353,7 @@ auto attempt(AuthConnection& connection, Session& session, Config& config, bool&
 {
     std::optional<Request> request;
 
-    /* Determine if we should auto-login.. */
+    // Determine if we should auto-login..
     if (!config.username.empty() && !config.password.empty() && autoLogin)
     {
         xiloader::console::output(xiloader::color::lightgreen, "Autologin activated!");
@@ -377,7 +377,7 @@ auto attempt(AuthConnection& connection, Session& session, Config& config, bool&
         return LoginOutcome::Retry;
     }
 
-    /* Send info to server and obtain response.. */
+    // Send info to server and obtain response..
     const auto reply = connection.exchange(toJson(*request, config, trustTokens).dump());
     if (!reply)
     {

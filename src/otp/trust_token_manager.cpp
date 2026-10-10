@@ -45,6 +45,8 @@ using json = nlohmann::json;
 namespace
 {
 
+constexpr int64_t kSecondsPerDay = 24 * 60 * 60;
+
 auto getTrustTokenDir() -> std::string
 {
     char*  appdata = nullptr;
@@ -82,7 +84,7 @@ auto readTokenStore(const std::string& filepath) -> json
         return json::object();
     }
 
-    auto fileSize = file.tellg();
+    const auto fileSize = file.tellg();
     if (fileSize <= 0)
     {
         return json::object();
@@ -107,7 +109,7 @@ auto readTokenStore(const std::string& filepath) -> json
         return json::object();
     }
 
-    std::string jsonStr(reinterpret_cast<char*>(decryptedBlob.pbData), decryptedBlob.cbData);
+    const std::string jsonStr(reinterpret_cast<char*>(decryptedBlob.pbData), decryptedBlob.cbData);
     LocalFree(decryptedBlob.pbData);
 
     json tokenData = json::parse(jsonStr, nullptr, false);
@@ -222,11 +224,11 @@ void TrustTokenManager::acceptLoginReply(const json& reply, const std::string& u
     const auto expiry  = reply.find("trust_expires");
     const auto expires = expiry != reply.end() && expiry->is_number_integer()
                              ? expiry->get<int64_t>()
-                             : now + (30 * 24 * 60 * 60);
+                             : now + (30 * kSecondsPerDay);
 
     save(username, token->get<std::string>(), expires);
 
-    const auto days = (expires - now) / (24 * 60 * 60);
+    const auto days = (expires - now) / kSecondsPerDay;
     xiloader::console::output(xiloader::color::info, "This computer is now trusted for %lld day%s.", days, days == 1 ? "" : "s");
 }
 

@@ -39,15 +39,14 @@
 namespace
 {
 
-/**
- * @brief Locates the INET mutex function call inside of polcore.dll
- *
- * @return The pointer to the function call, 0 when it is not found.
- */
-inline DWORD FindINETMutex(const xiloader::Language language)
+constexpr size_t kEncBufferSize = 0x1000;
+
+// Locates the INET mutex function call inside of polcore.dll
+// Returns the pointer to the function call, 0 when it is not found.
+inline auto FindINETMutex(const xiloader::Language language) -> DWORD
 {
-    const char* module = (language == xiloader::Language::European) ? "polcoreeu.dll" : "polcore.dll";
-    auto        result = (DWORD)xiloader::memory::FindPattern(module, (BYTE*)"\x8B\x56\x2C\x8B\x46\x28\x8B\x4E\x24\x52\x50\x51", "xxxxxxxxxxxx");
+    const char* const module = (language == xiloader::Language::European) ? "polcoreeu.dll" : "polcore.dll";
+    const auto        result = (DWORD)xiloader::memory::FindPattern(module, (BYTE*)"\x8B\x56\x2C\x8B\x46\x28\x8B\x4E\x24\x52\x50\x51", "xxxxxxxxxxxx");
     if (result == 0)
     {
         xiloader::console::output(xiloader::color::error, "Failed to locate the INET mutex in %s. This PlayOnline version is not supported, or --lang doesn't match your install.", module);
@@ -56,15 +55,12 @@ inline DWORD FindINETMutex(const xiloader::Language language)
     return (*(DWORD*)(result - 4) + (result));
 }
 
-/**
- * @brief Locates the PlayOnline connection object inside of polcore.dll
- *
- * @return Pointer to the pol connection object, 0 when it is not found.
- */
-inline DWORD FindPolConn(const xiloader::Language language)
+// Locates the PlayOnline connection object inside of polcore.dll
+// Returns pointer to the pol connection object, 0 when it is not found.
+inline auto FindPolConn(const xiloader::Language language) -> DWORD
 {
-    const char* module = (language == xiloader::Language::European) ? "polcoreeu.dll" : "polcore.dll";
-    auto        result = (DWORD)xiloader::memory::FindPattern(module, (BYTE*)"\x81\xC6\x38\x03\x00\x00\x83\xC4\x04\x81\xFE", "xxxxxxxxxxx");
+    const char* const module = (language == xiloader::Language::European) ? "polcoreeu.dll" : "polcore.dll";
+    const auto        result = (DWORD)xiloader::memory::FindPattern(module, (BYTE*)"\x81\xC6\x38\x03\x00\x00\x83\xC4\x04\x81\xFE", "xxxxxxxxxxx");
     if (result == 0)
     {
         xiloader::console::output(xiloader::color::error, "Failed to locate the PlayOnline connection in %s. This PlayOnline version is not supported, or --lang doesn't match your install.", module);
@@ -73,12 +69,9 @@ inline DWORD FindPolConn(const xiloader::Language language)
     return (*(DWORD*)(result - 10));
 }
 
-/**
- * @brief Locates the current character information block.
- *
- * @return Pointer to the character information table.
- */
-inline LPVOID FindCharacters(void** commFuncs)
+// Locates the current character information block.
+// Returns pointer to the character information table.
+inline auto FindCharacters(void* const* const commFuncs) -> LPVOID
 {
     LPVOID lpCharTable = NULL;
     memcpy(&lpCharTable, (char*)commFuncs[0xD3] + 31, sizeof(lpCharTable));
@@ -92,7 +85,7 @@ namespace xiloader
 
 auto runGame(const Config& config, const Session& session, LobbyDataConnection& lobbyData) -> int
 {
-    /* Attempt to create polcore instance..*/
+    // Attempt to create polcore instance..
     const auto                          languageId = static_cast<int>(config.language);
     Microsoft::WRL::ComPtr<IPOLCoreCom> polcore;
     if (CoCreateInstance(xiloader::CLSID_POLCoreCom[languageId], NULL, 0x17, xiloader::IID_IPOLCoreCom[languageId], (LPVOID*)polcore.GetAddressOf()) != S_OK)
@@ -101,18 +94,18 @@ auto runGame(const Config& config, const Session& session, LobbyDataConnection& 
         return ERROR_SUCCESS;
     }
 
-    /* Invoke the setup functions for polcore.. */
+    // Invoke the setup functions for polcore..
     // Create string for the login view port
-    std::string polcorecmd = " /game eAZcFcB -net 3 -port " + std::to_string(config.loginViewPort);
+    const std::string polcorecmd = " /game eAZcFcB -net 3 -port " + std::to_string(config.loginViewPort);
     // Cast to an LPSTR
-    LPSTR cmd = const_cast<char*>(polcorecmd.c_str());
+    const LPSTR cmd = const_cast<char*>(polcorecmd.c_str());
     polcore->SetAreaCode(languageId);
     if (const auto hr = polcore->SetParamInit(GetModuleHandle(NULL), cmd); FAILED(hr))
     {
         xiloader::console::output(xiloader::color::error, "polcore failed to initialize (0x%08lX).", hr);
     }
 
-    /* Obtain the common function table.. */
+    // Obtain the common function table..
     xiloader::playonline::CommandFunc** lpCommandTable = nullptr;
     if (const auto hr = polcore->GetCommonFunctionTable((unsigned long**)&lpCommandTable); FAILED(hr) || lpCommandTable == nullptr)
     {
@@ -120,33 +113,33 @@ auto runGame(const Config& config, const Session& session, LobbyDataConnection& 
         return 1;
     }
 
-    /* Invoke the inet mutex function.. */
-    auto findMutex = (void* (*)(...))FindINETMutex(config.language);
+    // Invoke the inet mutex function..
+    const auto findMutex = (void* (*)(...))FindINETMutex(config.language);
     if (findMutex == nullptr)
     {
         return 1;
     }
     findMutex();
 
-    /* Locate and prepare the pol connection.. */
-    auto polConnection = (char*)FindPolConn(config.language);
+    // Locate and prepare the pol connection..
+    const auto polConnection = (char*)FindPolConn(config.language);
     if (polConnection == nullptr)
     {
         return 1;
     }
     memset(polConnection, 0x00, 0x68);
-    auto enc = (char*)malloc(0x1000);
-    memset(enc, 0x00, 0x1000);
+    const auto enc = (char*)malloc(kEncBufferSize);
+    memset(enc, 0x00, kEncBufferSize);
     memcpy(polConnection + 0x48, &enc, sizeof(char**));
 
-    /* Locate the character storage buffer.. */
+    // Locate the character storage buffer..
     lobbyData.setCharacterList((char*)FindCharacters((void**)lpCommandTable));
 
-    /* Invoke the setup functions for polcore.. */
+    // Invoke the setup functions for polcore..
     lpCommandTable[xiloader::tableIndex(xiloader::PolFunction::RegistryLang)](languageId);
     lpCommandTable[xiloader::tableIndex(xiloader::PolFunction::FfxiLang)](xiloader::registry::GetPlayOnlineLanguage(config.language));
     lpCommandTable[xiloader::tableIndex(xiloader::PolFunction::RegistryKey)](xiloader::registry::GetPlayOnlineKey(config.language));
-    const char* installFolder = xiloader::registry::GetPlayOnlineInstallFolder(config.language);
+    const char* const installFolder = xiloader::registry::GetPlayOnlineInstallFolder(config.language);
     if (installFolder[0] == '\0')
     {
         xiloader::console::output(xiloader::color::error, "PlayOnline install folder not found in the registry (HKLM\\%s\\InstallFolder). Check PlayOnline is installed and --lang matches your install.", xiloader::registry::GetPlayOnlineKey(config.language));
@@ -180,7 +173,7 @@ auto runGame(const Config& config, const Session& session, LobbyDataConnection& 
 
     xiloader::playonline::keepGameOnDisconnect(lpCommandTable);
 
-    /* Attempt to create FFXi instance..*/
+    // Attempt to create FFXi instance..
     Microsoft::WRL::ComPtr<IFFXiEntry> ffxi;
     if (CoCreateInstance(xiloader::CLSID_FFXiEntry, NULL, 0x17, xiloader::IID_IFFXiEntry, (LPVOID*)ffxi.GetAddressOf()) != S_OK)
     {
@@ -188,7 +181,7 @@ auto runGame(const Config& config, const Session& session, LobbyDataConnection& 
         return ERROR_SUCCESS;
     }
 
-    /* Attempt to start Final Fantasy.. */
+    // Attempt to start Final Fantasy..
     IUnknown* message = NULL;
     if (config.hide)
     {

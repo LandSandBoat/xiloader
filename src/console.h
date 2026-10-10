@@ -33,76 +33,54 @@ This file is part of DarkStar-server source code.
 namespace xiloader
 {
 
-/**
- * @brief Console class containing helper functions for console output.
- */
+// Console class containing helper functions for console output.
 class console
 {
 private:
-    /**
-     * @brief Shows or hides the console based on the provided argument.
-     *
-     * @param visible   "true" to show the console, "false" to hide it.
-     */
+    // Shows or hides the console based on the provided argument.
     static void visible(bool visible);
 
 public:
-    /**
-     * @brief Prints a text fragment with the specified color to the console.
-     *
-     * @param c         The color to print the fragment with.
-     * @param message   The fragment to print.
-     */
+    // Prints a text fragment with the specified color to the console.
     static void print(xiloader::color c, const std::string& message);
 
-    /**
-     * @brief Prints the given message to the console.
-     *
-     * @param format    The format of the message to print.
-     * @param args      The arguments to fill the format.
-     */
+    // Prints the given message to the console.
     template <typename... Args>
-    static void output(const char* format, Args... args)
+    static void output(const char* const format, const Args... args)
     {
         output(xiloader::color::white, format, args...);
     }
 
-    static std::string getTimestamp()
+    static auto getTimestamp() -> std::string
     {
-        /* Get the current timestamp */
+        // Get the current timestamp
         ::__time32_t rawtime;
         ::_time32(&rawtime);
 
         ::tm timeinfo;
         ::_localtime32_s(&timeinfo, &rawtime);
 
-        /* Format the timestamp */
+        // Format the timestamp
         char timestamp[256];
         ::strftime(timestamp, sizeof timestamp, "[%m/%d/%y %H:%M:%S] ", &timeinfo);
 
         return timestamp;
     }
 
-    /**
-     * @brief Prints the given message to the console with the specific color.
-     *
-     * @param c         The color to print the message with.
-     * @param format    The format of the message to print.
-     * @param args      The arguments to fill the format.
-     */
+    // Prints the given message to the console with the specific color.
     template <typename... Args>
-    static void output(xiloader::color c, const char* format, Args... args)
+    static void output(const xiloader::color c, const char* const format, const Args... args)
     {
-        std::string timestamp = getTimestamp();
+        const std::string timestamp = getTimestamp();
 
-        /* Output the timestamp */
+        // Output the timestamp
         print(xiloader::color::lightyelllow, timestamp.c_str());
 
-        /* Parse the incoming message */
+        // Parse the incoming message
         const auto  length = ::snprintf(nullptr, 0, format, args...);
         std::string buffer(length > 0 ? length : 0, '\0');
         ::snprintf(buffer.data(), buffer.size() + 1, format, args...);
-        /* Output the message */
+        // Output the message
 
         print(c, buffer);
 
@@ -124,14 +102,10 @@ public:
         xiloader::console::output(color, "%s", msg.c_str());
     }
 
-    /**
-     * @brief Hides the console window.
-     */
+    // Hides the console window.
     static void hide();
 
-    /**
-     * @brief Shows the console window.
-     */
+    // Shows the console window.
     static void show();
 };
 

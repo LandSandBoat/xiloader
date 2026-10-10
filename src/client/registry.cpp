@@ -25,47 +25,37 @@
 
 #include <cstdio>
 
+namespace
+{
+
+const char* const kRegistryKeys[3] = {
+    "SOFTWARE\\PlayOnline",   // xiloader::Japanese
+    "SOFTWARE\\PlayOnlineUS", // xiloader::English
+    "SOFTWARE\\PlayOnlineEU"  // xiloader::European
+};
+
+} // namespace
+
 namespace xiloader
 {
 
-/**
- * @brief Obtains the PlayOnline registry key.
- *  "SOFTWARE\PlayOnlineXX"
- *
- * @param lang      The language id the loader was started with.
- *
- * @return registry pathname.
- */
-const char* registry::GetPlayOnlineKey(xiloader::Language language)
+auto registry::GetPlayOnlineKey(const xiloader::Language language) -> const char*
 {
     int lang = static_cast<int>(language);
-
-    static const char* RegistryKeys[3] = {
-        "SOFTWARE\\PlayOnline",   // xiloader::Japanese
-        "SOFTWARE\\PlayOnlineUS", // xiloader::English
-        "SOFTWARE\\PlayOnlineEU"  // xiloader::European
-    };
 
     if (lang < 0)
         lang = 0;
     if (lang > 2)
         lang = 2;
 
-    return RegistryKeys[lang];
+    return kRegistryKeys[lang];
 }
 
-/**
- * @brief Obtains the PlayOnline language id from the system registry.
- *
- * @param lang          The language id the loader was started with.
- *
- * @return The language id from the registry, 1 otherwise.
- */
-int registry::GetPlayOnlineLanguage(xiloader::Language language)
+auto registry::GetPlayOnlineLanguage(const xiloader::Language language) -> int
 {
     int lang = static_cast<int>(language);
 
-    const char* SquareEnix = (lang == 0 /*xiloader::Japanese*/) ? "Square" : "SquareEnix";
+    const char* const SquareEnix = (lang == 0 /*xiloader::Japanese*/) ? "Square" : "SquareEnix";
 
     char szRegistryPath[MAX_PATH];
     sprintf_s(szRegistryPath, MAX_PATH, "%s\\%s\\PlayOnlineViewer\\Settings", registry::GetPlayOnlineKey(language), SquareEnix);
@@ -88,15 +78,7 @@ int registry::GetPlayOnlineLanguage(xiloader::Language language)
     return lang;
 }
 
-/**
- * @brief Obtains the PlayOnlineViewer folder from the system registry.
- *  "C:\Program Files\PlayOnline\PlayOnlineViewer"
- *
- * @param lang      The language id the loader was started with.
- *
- * @return installation folder path.
- */
-const char* registry::GetPlayOnlineInstallFolder(xiloader::Language language)
+auto registry::GetPlayOnlineInstallFolder(const xiloader::Language language) -> const char*
 {
     static char InstallFolder[MAX_PATH] = { 0 };
 

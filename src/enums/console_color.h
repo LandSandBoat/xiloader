@@ -30,35 +30,35 @@ namespace xiloader
 // Console color enumeration.
 enum class color : uint16_t
 {
-    /* Red color codes. */
+    // Red color codes.
     red      = FOREGROUND_RED,
     lightred = FOREGROUND_RED | FOREGROUND_INTENSITY,
 
-    /* Green color codes. */
+    // Green color codes.
     green      = FOREGROUND_GREEN,
     lightgreen = FOREGROUND_GREEN | FOREGROUND_INTENSITY,
 
-    /* Blue color codes. */
+    // Blue color codes.
     blue      = FOREGROUND_BLUE,
     lightblue = FOREGROUND_BLUE | FOREGROUND_INTENSITY,
 
-    /* Cyan color codes. */
+    // Cyan color codes.
     cyan      = FOREGROUND_BLUE | FOREGROUND_GREEN,
     lightcyan = FOREGROUND_BLUE | FOREGROUND_GREEN | FOREGROUND_INTENSITY,
 
-    /* Yellow color codes. */
+    // Yellow color codes.
     yellow       = FOREGROUND_GREEN | FOREGROUND_RED,
     lightyelllow = FOREGROUND_GREEN | FOREGROUND_RED | FOREGROUND_INTENSITY,
 
-    /* Purple color codes. */
+    // Purple color codes.
     purple      = FOREGROUND_BLUE | FOREGROUND_RED,
     lightpurple = FOREGROUND_BLUE | FOREGROUND_RED | FOREGROUND_INTENSITY,
 
-    /* White color codes. */
+    // White color codes.
     grey  = FOREGROUND_RED | FOREGROUND_GREEN | FOREGROUND_BLUE,
     white = FOREGROUND_RED | FOREGROUND_GREEN | FOREGROUND_BLUE | FOREGROUND_INTENSITY,
 
-    /* Common color codes. */
+    // Common color codes.
     debug   = lightcyan,
     error   = lightred,
     info    = white,

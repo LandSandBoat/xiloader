@@ -26,14 +26,8 @@
 namespace xiloader
 {
 
-/**
- * @brief Resolves the given hostname to its long ip format.
- *
- * @param host          The host name to resolve.
- * @param lpOutput      Pointer to a ULONG to store the result.
- *
- * @return True on success, false otherwise.
- */
-bool resolveHostname(const char* host, PULONG lpOutput);
+// Resolves the given hostname to its long ip format.
+// Returns true on success, false otherwise.
+auto resolveHostname(const char* host, PULONG lpOutput) -> bool;
 
 } // namespace xiloader
