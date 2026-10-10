@@ -41,13 +41,16 @@ configure_file(
 
 # xiloader
 add_executable(xiloader
+    src/client/game.cpp
+    src/client/game.h
+    src/client/registry.cpp
+    src/client/registry.h
     src/client/sdk/ffxi.h
     src/client/sdk/polcore.h
     src/config.cpp
     src/config.h
     src/console.cpp
     src/console.h
-    src/defines.h
     src/enums/console_color.h
     src/enums/lobby_command.h
     src/enums/lobby_data.h
@@ -60,8 +63,6 @@ add_executable(xiloader
     src/enums/polcon_state.h
     src/enums/reconnect.h
     src/enums/relay_phase.h
-    src/functions.cpp
-    src/functions.h
     src/guards.h
     src/hooks/hairpin_fix.cpp
     src/hooks/hairpin_fix.h
@@ -83,10 +84,13 @@ add_executable(xiloader
     src/otp/qr_code.h
     src/otp/trust_token_manager.cpp
     src/otp/trust_token_manager.h
-    src/playonline.cpp
-    src/playonline.h
-    src/polrelay.cpp
-    src/polrelay.h
+    src/client/pattern_scan.cpp
+    src/client/pattern_scan.h
+    src/client/playonline.cpp
+    src/client/playonline.h
+    src/client/polcore_ids.h
+    src/client/polrelay.cpp
+    src/client/polrelay.h
     src/ui/ftxui_menu.cpp
     src/ui/menu.cpp
     src/ui/menu.h

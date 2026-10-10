@@ -19,15 +19,16 @@
 ===========================================================================
 */
 
-#include "defines.h"
+#include <windows.h>
 
 #include "playonline.h"
 
 #include "enums/polcon_state.h"
 #include "enums/reconnect.h"
 
+#include "client/pattern_scan.h"
+#include "client/registry.h"
 #include "console.h"
-#include "functions.h"
 
 #include <algorithm>
 #include <cstring>
@@ -354,7 +355,7 @@ auto disableCipher(const Language language) -> bool
     // The IRC send path: push 1; push edx; lea eax,[ebx+8]; push edi; lea ecx,[esp+0x1c]; push eax; push ecx; call cipher
     const unsigned char site[] = { 0x6A, 0x01, 0x52, 0x8D, 0x43, 0x08, 0x57, 0x8D, 0x4C, 0x24, 0x1C, 0x50, 0x51, 0xE8 };
 
-    const auto found = xiloader::functions::FindPattern(module, site, "xxxxxxxxxxxxxx");
+    const auto found = xiloader::memory::FindPattern(module, site, "xxxxxxxxxxxxxx");
     if (!found)
     {
         xiloader::console::output(xiloader::color::error, "Failed to locate the IRC send path in %s. This PlayOnline version is not supported, or --lang doesn't match your install.", module);
@@ -456,7 +457,7 @@ auto logIn(CommandTable table, const uint32_t accountId, const Language language
     //
     // polcore is not capable of creating the folders directly so we have to do it ourselves.
     session.slot    = 50 + static_cast<int>(accountId % 50);
-    const auto home = std::filesystem::path(xiloader::functions::GetRegistryPlayOnlineInstallFolder(language)) / std::format("pub/home{:02}/msg", session.slot);
+    const auto home = std::filesystem::path(xiloader::registry::GetPlayOnlineInstallFolder(language)) / std::format("pub/home{:02}/msg", session.slot);
     for (const char* folder : { "s/a", "s/b", "r/a", "r/b" })
     {
         std::error_code error;

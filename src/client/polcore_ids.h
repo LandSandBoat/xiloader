@@ -1,50 +1,32 @@
 /*
 ===========================================================================
 
-Copyright (c) 2010-2014 Darkstar Dev Teams
+  Copyright (c) 2026 LandSandBoat Dev Teams
 
-This program is free software: you can redistribute it and/or modify
-it under the terms of the GNU General Public License as published by
-the Free Software Foundation, either version 3 of the License, or
-(at your option) any later version.
+  This program is free software: you can redistribute it and/or modify
+  it under the terms of the GNU General Public License as published by
+  the Free Software Foundation, either version 3 of the License, or
+  (at your option) any later version.
 
-This program is distributed in the hope that it will be useful,
-but WITHOUT ANY WARRANTY; without even the implied warranty of
-MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-GNU General Public License for more details.
+  This program is distributed in the hope that it will be useful,
+  but WITHOUT ANY WARRANTY; without even the implied warranty of
+  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+  GNU General Public License for more details.
 
-You should have received a copy of the GNU General Public License
-along with this program.  If not, see http://www.gnu.org/licenses/
-
-This file is part of DarkStar-server source code.
+  You should have received a copy of the GNU General Public License
+  along with this program.  If not, see http://www.gnu.org/licenses/
 
 ===========================================================================
 */
 
-#ifndef __XILOADER_DEFINES_H_INCLUDED__
-#define __XILOADER_DEFINES_H_INCLUDED__
-
-#if defined(_MSC_VER) && (_MSC_VER >= 1020)
 #pragma once
-#endif
 
-#include <winsock2.h>
-
-#include <process.h>
-#include <stdint.h>
-#include <string>
-#include <time.h>
 #include <windows.h>
 
 #include <ole2.h>
 
-#include "detours/detours.h"
-
-#include "config.h"
-#include "enums/pol_function.h"
-
-#include "client/sdk/ffxi.h"
-#include "client/sdk/polcore.h"
+#include "sdk/ffxi.h"
+#include "sdk/polcore.h"
 
 namespace xiloader
 {
@@ -67,6 +49,4 @@ const IID IID_IPOLCoreCom[] = {
 const CLSID CLSID_FFXiEntry = { 0x989D790D, 0x6236, 0x11D4, { 0x80, 0xE9, 0x00, 0x10, 0x5A, 0x81, 0xE8, 0x90 } };
 const IID   IID_IFFXiEntry  = { 0x989D790C, 0x6236, 0x11D4, { 0x80, 0xE9, 0x00, 0x10, 0x5A, 0x81, 0xE8, 0x90 } };
 
-}; // namespace xiloader
-
-#endif // __XILOADER_DEFINES_H_INCLUDED__
+} // namespace xiloader

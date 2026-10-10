@@ -27,7 +27,7 @@
 
 #include <objbase.h>
 
-#include "polrelay.h"
+#include "client/polrelay.h"
 
 namespace xiloader
 {

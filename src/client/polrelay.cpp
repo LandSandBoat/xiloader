@@ -19,8 +19,6 @@
 ===========================================================================
 */
 
-#include "defines.h"
-
 #include "polrelay.h"
 
 #include "console.h"

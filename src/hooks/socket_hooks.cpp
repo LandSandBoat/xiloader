@@ -21,10 +21,14 @@
 
 #include "socket_hooks.h"
 
-#include "defines.h"
+#include <winsock2.h>
 
+#include <windows.h>
+
+#include "detours/detours.h"
+
+#include "client/polrelay.h"
 #include "console.h"
-#include "polrelay.h"
 
 #include "enums/lobby_command.h"
 

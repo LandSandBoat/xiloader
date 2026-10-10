@@ -21,10 +21,8 @@
 
 #include "hairpin_fix.h"
 
-#include "defines.h"
-
+#include "client/pattern_scan.h"
 #include "console.h"
-#include "functions.h"
 
 namespace
 {
@@ -64,7 +62,7 @@ DWORD xiloader::ApplyHairpinFixThread(LPVOID lpParam)
     //      8B 82 902E0100        - mov eax, [edx+00012E90]
     //      89 02                 - mov [edx], eax <-- edit this
 
-    auto hairpinAddress = (DWORD)xiloader::functions::FindPattern("FFXiMain.dll", (BYTE*)"\x8B\x82\xFF\xFF\xFF\xFF\x89\x02\x8B\x0D", "xx????xxxx");
+    auto hairpinAddress = (DWORD)xiloader::memory::FindPattern("FFXiMain.dll", (BYTE*)"\x8B\x82\xFF\xFF\xFF\xFF\x89\x02\x8B\x0D", "xx????xxxx");
     if (hairpinAddress == 0)
     {
         xiloader::console::output(xiloader::color::error, "Failed to locate main hairpin hack address!");
@@ -80,7 +78,7 @@ DWORD xiloader::ApplyHairpinFixThread(LPVOID lpParam)
     //      8B 46 0C              - mov eax, [esi+0C]
     //      85 C0                 - test eax, eax
 
-    auto zoneChangeAddress = (DWORD)xiloader::functions::FindPattern("FFXiMain.dll", (BYTE*)"\x8B\x0D\xFF\xFF\xFF\xFF\x89\x01\x8B\x46", "xx????xxxx");
+    auto zoneChangeAddress = (DWORD)xiloader::memory::FindPattern("FFXiMain.dll", (BYTE*)"\x8B\x0D\xFF\xFF\xFF\xFF\x89\x01\x8B\x46", "xx????xxxx");
     if (zoneChangeAddress == 0)
     {
         xiloader::console::output(xiloader::color::error, "Failed to locate zone change hairpin address!");
