@@ -34,74 +34,9 @@ along with this program.  If not, see http://www.gnu.org/licenses/
 #include <limits>
 #include <sstream>
 
-#include "qrcodegen.hpp"
 #include <nlohmann/json.hpp>
 
 using json = nlohmann::json;
-
-template <typename T, typename U>
-T& ref(U* buf, std::size_t index)
-{
-    return *reinterpret_cast<T*>(reinterpret_cast<uint8_t*>(buf) + index);
-}
-
-// from https://github.com/nayuki/QR-Code-generator/blob/master/cpp/QrCodeGeneratorDemo.cpp
-// Slightly modified
-static std::string qrToSvgString(const qrcodegen::QrCode& qr, int border)
-{
-    if (border < 0)
-    {
-        throw std::domain_error("Border must be non-negative");
-    }
-
-    if (border > std::numeric_limits<int>::max() / 2 || border * 2 > std::numeric_limits<int>::max() - qr.getSize())
-    {
-        throw std::overflow_error("Border too large");
-    }
-
-    std::ostringstream sb;
-    sb << "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n";
-    sb << "<!DOCTYPE svg PUBLIC \"-//W3C//DTD SVG 1.1//EN\" \"http://www.w3.org/Graphics/SVG/1.1/DTD/svg11.dtd\">\n";
-    sb << "<svg xmlns=\"http://www.w3.org/2000/svg\" version=\"1.1\" viewBox=\"0 0 ";
-    sb << (qr.getSize() + border * 2) << " " << (qr.getSize() + border * 2) << "\" stroke=\"none\">\n";
-    sb << "\t<rect width=\"100%\" height=\"100%\" fill=\"#FFFFFF\"/>\n";
-    sb << "\t<path d=\"";
-    for (int y = 0; y < qr.getSize(); y++)
-    {
-        for (int x = 0; x < qr.getSize(); x++)
-        {
-            if (qr.getModule(x, y))
-            {
-                if (x != 0 || y != 0)
-                    sb << " ";
-                sb << "M" << (x + border) << "," << (y + border) << "h1v1h-1z";
-            }
-        }
-    }
-    sb << "\" fill=\"#000000\"/>\n";
-    sb << "</svg>\n";
-    return sb.str();
-}
-
-static std::string getTemporaryPath()
-{
-    return std::filesystem::temp_directory_path().generic_string();
-}
-
-// Return filename for later deletion
-// Only input filename as "name.ext" and don't include the path
-static std::string writeSvgToDisk(std::string filename, std::string contents)
-{
-    filename = getTemporaryPath() + filename;
-    std::ofstream svg(filename, std::ios::out | std::ios::trunc);
-
-    svg.write(contents.c_str(), contents.length());
-
-    svg.flush();
-    svg.close();
-
-    return filename;
-}
 
 template <typename T>
 struct always_false : std::false_type

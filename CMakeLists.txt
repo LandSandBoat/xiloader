@@ -70,6 +70,8 @@ add_executable(xiloader
     src/net/tls_client_config.h
     src/network.cpp
     src/network.h
+    src/otp/qr_code.cpp
+    src/otp/qr_code.h
     src/otp/trust_token_manager.cpp
     src/otp/trust_token_manager.h
     src/playonline.cpp

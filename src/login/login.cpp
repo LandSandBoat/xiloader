@@ -25,14 +25,13 @@
 #include "auth_connection.h"
 #include "helpers.h"
 #include "network.h"
+#include "otp/qr_code.h"
 #include "otp/trust_token_manager.h"
 #include "ui/prompts.h"
 
 #include "enums/login_command.h"
 #include "enums/login_outcome.h"
 #include "enums/login_result.h"
-
-#include <shellapi.h>
 
 #include <optional>
 
@@ -218,19 +217,13 @@ void onCreateTotpSuccess(const json& reply, Menu& menu)
         return;
     }
 
-    const auto qrCode      = qrcodegen::QrCode::encodeText(maybeURI.value().c_str(), qrcodegen::QrCode::Ecc::LOW);
-    const auto svgFilePath = writeSvgToDisk("temp.svg", qrToSvgString(qrCode, 4));
+    const auto svgFilePath = xiloader::otp::writeQrCode(maybeURI.value());
 
     xiloader::console::output(xiloader::color::info, "Open your authenticator application on your phone and prepare to scan the QR code.");
 
     if (xiloader::ui::okCancelDialog(menu, "Open QR code in my default browser"))
     {
-        // ShellExecuteA returns a value above 32 on success
-        const auto opened = reinterpret_cast<INT_PTR>(ShellExecuteA(nullptr, "open", svgFilePath.c_str(), nullptr, nullptr, SW_SHOWNORMAL));
-        if (opened <= 32)
-        {
-            xiloader::console::output(xiloader::color::error, "Failed to open the QR code (error %d). Open %s manually.", static_cast<int>(opened), svgFilePath.c_str());
-        }
+        xiloader::otp::openQrCode(svgFilePath);
 
         xiloader::console::output(xiloader::color::info, "Once saved please use the \"Validate 2FA OTP\" option to verify the OTP.");
     }
@@ -249,11 +242,7 @@ void onVerifyTotpSuccess(const json& reply)
         xiloader::console::output(xiloader::color::info, "You may remove your TOTP with this recovery code.");
     }
 
-    const auto svgFilePath = getTemporaryPath() + "temp.svg";
-    if (std::filesystem::exists(svgFilePath))
-    {
-        std::filesystem::remove(svgFilePath);
-    }
+    xiloader::otp::removeQrCode();
 }
 
 auto handleReply(const std::string& text, uint32_t& accountId, const TrustTokenManager& trustTokens, Menu& menu) -> LoginOutcome
