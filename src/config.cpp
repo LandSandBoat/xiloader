@@ -122,6 +122,7 @@ auto applyJsonFile(Config& config, const std::string& filename) -> std::expected
     check(read(data, "server", config.serverAddress));
     check(read(data, "username", config.username));
     check(read(data, "password", config.password));
+    check(read(data, "fingerprint", config.fingerprint));
     check(read(data, "hairpin", config.hairpin));
     check(read(data, "hide", config.hide));
     check(read(data, "plain", config.plainMenus));
@@ -235,6 +236,10 @@ auto Config::load(const int argc, const char* const argv[]) -> std::expected<Con
         .help("(optional) Use plain text menus. Always on under Wine.")
         .append();
 
+    args.add_argument("--fingerprint")
+        .help("(optional) The server's key fingerprint, as the loader prints it (SHA256:...). The server is only trusted if its key matches.")
+        .append();
+
     args.add_argument("--diagnose")
         .implicit_value(true)
         .help("(optional) Check the PlayOnline install and the server, print a report and exit. Nothing is changed and the game is not started.")
@@ -280,6 +285,7 @@ auto Config::load(const int argc, const char* const argv[]) -> std::expected<Con
     apply("--user", config.username);
     apply("--pass", config.password);
     apply("--otp", config.otpCode);
+    apply("--fingerprint", config.fingerprint);
     apply("--dataport", config.loginDataPort);
     apply("--viewport", config.loginViewPort);
     apply("--authport", config.loginAuthPort);

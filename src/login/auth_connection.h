@@ -48,6 +48,12 @@ public:
     // Connects and completes the handshake. The error says which step failed.
     auto connect(const std::string& server, uint16_t port) -> std::expected<void, std::string>;
 
+    // "SHA256:" and the unpadded base64 hash of the server's public key, as ssh prints them. Needs a completed connect.
+    auto fingerprint() const -> std::expected<std::string, std::string>;
+
+    // The server is this machine
+    auto isLoopback() const -> bool;
+
     // Sends one request and waits for the reply. The error says why the connection failed.
     auto exchange(const std::string& request) -> std::expected<std::string, std::string>;
 

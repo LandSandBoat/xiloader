@@ -46,6 +46,7 @@ struct Config
     std::string username;                          // The username being logged in with.
     std::string password;                          // The password being logged in with.
     std::string otpCode;                           // The OTP code the user input
+    std::string fingerprint;                       // The server key to insist on, from --fingerprint
     bool        trustThisComputer = false;         // user checkbox / CLI flag for "trust this computer"
     bool        hairpin           = false;
     bool        plainMenus        = false; // Line-based menus instead of FTXUI; always on under Wine

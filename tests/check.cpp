@@ -28,6 +28,7 @@
 #include "config.h"
 #include "diagnostics/checks.h"
 #include "lobby/data_connection.h"
+#include "login/known_servers.h"
 #include "ui/menu.h"
 
 #include <filesystem>
@@ -318,6 +319,49 @@ void checkInstallChecks()
     assert(std::string_view(xiloader::languageName(xiloader::Language::European)) == "EU");
 }
 
+void checkKnownServers()
+{
+    using xiloader::judgeServer;
+    using xiloader::ServerTrust;
+
+    const std::string key   = "SHA256:AAAA";
+    const std::string other = "SHA256:BBBB";
+
+    // First sight asks, the key on record passes, another key is refused
+    assert(judgeServer(std::nullopt, key, "", false) == ServerTrust::Ask);
+    assert(judgeServer(key, key, "", false) == ServerTrust::Trusted);
+    assert(judgeServer(other, key, "", false) == ServerTrust::Changed);
+
+    // A loopback server is never asked about or refused
+    assert(judgeServer(std::nullopt, key, "", true) == ServerTrust::Remember);
+    assert(judgeServer(other, key, "", true) == ServerTrust::Remember);
+    assert(judgeServer(key, key, "", true) == ServerTrust::Trusted);
+
+    // --fingerprint decides on its own, whatever is on record and wherever the server is
+    assert(judgeServer(std::nullopt, key, "AAAA", false) == ServerTrust::Remember);
+    assert(judgeServer(other, key, "sha256:AAAA==", false) == ServerTrust::Remember);
+    assert(judgeServer(key, key, "SHA256:BBBB", false) == ServerTrust::PinMismatch);
+    assert(judgeServer(std::nullopt, key, "SHA256:aaaa", true) == ServerTrust::PinMismatch);
+
+    assert(xiloader::normalizeFingerprint(" sha256:AbC= ") == "SHA256:AbC");
+    assert(xiloader::serverKey("Play.Example.COM", 54231) == "play.example.com:54231");
+
+    const auto file = std::filesystem::temp_directory_path() / "xiloader_check_known_servers.json";
+    std::filesystem::remove(file);
+
+    const xiloader::KnownServers servers(file);
+    assert(!servers.find("a:1"));
+    servers.remember("a:1", key);
+    servers.remember("b:2", other);
+    servers.remember("a:1", other);
+    assert(servers.find("a:1") == other && servers.find("b:2") == other && !servers.find("c:3"));
+
+    // A damaged file reads as empty instead of failing
+    std::ofstream(file) << "not json";
+    assert(!servers.find("a:1"));
+    std::filesystem::remove(file);
+}
+
 } // namespace
 
 auto main() -> int
@@ -327,6 +371,7 @@ auto main() -> int
     checkLobbyData();
     checkPatternScan();
     checkInstallChecks();
+    checkKnownServers();
     std::println("ok");
     return 0;
 }

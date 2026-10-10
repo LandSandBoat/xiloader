@@ -180,6 +180,11 @@ auto checkServer(const Config& config) -> std::vector<Check>
     if (const auto connected = auth.connect(text, config.loginAuthPort); connected)
     {
         checks.push_back({ .name = "Server TLS", .detail = "handshake completed" });
+
+        if (const auto key = auth.fingerprint())
+        {
+            checks.push_back({ .name = "Server key", .detail = *key });
+        }
     }
     else
     {

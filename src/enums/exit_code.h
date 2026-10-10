@@ -38,6 +38,7 @@ enum class ExitCode : uint8_t
     PlayOnlineUnsupported = 6, // Installed, but not a version the loader knows
     ProfileServerFailed   = 7,
     GameFailed            = 8,
+    ServerUntrusted       = 9, // Its key was refused, or isn't the one on record
 };
 
 } // namespace xiloader

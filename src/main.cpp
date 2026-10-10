@@ -48,6 +48,7 @@ This file is part of DarkStar-server source code.
 #include "hooks/socket_hooks.h"
 #include "lobby/data_connection.h"
 #include "login/auth_connection.h"
+#include "login/known_servers.h"
 #include "login/login.h"
 #include "net/resolve.h"
 
@@ -98,7 +99,8 @@ auto run(xiloader::Config& config) -> ExitCode
     const xiloader::RelayStop relayStop;
 
     // Attempt to resolve the server address..
-    ULONG ulAddress = 0;
+    const std::string serverName = config.serverAddress;
+    ULONG             ulAddress  = 0;
 
     xiloader::console::output(xiloader::color::info, "Resolving '{}' ...", config.serverAddress);
 
@@ -117,6 +119,11 @@ auto run(xiloader::Config& config) -> ExitCode
     {
         xiloader::console::output(xiloader::color::error, "{}", connected.error());
         return ExitCode::ServerUnreachable;
+    }
+
+    if (!xiloader::verifyServer(auth, serverName, config))
+    {
+        return ExitCode::ServerUntrusted;
     }
 
     const auto session = xiloader::login::run(auth, config);

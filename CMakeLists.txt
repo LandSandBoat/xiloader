@@ -70,6 +70,7 @@ add_executable(xiloader
     src/enums/polcon_state.h
     src/enums/reconnect.h
     src/enums/relay_phase.h
+    src/enums/server_trust.h
     src/guards.h
     src/hooks/hairpin_fix.cpp
     src/hooks/hairpin_fix.h
@@ -80,9 +81,12 @@ add_executable(xiloader
     src/lobby/data_connection.h
     src/login/auth_connection.cpp
     src/login/auth_connection.h
+    src/login/known_servers.cpp
+    src/login/known_servers.h
     src/login/login.cpp
     src/login/login.h
     src/login/session.h
+    src/login/verify_server.cpp
     src/main.cpp
     src/net/resolve.cpp
     src/net/resolve.h
@@ -139,6 +143,7 @@ add_executable(xiloader_check
     src/console.cpp
     src/diagnostics/install_checks.cpp
     src/lobby/data_connection.cpp
+    src/login/known_servers.cpp
     src/ui/plain_menu.cpp
     tests/check.cpp
 )
