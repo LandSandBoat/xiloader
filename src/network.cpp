@@ -24,8 +24,8 @@ This file is part of DarkStar-server source code.
 
 #include "network.h"
 #include "helpers.h"
-#include "menus.h"
 #include "otp/trust_token_manager.h"
+#include "ui/prompts.h"
 #include <iphlpapi.h>
 #include <vector>
 
@@ -266,6 +266,7 @@ bool network::VerifyAccount(datasocket* sock)
     auto command = xiloader::LoginCommand::None;
 
     const xiloader::TrustTokenManager trustTokens(xiloader::config.serverAddress);
+    const auto                        menu = xiloader::ui::makeMenu(xiloader::config.plainMenus);
 
     /* Create connection if required.. */
 
@@ -290,12 +291,12 @@ bool network::VerifyAccount(datasocket* sock)
         while (selected == MenuSelection::None)
         {
             xiloader::console::output("What would you like to do?");
-            selected = menus::mainMenu();
+            selected = xiloader::ui::mainMenu(*menu);
 
             if (selected == MenuSelection::TwoFactorSubmenu)
             {
                 xiloader::console::output("What would you like to do?");
-                selected = menus::twoFactorSubMenu();
+                selected = xiloader::ui::twoFactorSubMenu(*menu);
             }
         }
 
@@ -307,7 +308,7 @@ bool network::VerifyAccount(datasocket* sock)
         {
             case MenuSelection::Login:
             {
-                menus::enterCredentialsWithOTP(xiloader::config.username, xiloader::config.password, xiloader::config.otpCode, &xiloader::config.trustThisComputer, &trustTokens);
+                xiloader::ui::enterCredentialsWithOTP(*menu, xiloader::config.username, xiloader::config.password, xiloader::config.otpCode, &xiloader::config.trustThisComputer, &trustTokens);
 
                 command = xiloader::LoginCommand::Login;
                 break;
@@ -318,7 +319,7 @@ bool network::VerifyAccount(datasocket* sock)
                 xiloader::console::output("Username (3-15 characters)");
                 xiloader::console::output("Password (6-32 characters)");
 
-                while (!menus::createNewAccount(xiloader::config.username, xiloader::config.password))
+                while (!xiloader::ui::createNewAccount(*menu, xiloader::config.username, xiloader::config.password))
                 {
                     xiloader::console::output(xiloader::color::error, "Passwords did not match! Please try again.");
                 }
@@ -332,11 +333,11 @@ bool network::VerifyAccount(datasocket* sock)
                 xiloader::console::output("Before resetting your password, first verify your account details.");
                 xiloader::console::output("Please enter your login information. The OTP code is only necessary if you have one registered.");
 
-                menus::enterCredentialsWithOTP(xiloader::config.username, xiloader::config.password, xiloader::config.otpCode);
+                xiloader::ui::enterCredentialsWithOTP(*menu, xiloader::config.username, xiloader::config.password, xiloader::config.otpCode);
 
                 xiloader::console::output("Enter new password (6-32 characters): ");
 
-                while (!menus::confirmNewPassword(new_password))
+                while (!xiloader::ui::confirmNewPassword(*menu, new_password))
                 {
                     xiloader::console::output(xiloader::color::error, "Passwords did not match! Please try again.");
                 }
@@ -346,7 +347,7 @@ bool network::VerifyAccount(datasocket* sock)
             }
             case MenuSelection::RegisterTwoFactorOTP:
             {
-                menus::enterCredentialsNoOTP(xiloader::config.username, xiloader::config.password);
+                xiloader::ui::enterCredentialsNoOTP(*menu, xiloader::config.username, xiloader::config.password);
 
                 command = xiloader::LoginCommand::CreateTotp;
                 break;
@@ -355,7 +356,7 @@ bool network::VerifyAccount(datasocket* sock)
             case MenuSelection::RemoveTwoFactorOTP:
             {
                 xiloader::console::output("Please enter your login information; your OTP code may be substituted for the recovery code");
-                menus::enterCredentialsWithOTP(xiloader::config.username, xiloader::config.password, xiloader::config.otpCode);
+                xiloader::ui::enterCredentialsWithOTP(*menu, xiloader::config.username, xiloader::config.password, xiloader::config.otpCode);
 
                 command = xiloader::LoginCommand::RemoveTotp;
                 break;
@@ -364,14 +365,14 @@ bool network::VerifyAccount(datasocket* sock)
             case MenuSelection::RegenerateTwoFactorRemovalCode:
             {
                 xiloader::console::output("Please enter your login information; your OTP code may be substituted for the recovery code");
-                menus::enterCredentialsWithOTP(xiloader::config.username, xiloader::config.password, xiloader::config.otpCode);
+                xiloader::ui::enterCredentialsWithOTP(*menu, xiloader::config.username, xiloader::config.password, xiloader::config.otpCode);
 
                 command = xiloader::LoginCommand::RegenerateRecoveryCode;
                 break;
             }
             case MenuSelection::ValidateTwoFactorOTP: // also enables OTP
             {
-                menus::enterCredentialsWithOTP(xiloader::config.username, xiloader::config.password, xiloader::config.otpCode);
+                xiloader::ui::enterCredentialsWithOTP(*menu, xiloader::config.username, xiloader::config.password, xiloader::config.otpCode);
 
                 command = xiloader::LoginCommand::VerifyTotp;
                 break;
@@ -380,7 +381,7 @@ bool network::VerifyAccount(datasocket* sock)
             {
                 std::string revokeUsername;
                 xiloader::console::output("Enter the username to revoke trust for:");
-                menus::enterUsernameOnly(revokeUsername);
+                xiloader::ui::enterUsernameOnly(*menu, revokeUsername);
                 trustTokens.revoke(revokeUsername);
                 xiloader::console::output(xiloader::color::info, "Computer trust revoked for '%s'.", revokeUsername.c_str());
                 return 0; // Return to menu
@@ -466,7 +467,7 @@ bool network::VerifyAccount(datasocket* sock)
             return false;
         }
 
-        retval = handleLoginCommand(result, login_reply_json, sock->AccountId, sock->s, trustTokens);
+        retval = handleLoginCommand(result, login_reply_json, sock->AccountId, sock->s, trustTokens, *menu);
     }
     else
     {

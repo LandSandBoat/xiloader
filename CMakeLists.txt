@@ -62,7 +62,6 @@ add_executable(xiloader
     src/functions.cpp
     src/functions.h
     src/main.cpp
-    src/menus.h
     src/network.cpp
     src/network.h
     src/otp/trust_token_manager.cpp
@@ -71,6 +70,12 @@ add_executable(xiloader
     src/playonline.h
     src/polrelay.cpp
     src/polrelay.h
+    src/ui/ftxui_menu.cpp
+    src/ui/menu.cpp
+    src/ui/menu.h
+    src/ui/plain_menu.cpp
+    src/ui/prompts.cpp
+    src/ui/prompts.h
     ${CMAKE_CURRENT_BINARY_DIR}/src/xiloader.rc
     xiloader.manifest
 )
@@ -97,6 +102,15 @@ target_link_libraries(xiloader PUBLIC
     ftxui::dom
     ftxui::component
     qr-code-generator)
+
+# Assert-based checks for the parts that run without the game
+add_executable(xiloader_check
+    src/ui/plain_menu.cpp
+    tests/check.cpp
+)
+
+target_include_directories(xiloader_check PRIVATE ${PROJECT_SOURCE_DIR}/src)
+target_compile_definitions(xiloader_check PRIVATE NOMINMAX WIN32_LEAN_AND_MEAN)
 
 message(STATUS "CMAKE_VERSION: ${CMAKE_VERSION}")
 message(STATUS "CMAKE_BUILD_TYPE: ${CMAKE_BUILD_TYPE}")

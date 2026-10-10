@@ -47,6 +47,7 @@ struct Config
     std::string otpCode;                           // The OTP code the user input
     bool        trustThisComputer = false;         // user checkbox / CLI flag for "trust this computer"
     bool        hairpin           = false;
+    bool        plainMenus        = false; // Line-based menus instead of FTXUI; always on under Wine
     bool        hide              = false; // Determines whether or not to hide the console window after FFXI starts.
 };
 

@@ -25,6 +25,7 @@
 #include "helpers.h"
 #include "network.h"
 #include "otp/trust_token_manager.h"
+#include "ui/prompts.h"
 
 #include "enums/login_result.h"
 
@@ -35,7 +36,7 @@
 
 using json = nlohmann::json;
 
-bool handleLoginCommand(xiloader::LoginResult command, json& login_reply_json, uint32_t& accountId, SOCKET& sock, const xiloader::TrustTokenManager& trustTokens)
+bool handleLoginCommand(xiloader::LoginResult command, json& login_reply_json, uint32_t& accountId, SOCKET& sock, const xiloader::TrustTokenManager& trustTokens, xiloader::ui::Menu& menu)
 {
     /* Handle the obtained result.. */
     switch (command)
@@ -151,7 +152,7 @@ bool handleLoginCommand(xiloader::LoginResult command, json& login_reply_json, u
 
             xiloader::console::output(xiloader::color::info, "Open your authenticator application on your phone and prepare to scan the QR code.");
 
-            bool display = menus::okCancelDialog("Open QR code in my default browser");
+            bool display = xiloader::ui::okCancelDialog(menu, "Open QR code in my default browser");
             if (display)
             {
                 // ShellExecuteA returns a value above 32 on success

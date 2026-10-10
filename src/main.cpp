@@ -447,6 +447,11 @@ int __cdecl main(int argc, char* argv[])
         .help("(optional) Determines whether or not to hide the console window after FFXI starts.")
         .append();
 
+    args.add_argument("--plain")
+        .implicit_value(true)
+        .help("(optional) Use plain text menus. Always on under Wine.")
+        .append();
+
     args.add_argument("--trust")
         .implicit_value(true)
         .help("(optional) Trust this computer for 30 days, skipping 2FA on subsequent logins.")
@@ -519,6 +524,8 @@ int __cdecl main(int argc, char* argv[])
 
     xiloader::config.hide = args.is_used("--hide") ? args.get<bool>("--hide") : xiloader::config.hide;
 
+    xiloader::config.plainMenus = args.is_used("--plain") ? args.get<bool>("--plain") : xiloader::config.plainMenus;
+
     xiloader::config.trustThisComputer = args.is_used("--trust") ? args.get<bool>("--trust") : xiloader::config.trustThisComputer;
 
     bool readInJsonArgs = false;
@@ -580,6 +587,7 @@ int __cdecl main(int argc, char* argv[])
 
                 xiloader::config.hairpin           = jsonGet<bool>(jsonData, "hairpin").value_or(xiloader::config.hairpin);
                 xiloader::config.hide              = jsonGet<bool>(jsonData, "hide").value_or(xiloader::config.hide);
+                xiloader::config.plainMenus        = jsonGet<bool>(jsonData, "plain").value_or(xiloader::config.plainMenus);
                 xiloader::config.trustThisComputer = jsonGet<bool>(jsonData, "trust_this_computer").value_or(xiloader::config.trustThisComputer);
 
                 std::string language = jsonGet<std::string>(jsonData, "language").value_or({});
