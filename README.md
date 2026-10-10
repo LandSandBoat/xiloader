@@ -90,3 +90,13 @@ Requires VC2022 redist, included in https://aka.ms/vs/17/release/vc_redist.x86.e
 ### Linux (through Wine)
 
 Requires `winetricks vcrun2022`
+
+## Credits
+
+Thanks to [atom0s](https://github.com/atom0s) for starting this project, and for the FFXI research he has shared publicly over the years.
+
+Thanks to the LandSandBoat contributors, and to those of the projects it descends from.
+
+## License
+
+GPLv3. See [LICENSE](LICENSE).

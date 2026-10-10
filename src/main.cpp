@@ -186,6 +186,7 @@ auto __cdecl main(const int argc, char* argv[]) -> int
     const time_t currentTime = time(nullptr);
     const int    currentYear = localtime(&currentTime)->tm_year + 1900; // Year is returned as the number of years since 1900.
     xiloader::console::output(xiloader::color::lightred, "==========================================================");
+    xiloader::console::output(xiloader::color::lightgreen, "Original Boot Loader by atom0s (2014)");
     xiloader::console::output(xiloader::color::lightgreen, "DarkStar Boot Loader (c) 2015 DarkStar Team");
     xiloader::console::output(xiloader::color::lightgreen, "LandSandBoat Boot Loader (c) 2021-{} LandSandBoat Team (v{}.{}.{})", currentYear, version[0], version[1], version[2]);
     xiloader::console::output(xiloader::color::lightblue, "Using {}", MBEDTLS_VERSION_STRING_FULL); // this prints "Using Mbed TLS #.#.#"
