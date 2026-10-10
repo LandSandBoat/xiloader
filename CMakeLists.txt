@@ -1,5 +1,13 @@
 cmake_minimum_required(VERSION 3.15)
-project(xiloader CXX)
+# C is enabled here so the flag fix below reaches the C dependencies
+project(xiloader C CXX)
+
+# Parallel compiles behind sccache or ccache cannot share one PDB (/Zi), so embed the debug info in the objects (/Z7)
+if(MSVC AND (CMAKE_C_COMPILER_LAUNCHER OR CMAKE_CXX_COMPILER_LAUNCHER))
+    foreach(flags CMAKE_C_FLAGS_DEBUG CMAKE_CXX_FLAGS_DEBUG CMAKE_C_FLAGS_RELWITHDEBINFO CMAKE_CXX_FLAGS_RELWITHDEBINFO)
+        string(REPLACE "/Zi" "/Z7" ${flags} "${${flags}}")
+    endforeach()
+endif()
 
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
