@@ -46,6 +46,8 @@ xiloader --server example.com --fingerprint SHA256:SsZ/oJuyOzk59TZicWuiA/F8xIW8l
 
 `--fingerprint`, or `fingerprint` in the json file, names the key to insist on. The server is trusted without a question if it matches and refused if it does not, whatever is on record, and a match replaces the record. A server's operator can publish the fingerprint, or ship it in a launcher config, so players never have to judge an unknown key. `--diagnose` prints it.
 
+A "trust this computer" token is bound to the key of the server that issued it. If that server's key changes, the token is discarded instead of being sent, and the next login asks for the OTP code again.
+
 ## Troubleshooting
 
 Before asking for a password the loader checks that PlayOnline and the game are installed for the chosen language, and says what to do when they are not. If `--lang` is not given and PlayOnline is only installed for another language, that one is used.

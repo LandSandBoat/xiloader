@@ -396,7 +396,7 @@ namespace xiloader::login
 
 auto run(AuthConnection& connection, Config& config) -> std::expected<Session, LoginOutcome>
 {
-    const TrustTokenManager trustTokens(config.serverAddress);
+    const TrustTokenManager trustTokens(config.serverAddress, connection.fingerprint().value_or(""));
     const auto              menu = xiloader::ui::makeMenu(config.plainMenus);
 
     // Credentials supplied up front are tried once before the menu shows

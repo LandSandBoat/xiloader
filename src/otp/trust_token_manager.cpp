@@ -151,10 +151,15 @@ void writeTokenStore(const std::string& filepath, const json& tokenData)
 namespace xiloader
 {
 
-TrustTokenManager::TrustTokenManager(std::string server)
+TrustTokenManager::TrustTokenManager(std::string server, std::string fingerprint, std::string store)
 : server(std::move(server))
-, storePath(getTrustTokenDir() + "trust_tokens.dat")
+, fingerprint(std::move(fingerprint))
+, storePath(std::move(store))
 {
+    if (storePath.empty())
+    {
+        storePath = getTrustTokenDir() + "trust_tokens.dat";
+    }
 }
 
 auto TrustTokenManager::key(const std::string& username) const -> std::string
@@ -180,6 +185,32 @@ auto TrustTokenManager::load(const std::string& username) const -> std::string
         return "";
     }
 
+    // Without the server's key there is nothing to hold the token to, so it stays where it is
+    if (fingerprint.empty())
+    {
+        return "";
+    }
+
+    std::string issuedTo;
+    if (const auto bound = entry->find("fingerprint"); bound != entry->end() && bound->is_string())
+    {
+        issuedTo = bound->get<std::string>();
+    }
+
+    if (issuedTo.empty())
+    {
+        // Saved before tokens were bound to a key: it now belongs to the key the user has just trusted
+        (*entry)["fingerprint"] = fingerprint;
+        writeTokenStore(storePath, tokenData);
+    }
+    else if (issuedTo != fingerprint)
+    {
+        // Another server at this address must not be handed it
+        tokenData.erase(entry);
+        writeTokenStore(storePath, tokenData);
+        return "";
+    }
+
     return (*entry)["token"].get<std::string>();
 }
 
@@ -187,7 +218,7 @@ void TrustTokenManager::save(const std::string& username, const std::string& tok
 {
     json tokenData = readTokenStore(storePath);
 
-    tokenData[key(username)] = { { "token", token }, { "expires", expiresEpoch } };
+    tokenData[key(username)] = { { "token", token }, { "expires", expiresEpoch }, { "fingerprint", fingerprint } };
 
     writeTokenStore(storePath, tokenData);
 }

@@ -29,6 +29,7 @@
 #include "diagnostics/checks.h"
 #include "lobby/data_connection.h"
 #include "login/known_servers.h"
+#include "otp/trust_token_manager.h"
 #include "ui/menu.h"
 
 #include <filesystem>
@@ -40,6 +41,8 @@
 #include <thread>
 
 #include <ws2tcpip.h>
+
+#include <nlohmann/json.hpp>
 
 namespace
 {
@@ -362,6 +365,35 @@ void checkKnownServers()
     std::filesystem::remove(file);
 }
 
+void checkTrustTokens()
+{
+    const auto store = (std::filesystem::temp_directory_path() / "xiloader_check_trust_tokens.dat").string();
+    std::filesystem::remove(store);
+
+    const nlohmann::json reply = { { "trust_token", "token" }, { "trust_expires", static_cast<int64_t>(time(nullptr)) + 3600 } };
+
+    const xiloader::TrustTokenManager issuer("server", "SHA256:AAAA", store);
+    assert(!issuer.isTrusted("user"));
+    issuer.acceptLoginReply(reply, "user");
+    assert(issuer.isTrusted("user") && !issuer.isTrusted("other"));
+
+    // Without a key to compare, the token is neither used nor thrown away
+    assert(!xiloader::TrustTokenManager("server", "", store).isTrusted("user"));
+    assert(issuer.isTrusted("user"));
+
+    // A server with another key doesn't get it, and it is gone afterwards
+    assert(!xiloader::TrustTokenManager("server", "SHA256:BBBB", store).isTrusted("user"));
+    assert(!issuer.isTrusted("user"));
+
+    // A token saved before keys were recorded is adopted by the first key that asks
+    const xiloader::TrustTokenManager legacy("server", "", store);
+    legacy.acceptLoginReply(reply, "user");
+    assert(issuer.isTrusted("user"));
+    assert(!xiloader::TrustTokenManager("server", "SHA256:BBBB", store).isTrusted("user"));
+
+    std::filesystem::remove(store);
+}
+
 } // namespace
 
 auto main() -> int
@@ -372,6 +404,7 @@ auto main() -> int
     checkPatternScan();
     checkInstallChecks();
     checkKnownServers();
+    checkTrustTokens();
     std::println("ok");
     return 0;
 }

@@ -31,10 +31,13 @@ namespace xiloader
 
 // The trust tokens one server has issued to this computer; a valid token lets a login skip the OTP code.
 // Tokens for every server share one file under %APPDATA%, encrypted for the current Windows user.
+// A token is bound to the key the server had when it issued it, and is dropped rather than sent to a server with another key.
 class TrustTokenManager
 {
 public:
-    explicit TrustTokenManager(std::string server);
+    // fingerprint is the connected server's key, as AuthConnection::fingerprint gives it.
+    // store is where the tokens are kept; left empty it is the file under %APPDATA%.
+    TrustTokenManager(std::string server, std::string fingerprint, std::string store = {});
 
     auto isTrusted(const std::string& username) const -> bool;
 
@@ -47,13 +50,14 @@ public:
     void revoke(const std::string& username) const;
 
 private:
-    // Returns an empty string when the user has no token; an expired token is removed from the file
+    // Returns an empty string when the user has no token; an expired token, or one from a server with another key, is removed from the file
     auto load(const std::string& username) const -> std::string;
     void save(const std::string& username, const std::string& token, int64_t expiresEpoch) const;
 
     auto key(const std::string& username) const -> std::string;
 
     std::string server;
+    std::string fingerprint;
     std::string storePath;
 };
 
