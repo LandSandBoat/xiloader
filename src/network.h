@@ -29,6 +29,7 @@ This file is part of DarkStar-server source code.
 #endif
 
 #include <conio.h>
+#include <optional>
 #include <string>
 #include <windows.h>
 #include <winsock2.h>
@@ -119,13 +120,13 @@ public:
     static bool ResolveHostname(const char* host, PULONG lpOutput);
 
     /**
-     * @brief Verifies the players login information; also handles creating new accounts.
+     * @brief Sends one request on the auth connection and waits for the reply.
      *
-     * @param sock          The datasocket object with the connection socket.
+     * @param request       The request to send.
      *
-     * @return True on success, false otherwise.
+     * @return The reply, or nothing when the connection failed.
      */
-    static bool VerifyAccount(datasocket* sock);
+    static std::optional<std::string> ExchangeAuth(const std::string& request);
 
     /**
      * @brief Starts the data communication between the client and server.

@@ -23,16 +23,12 @@ This file is part of DarkStar-server source code.
 */
 
 #include "network.h"
+#include "app.h"
 #include "helpers.h"
-#include "otp/trust_token_manager.h"
-#include "ui/prompts.h"
 #include <iphlpapi.h>
 #include <vector>
 
-#include "command_handler.h"
-
 #include "enums/lobby_data.h"
-#include "enums/login_command.h"
 #include "helpers.h"
 
 // mbed tls state
@@ -251,240 +247,36 @@ bool network::ResolveHostname(const char* host, PULONG lpOutput)
 }
 
 /**
- * @brief Verifies the players login information; also handles creating new accounts.
+ * @brief Sends one request on the auth connection and waits for the reply.
  *
- * @param sock      The datasocket object with the connection socket.
+ * @param request   The request to send.
  *
- * @return True on success, false otherwise.
+ * @return The reply, or nothing when the connection failed.
  */
-bool network::VerifyAccount(datasocket* sock)
+std::optional<std::string> network::ExchangeAuth(const std::string& request)
 {
-    unsigned char recvBuffer[8192] = { 0 };
-    unsigned char sendBuffer[8192] = { 0 };
-    std::string   new_password     = "";
-
-    auto command = xiloader::LoginCommand::None;
-
-    const xiloader::TrustTokenManager trustTokens(xiloader::config.serverAddress);
-    const auto                        menu = xiloader::ui::makeMenu(xiloader::config.plainMenus);
-
-    /* Create connection if required.. */
-
-    // TODO: fix this check for TLS
-    /* if (sock->s == NULL || sock->s == INVALID_SOCKET)
-    {
-        if (!xiloader::network::CreateConnection(sock, g_LoginAuthPort.c_str()))
-            return false;
-    }*/
-
-    /* Determine if we should auto-login.. */
-    bool bUseAutoLogin = !xiloader::config.username.empty() && !xiloader::config.password.empty() && xiloader::state.firstLogin;
-    if (bUseAutoLogin)
-        xiloader::console::output(xiloader::color::lightgreen, "Autologin activated!");
-
-    if (!bUseAutoLogin)
-    {
-        auto selected = MenuSelection::None;
-
-        // Check for None, because the 2FA submenu can select None and needs to replay the main menu.
-        // Any other option is a "real" selection
-        while (selected == MenuSelection::None)
-        {
-            xiloader::console::output("What would you like to do?");
-            selected = xiloader::ui::mainMenu(*menu);
-
-            if (selected == MenuSelection::TwoFactorSubmenu)
-            {
-                xiloader::console::output("What would you like to do?");
-                selected = xiloader::ui::twoFactorSubMenu(*menu);
-            }
-        }
-
-        xiloader::config.username = "";
-        xiloader::config.password = "";
-        xiloader::config.otpCode  = "";
-
-        switch (selected)
-        {
-            case MenuSelection::Login:
-            {
-                xiloader::ui::enterCredentialsWithOTP(*menu, xiloader::config.username, xiloader::config.password, xiloader::config.otpCode, &xiloader::config.trustThisComputer, &trustTokens);
-
-                command = xiloader::LoginCommand::Login;
-                break;
-            }
-            case MenuSelection::CreateAccount:
-            {
-                xiloader::console::output("Please enter your desired login information.");
-                xiloader::console::output("Username (3-15 characters)");
-                xiloader::console::output("Password (6-32 characters)");
-
-                while (!xiloader::ui::createNewAccount(*menu, xiloader::config.username, xiloader::config.password))
-                {
-                    xiloader::console::output(xiloader::color::error, "Passwords did not match! Please try again.");
-                }
-
-                command = xiloader::LoginCommand::CreateAccount;
-                break;
-            }
-
-            case MenuSelection::ChangePassword:
-            {
-                xiloader::console::output("Before resetting your password, first verify your account details.");
-                xiloader::console::output("Please enter your login information. The OTP code is only necessary if you have one registered.");
-
-                xiloader::ui::enterCredentialsWithOTP(*menu, xiloader::config.username, xiloader::config.password, xiloader::config.otpCode);
-
-                xiloader::console::output("Enter new password (6-32 characters): ");
-
-                while (!xiloader::ui::confirmNewPassword(*menu, new_password))
-                {
-                    xiloader::console::output(xiloader::color::error, "Passwords did not match! Please try again.");
-                }
-
-                command = xiloader::LoginCommand::ChangePassword;
-                break;
-            }
-            case MenuSelection::RegisterTwoFactorOTP:
-            {
-                xiloader::ui::enterCredentialsNoOTP(*menu, xiloader::config.username, xiloader::config.password);
-
-                command = xiloader::LoginCommand::CreateTotp;
-                break;
-            }
-
-            case MenuSelection::RemoveTwoFactorOTP:
-            {
-                xiloader::console::output("Please enter your login information; your OTP code may be substituted for the recovery code");
-                xiloader::ui::enterCredentialsWithOTP(*menu, xiloader::config.username, xiloader::config.password, xiloader::config.otpCode);
-
-                command = xiloader::LoginCommand::RemoveTotp;
-                break;
-            }
-
-            case MenuSelection::RegenerateTwoFactorRemovalCode:
-            {
-                xiloader::console::output("Please enter your login information; your OTP code may be substituted for the recovery code");
-                xiloader::ui::enterCredentialsWithOTP(*menu, xiloader::config.username, xiloader::config.password, xiloader::config.otpCode);
-
-                command = xiloader::LoginCommand::RegenerateRecoveryCode;
-                break;
-            }
-            case MenuSelection::ValidateTwoFactorOTP: // also enables OTP
-            {
-                xiloader::ui::enterCredentialsWithOTP(*menu, xiloader::config.username, xiloader::config.password, xiloader::config.otpCode);
-
-                command = xiloader::LoginCommand::VerifyTotp;
-                break;
-            }
-            case MenuSelection::RevokeComputerTrust:
-            {
-                std::string revokeUsername;
-                xiloader::console::output("Enter the username to revoke trust for:");
-                xiloader::ui::enterUsernameOnly(*menu, revokeUsername);
-                trustTokens.revoke(revokeUsername);
-                xiloader::console::output(xiloader::color::info, "Computer trust revoked for '%s'.", revokeUsername.c_str());
-                return 0; // Return to menu
-            }
-            case MenuSelection::Exit:
-            {
-                exit(0); // Bit ugly, can't really exit properly with the current code flow
-                break;
-            }
-
-            default:
-            {
-                xiloader::console::output("Invalid menu selection");
-                return 0;
-            }
-        }
-    }
-    else
-    {
-        /* User has auto-login enabled.. */
-        command                    = xiloader::LoginCommand::Login;
-        xiloader::state.firstLogin = false;
-    }
-
-    json login_json;
-    login_json["username"]     = xiloader::config.username;
-    login_json["password"]     = xiloader::config.password;
-    login_json["otp"]          = xiloader::config.otpCode;
-    login_json["new_password"] = new_password;
-    login_json["version"]      = xiloader::Config::versionNumber;
-    login_json["command"]      = static_cast<int8_t>(command);
-
-    if (command == xiloader::LoginCommand::Login) // Only send trust fields for login
-    {
-        trustTokens.addToLoginRequest(login_json, xiloader::config.username, xiloader::config.trustThisComputer);
-    }
-
-    std::string str          = login_json.dump();
-    const char* strBuffer    = str.c_str();
-    size_t      strBufferLen = strlen(strBuffer);
-
-    /* Send info to server and obtain response.. */
-    if (const auto written = mbedtls_ssl_write(&sslState::ssl, reinterpret_cast<const unsigned char*>(strBuffer), strBufferLen); written < 0)
+    if (const auto written = mbedtls_ssl_write(&sslState::ssl, reinterpret_cast<const unsigned char*>(request.data()), request.size()); written < 0)
     {
         xiloader::console::output(xiloader::color::error, "Failed to send the login request (%s). The login server may have closed the connection.", xiloader::mbedtlsErrorText(written).c_str());
+        return std::nullopt;
     }
 
-    std::memset(recvBuffer, 0, sizeof(recvBuffer));
+    unsigned char recvBuffer[8192] = { 0 };
 
-    if (mbedtls_ssl_read(&sslState::ssl, recvBuffer, sizeof(recvBuffer)) == MBEDTLS_ERR_SSL_TIMEOUT)
+    const auto received = mbedtls_ssl_read(&sslState::ssl, recvBuffer, sizeof(recvBuffer));
+    if (received == MBEDTLS_ERR_SSL_TIMEOUT)
     {
         xiloader::console::output(xiloader::color::error, "Remote failed to reply within the timeout, exiting...");
-        exit(2);
+        return std::nullopt;
     }
 
-    json login_reply_json = json::parse(recvBuffer, nullptr, false);
-
-    if (login_reply_json.is_discarded())
+    if (received <= 0)
     {
-        xiloader::console::output(xiloader::color::error, "Bad json reply from remote");
-        closesocket(sock->s);
-        sock->s = INVALID_SOCKET;
-        return false;
+        xiloader::console::output(xiloader::color::error, "Failed to read the login reply (%s). The login server may have closed the connection.", xiloader::mbedtlsErrorText(received).c_str());
+        return std::nullopt;
     }
 
-    bool retval = false;
-
-    std::string errorMessage = jsonGet<std::string>(login_reply_json, "error_message").value_or({}); // {} = empty string
-
-    if (errorMessage.empty())
-    {
-        auto result       = xiloader::LoginResult{};
-        auto maybeCommand = jsonGet<int8_t>(login_reply_json, "result");
-        if (maybeCommand.has_value())
-        {
-            result = static_cast<xiloader::LoginResult>(maybeCommand.value());
-        }
-        else
-        {
-            xiloader::console::output(xiloader::color::error, "xi_connect didn't send a proper reply command");
-            closesocket(sock->s);
-            sock->s = INVALID_SOCKET;
-            return false;
-        }
-
-        retval = handleLoginCommand(result, login_reply_json, sock->AccountId, sock->s, trustTokens, *menu);
-    }
-    else
-    {
-        xiloader::console::output(xiloader::color::error, "Error from remote:");
-
-        xiloader::console::printMultiLine(errorMessage, "\n", xiloader::color::error);
-        return false;
-    }
-
-    // Socket is already closed if handleLoginCommand is true
-    if (!retval)
-    {
-        closesocket(sock->s);
-    }
-
-    sock->s = INVALID_SOCKET;
-    return retval;
+    return std::string(reinterpret_cast<const char*>(recvBuffer), received);
 }
 
 /**

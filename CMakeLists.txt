@@ -44,7 +44,6 @@ add_executable(xiloader
     src/app.h
     src/client/sdk/ffxi.h
     src/client/sdk/polcore.h
-    src/command_handler.h
     src/console.cpp
     src/console.h
     src/defines.h
@@ -52,6 +51,7 @@ add_executable(xiloader
     src/enums/lobby_command.h
     src/enums/lobby_data.h
     src/enums/login_command.h
+    src/enums/login_outcome.h
     src/enums/login_result.h
     src/enums/menu_selection.h
     src/enums/pol_function.h
@@ -61,6 +61,8 @@ add_executable(xiloader
     src/enums/relay_phase.h
     src/functions.cpp
     src/functions.h
+    src/login/login.cpp
+    src/login/login.h
     src/main.cpp
     src/network.cpp
     src/network.h

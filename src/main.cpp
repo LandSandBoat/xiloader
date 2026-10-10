@@ -38,6 +38,7 @@ This file is part of DarkStar-server source code.
 #include "console.h"
 #include "functions.h"
 #include "helpers.h"
+#include "login/login.h"
 #include "network.h"
 #include "playonline.h"
 #include "polrelay.h"
@@ -691,12 +692,9 @@ int __cdecl main(int argc, char* argv[])
         std::string          authport  = std::to_string(xiloader::config.loginAuthPort);
         std::string          loginport = std::to_string(xiloader::config.loginDataPort);
 
-        if (xiloader::network::CreateAuthConnection(&sock, authport.c_str()))
+        /* Attempt to verify the users account info.. */
+        if (xiloader::network::CreateAuthConnection(&sock, authport.c_str()) && xiloader::login::run(sock.AccountId))
         {
-            /* Attempt to verify the users account info.. */
-            while (!xiloader::network::VerifyAccount(&sock))
-                Sleep(10);
-
             /* Attempt to create connection to the login server.. */
             if (!xiloader::network::CreateConnection(&sock, loginport.c_str()))
             {
