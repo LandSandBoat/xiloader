@@ -48,64 +48,87 @@ namespace menus
 
 using namespace ftxui;
 
-MenuSelection twoFactorSubMenu()
+// Wine's console doesn't interpret VT sequences, so FTXUI output shows up as raw escape codes.
+inline bool plainConsole()
 {
+    static const bool isWine = ::GetProcAddress(::GetModuleHandleA("ntdll.dll"), "wine_get_version") != nullptr;
+    return isWine;
+}
+
+inline std::string promptLine(const char* label, bool hidden = false)
+{
+    auto  stdinHandle = ::GetStdHandle(STD_INPUT_HANDLE);
+    DWORD mode        = 0;
+    if (hidden)
+    {
+        ::GetConsoleMode(stdinHandle, &mode);
+        ::SetConsoleMode(stdinHandle, mode & ~ENABLE_ECHO_INPUT);
+    }
+
+    std::cout << label << std::flush;
+    std::string line;
+    std::getline(std::cin, line);
+
+    if (hidden)
+    {
+        ::SetConsoleMode(stdinHandle, mode);
+        std::cout << std::endl;
+    }
+
+    return line;
+}
+
+// Shows a numbered menu and returns the selected index. Entries are expected to be prefixed "1) ", "2) ", ...
+inline int pickEntry(const std::vector<std::string>& entries)
+{
+    const auto count = static_cast<int>(entries.size());
+
+    if (plainConsole())
+    {
+        for (const auto& entry : entries)
+        {
+            std::cout << "  " << entry << std::endl;
+        }
+
+        while (std::cin)
+        {
+            const auto line = promptLine("> ");
+            if (line.size() == 1 && line[0] >= '1' && line[0] < '1' + count)
+            {
+                return line[0] - '1';
+            }
+        }
+
+        return count - 1; // stdin closed, last entry is always exit/cancel
+    }
+
     auto screen   = ScreenInteractive::TerminalOutput();
     int  selected = 0; // Container::Vertical requires `int` input
 
+    Components items;
+    for (const auto& entry : entries)
+    {
+        items.push_back(MenuEntry(entry));
+    }
+
+    auto menu = Container::Vertical(items, &selected);
+
+    menu |= border; // Add border
+
     // clang-format off
-        auto menu = Container::Vertical(
-        {
-            MenuEntry("1) Register 2FA OTP"),
-            MenuEntry("2) Remove 2FA OTP"),
-            MenuEntry("3) Regenerate 2FA OTP removal code"),
-            MenuEntry("4) Validate 2FA OTP"),
-            MenuEntry("5) Revoke Computer Trust"),
-            MenuEntry("6) Exit Menu"),
-        },
-        &selected);
-
-        menu |= border; // Add border
-
         menu |= CatchEvent([&](Event event)
         {
-            if (event == Event::Character('1')) // Select "Register OTP"
+            if (event.is_character())
             {
-                selected = 0;
-                screen.Exit();
-                return true;
+                auto const c = event.character()[0];
+                if (c >= '1' && c < '1' + count)
+                {
+                    selected = c - '1';
+                    screen.Exit();
+                    return true;
+                }
             }
-            else if (event == Event::Character('2')) // Select "Remove OTP"
-            {
-                selected = 1;
-                screen.Exit();
-                return true;
-            }
-            else if (event == Event::Character('3')) // Select "Regenerate 2FA OTP removal code"
-            {
-                selected = 2;
-                screen.Exit();
-                return true;
-            }
-            else if (event == Event::Character('4')) // Select "Validate 2FA OTP"
-            {
-                selected = 3;
-                screen.Exit();
-                return true;
-            }
-            else if (event == Event::Character('5')) // Select "Revoke Computer Trust"
-            {
-                selected = 4;
-                screen.Exit();
-                return true;
-            }
-            else if (event == Event::Character('6')) // Select "Exit Menu"
-            {
-                selected = 5;
-                screen.Exit();
-                return true;
-            }
-            else if (event == event.Return)
+            else if (event == Event::Return)
             {
                 screen.Exit();
                 return true;
@@ -116,6 +139,20 @@ MenuSelection twoFactorSubMenu()
     // clang-format on
 
     screen.Loop(menu);
+
+    return selected;
+}
+
+MenuSelection twoFactorSubMenu()
+{
+    const auto selected = pickEntry({
+        "1) Register 2FA OTP",
+        "2) Remove 2FA OTP",
+        "3) Regenerate 2FA OTP removal code",
+        "4) Validate 2FA OTP",
+        "5) Revoke Computer Trust",
+        "6) Exit Menu",
+    });
 
     // Because ftxui is rigid with its input, return a menu selection here
     switch (selected)
@@ -150,66 +187,13 @@ MenuSelection twoFactorSubMenu()
 
 MenuSelection mainMenu()
 {
-    auto screen   = ScreenInteractive::TerminalOutput();
-    int  selected = 0; // Container::Vertical requires `int` input
-
-    // clang-format off
-        auto menu = Container::Vertical(
-        {
-            MenuEntry("1) Login"),
-            MenuEntry("2) Create New Account"),
-            MenuEntry("3) Change Account Password"),
-            MenuEntry("4) 2FA Options"),
-            MenuEntry("5) Exit"),
-        },
-        &selected);
-
-        menu |= border; // Add border
-
-        menu |= CatchEvent([&](Event event)
-        {
-
-            if (event == Event::Character('1')) // Select "login"
-            {
-                selected = 0;
-                screen.Exit();
-                return true;
-            }
-            else if (event == Event::Character('2')) // Select "create new account"
-            {
-                selected = 1;
-                screen.Exit();
-                return true;
-            }
-            else if (event == Event::Character('3')) // Select "change account password"
-            {
-                selected = 2;
-                screen.Exit();
-                return true;
-            }
-            else if (event == Event::Character('4')) // Select "2FA Settings"
-            {
-                selected = 3;
-                screen.Exit();
-                return true;
-            }
-            else if (event == Event::Character('5')) // Select "Exit"
-            {
-                selected = 4;
-                screen.Exit();
-                return true;
-            }
-            else if (event == event.Return)
-            {
-                screen.Exit();
-                return true;
-            }
-
-            return false;
-        });
-    // clang-format on
-
-    screen.Loop(menu);
+    const auto selected = pickEntry({
+        "1) Login",
+        "2) Create New Account",
+        "3) Change Account Password",
+        "4) 2FA Options",
+        "5) Exit",
+    });
 
     // Because ftxui is rigid with its input, get a menu selection here
     switch (selected)
@@ -246,6 +230,24 @@ MenuSelection mainMenu()
 
 void enterCredentialsWithOTP(std::string& username, std::string& password, std::string& OTP, bool* trustThisComputer = nullptr, const std::string& serverAddress = "")
 {
+    if (plainConsole())
+    {
+        username = promptLine("  Username: ");
+        password = promptLine("  Password: ", true);
+        if (!serverAddress.empty() && !loadTrustToken(serverAddress, username).empty())
+        {
+            return;
+        }
+
+        OTP = promptLine("  OTP Code (blank if none): ");
+        if (trustThisComputer)
+        {
+            const auto answer  = promptLine("  Trust this computer? (y/N): ");
+            *trustThisComputer = answer == "y" || answer == "Y";
+        }
+        return;
+    }
+
     ftxui::InputOption password_option;
     password_option.password = true;
 
@@ -354,6 +356,13 @@ void enterCredentialsWithOTP(std::string& username, std::string& password, std::
 
 void enterCredentialsNoOTP(std::string& username, std::string& password)
 {
+    if (plainConsole())
+    {
+        username = promptLine("  Username: ");
+        password = promptLine("  Password: ", true);
+        return;
+    }
+
     ftxui::InputOption password_option;
     password_option.password = true;
 
@@ -402,6 +411,13 @@ void enterCredentialsNoOTP(std::string& username, std::string& password)
 
 bool confirmNewPassword(std::string& confirmed_password)
 {
+    if (plainConsole())
+    {
+        const auto newPassword = promptLine("  Password        : ", true);
+        confirmed_password     = promptLine("  Confirm Password: ", true);
+        return confirmed_password == newPassword;
+    }
+
     ftxui::InputOption password_option;
     password_option.password = true;
 
@@ -460,51 +476,19 @@ bool confirmNewPassword(std::string& confirmed_password)
 
 bool okCancelDialog(std::string input)
 {
-    auto screen   = ScreenInteractive::TerminalOutput();
-    int  selected = 0;
-
-    // clang-format off
-        auto menu = Container::Vertical(
-        {
-            MenuEntry("1) " + input ),
-            MenuEntry("2) Cancel"),
-        },
-        &selected);
-
-        menu |= border; // Add border
-
-        menu |= CatchEvent([&](Event event)
-        {
-
-            if (event == Event::Character('1')) // Select "ok"
-            {
-                selected = 0;
-                screen.Exit();
-                return true;
-            }
-            else if (event == Event::Character('2')) // Select "cancel"
-            {
-                selected = 1;
-                screen.Exit();
-                return true;
-            }
-            else if (event == event.Return)
-            {
-                screen.Exit();
-                return true;
-            }
-
-            return false;
-        });
-    // clang-format on
-
-    screen.Loop(menu);
-
-    return selected == 0;
+    return pickEntry({ "1) " + input, "2) Cancel" }) == 0;
 }
 
 bool createNewAccount(std::string& username, std::string& confirmed_password)
 {
+    if (plainConsole())
+    {
+        username               = promptLine("  Username        : ");
+        const auto newPassword = promptLine("  Password        : ", true);
+        confirmed_password     = promptLine("  Confirm Password: ", true);
+        return confirmed_password == newPassword;
+    }
+
     ftxui::InputOption password_option;
     password_option.password = true;
 
@@ -573,6 +557,12 @@ bool createNewAccount(std::string& username, std::string& confirmed_password)
 
 void enterUsernameOnly(std::string& username)
 {
+    if (plainConsole())
+    {
+        username = promptLine("  Username: ");
+        return;
+    }
+
     ftxui::Component input_username = ftxui::Input(&username, "");
 
     auto component = ftxui::Container::Vertical({
