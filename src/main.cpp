@@ -39,7 +39,6 @@ This file is part of DarkStar-server source code.
 #include "client/game.h"
 #include "console.h"
 #include "guards.h"
-#include "helpers.h"
 #include "hooks/hairpin_fix.h"
 #include "hooks/socket_hooks.h"
 #include "lobby/data_connection.h"

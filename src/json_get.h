@@ -20,19 +20,12 @@ along with this program.  If not, see http://www.gnu.org/licenses/
 */
 #pragma once
 
-#ifndef NOMINMAX
-#define NOMINMAX 1
-#endif
-
-#include <windows.h>
-#include <winsock2.h>
-
-#include <cstddef>
-#include <filesystem>
-#include <fstream>
-#include <iostream>
+#include <array>
+#include <cstdint>
 #include <limits>
-#include <sstream>
+#include <optional>
+#include <string>
+#include <type_traits>
 
 #include <nlohmann/json.hpp>
 

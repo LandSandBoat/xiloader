@@ -24,7 +24,7 @@
 #include "auth_connection.h"
 #include "config.h"
 #include "console.h"
-#include "helpers.h"
+#include "json_get.h"
 #include "otp/qr_code.h"
 #include "otp/trust_token_manager.h"
 #include "ui/prompts.h"

@@ -68,6 +68,7 @@ add_executable(xiloader
     src/hooks/hairpin_fix.h
     src/hooks/socket_hooks.cpp
     src/hooks/socket_hooks.h
+    src/json_get.h
     src/lobby/data_connection.cpp
     src/lobby/data_connection.h
     src/login/auth_connection.cpp
