@@ -99,8 +99,9 @@ public:
         print(xiloader::color::lightyelllow, timestamp.c_str());
 
         /* Parse the incoming message */
-        char buffer[1024];
-        ::snprintf(buffer, sizeof buffer, format, args...);
+        const auto  length = ::snprintf(nullptr, 0, format, args...);
+        std::string buffer(length > 0 ? length : 0, '\0');
+        ::snprintf(buffer.data(), buffer.size() + 1, format, args...);
         /* Output the message */
 
         print(c, buffer);
