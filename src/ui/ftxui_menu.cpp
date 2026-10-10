@@ -41,6 +41,7 @@ public:
 
         auto screen   = ScreenInteractive::TerminalOutput();
         int  selected = 0; // Container::Vertical requires `int` input
+        bool chosen   = false;
 
         Components items;
         for (const auto& entry : entries)
@@ -60,12 +61,14 @@ public:
                                    if (c >= '1' && c < '1' + count)
                                    {
                                        selected = c - '1';
+                                       chosen   = true;
                                        screen.Exit();
                                        return true;
                                    }
                                }
                                else if (event == Event::Return)
                                {
+                                   chosen = true;
                                    screen.Exit();
                                    return true;
                                }
@@ -74,6 +77,11 @@ public:
                            });
 
         screen.Loop(menu);
+
+        if (!chosen)
+        {
+            return count - 1; // Ctrl+C, last entry is always exit/cancel
+        }
 
         return selected;
     }
