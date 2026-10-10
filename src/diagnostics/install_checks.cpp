@@ -139,13 +139,13 @@ auto otherLanguagesHint(const Language language) -> std::string
                 hint += " ";
             }
 
-            hint += std::format("PlayOnline is installed for {}: start the loader with --lang {}.", xiloader::languageName(installed), xiloader::languageName(installed));
+            hint += std::format("PlayOnline is installed for {}. Use --lang {}.", xiloader::languageName(installed), xiloader::languageName(installed));
         }
     }
 
     if (hint.empty())
     {
-        hint = "Install PlayOnline and FINAL FANTASY XI, then start the PlayOnline Viewer once.";
+        hint = "Install PlayOnline and FFXI.";
     }
 
     return hint;
@@ -209,7 +209,7 @@ auto checkInstall(const Language language) -> std::vector<Check>
         checks.push_back({ .name   = std::format("PlayOnline ({}) folder", name),
                            .status = CheckStatus::Fail,
                            .detail = std::format("{} doesn't exist", viewer),
-                           .hint   = "The registry points at a folder that is gone. Reinstall PlayOnline." });
+                           .hint   = "Reinstall PlayOnline." });
     }
     else
     {
@@ -222,7 +222,7 @@ auto checkInstall(const Language language) -> std::vector<Check>
     {
         checks.push_back({ .name   = std::format("polcore ({}) registration", name),
                            .status = CheckStatus::Fail,
-                           .detail = "its COM class isn't registered",
+                           .detail = "not registered",
                            .hint   = otherLanguagesHint(language) });
     }
     else if (!pathExists(*polcore))
@@ -230,7 +230,7 @@ auto checkInstall(const Language language) -> std::vector<Check>
         checks.push_back({ .name   = std::format("polcore ({}) file", name),
                            .status = CheckStatus::Fail,
                            .detail = std::format("{} doesn't exist", polcore->string()),
-                           .hint   = "The registration points at a file that is gone. Reinstall PlayOnline." });
+                           .hint   = "Reinstall PlayOnline." });
     }
     else
     {
@@ -243,15 +243,15 @@ auto checkInstall(const Language language) -> std::vector<Check>
     {
         checks.push_back({ .name   = "FINAL FANTASY XI registration",
                            .status = CheckStatus::Fail,
-                           .detail = "its COM class isn't registered",
-                           .hint   = "Install FINAL FANTASY XI through the PlayOnline Viewer and let it finish updating." });
+                           .detail = "not registered",
+                           .hint   = "Install FFXI through the PlayOnline Viewer." });
     }
     else if (!pathExists(*game) || !pathExists(game->parent_path() / "FFXiMain.dll"))
     {
         checks.push_back({ .name   = "FINAL FANTASY XI files",
                            .status = CheckStatus::Fail,
                            .detail = std::format("FFXi.dll or FFXiMain.dll is missing from {}", game->parent_path().string()),
-                           .hint   = "Run a file check from the PlayOnline Viewer, or reinstall the game." });
+                           .hint   = "Run a file check from the PlayOnline Viewer." });
     }
     else
     {
@@ -285,7 +285,7 @@ auto checkEnvironment(const Language language) -> std::vector<Check>
         checks.push_back({ .name   = "Privileges",
                            .status = CheckStatus::Warning,
                            .detail = "not running as administrator",
-                           .hint   = "Without it the game can't open its settings in the registry: it ignores resolution and window settings and skips the opening movie." });
+                           .hint   = "The game may ignore its registry settings (resolution, window mode)." });
     }
 
     // PlayOnline keeps per-account files under the viewer, and the game its settings and macros under its own folder
@@ -302,7 +302,7 @@ auto checkEnvironment(const Language language) -> std::vector<Check>
             checks.push_back({ .name   = "PlayOnline folder",
                                .status = CheckStatus::Warning,
                                .detail = std::format("{} is not writable", pub.string()),
-                               .hint   = "In-game PlayOnline settings and messages won't be saved. Run as administrator, or give your user write access to that folder." });
+                               .hint   = "PlayOnline settings won't be saved. Run as administrator." });
         }
     }
 
@@ -318,7 +318,7 @@ auto checkEnvironment(const Language language) -> std::vector<Check>
             checks.push_back({ .name   = "Game folder",
                                .status = CheckStatus::Warning,
                                .detail = std::format("{} is not writable", folder.string()),
-                               .hint   = "Macros and in-game settings won't be saved. Run as administrator, or give your user write access to that folder." });
+                               .hint   = "Macros and settings won't be saved. Run as administrator." });
         }
     }
 

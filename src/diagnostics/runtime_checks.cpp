@@ -108,7 +108,7 @@ auto checkPolcoreVersion(const Language language) -> std::vector<Check>
         checks.push_back({ .name   = "polcore loads",
                            .status = CheckStatus::Fail,
                            .detail = std::format("{} could not be loaded (error {})", path->string(), GetLastError()),
-                           .hint   = "The file may be damaged, or a DLL it needs is missing. Run a file check from the PlayOnline Viewer." });
+                           .hint   = "Run a file check from the PlayOnline Viewer." });
         return checks;
     }
 
@@ -123,7 +123,7 @@ auto checkPolcoreVersion(const Language language) -> std::vector<Check>
             checks.push_back({ .name   = std::format("polcore: {}", what),
                                .status = CheckStatus::Fail,
                                .detail = "not found",
-                               .hint   = "This PlayOnline version isn't one the loader knows. Update xiloader, or report it with this output." });
+                               .hint   = "Unsupported PlayOnline version. Update xiloader." });
         }
     }
 
@@ -140,7 +140,7 @@ auto checkServer(const Config& config) -> std::vector<Check>
         checks.push_back({ .name   = "Server address",
                            .status = CheckStatus::Fail,
                            .detail = std::format("{} can't be resolved", config.serverAddress),
-                           .hint   = "Check the --server address and your internet connection." });
+                           .hint   = "Check --server." });
         return checks;
     }
 
@@ -159,15 +159,15 @@ auto checkServer(const Config& config) -> std::vector<Check>
     {
         if (canConnect(address, port))
         {
-            checks.push_back({ .name = std::format("Server {} port", what), .detail = std::format("{} answers", port) });
+            checks.push_back({ .name = std::format("Server {} port", what), .detail = std::format("{} open", port) });
             authReachable = authReachable || port == config.loginAuthPort;
         }
         else
         {
             checks.push_back({ .name   = std::format("Server {} port", what),
                                .status = CheckStatus::Fail,
-                               .detail = std::format("nothing answers on {}:{}", text, port),
-                               .hint   = "Check the server is running, the port is right and no firewall is in the way." });
+                               .detail = std::format("{}:{} unreachable", text, port),
+                               .hint   = "Check the server is running and the port is open." });
         }
     }
 
@@ -179,7 +179,7 @@ auto checkServer(const Config& config) -> std::vector<Check>
     AuthConnection auth;
     if (const auto connected = auth.connect(text, config.loginAuthPort); connected)
     {
-        checks.push_back({ .name = "Server TLS", .detail = "handshake completed" });
+        checks.push_back({ .name = "Server TLS", .detail = "ok" });
 
         if (const auto key = auth.fingerprint())
         {
@@ -191,7 +191,7 @@ auto checkServer(const Config& config) -> std::vector<Check>
         checks.push_back({ .name   = "Server TLS",
                            .status = CheckStatus::Fail,
                            .detail = connected.error(),
-                           .hint   = "The server may be older than this loader, or not xi_connect at all." });
+                           .hint   = "The server may be outdated." });
     }
 
     return checks;
@@ -200,7 +200,7 @@ auto checkServer(const Config& config) -> std::vector<Check>
 auto runDiagnostics(const Config& config) -> ExitCode
 {
     const auto version = Config::versionNumber;
-    console::output(color::info, "xiloader v{}.{}.{} diagnostics, language {}. Nothing is changed and the game is not started.", version[0], version[1], version[2], languageName(config.language));
+    console::output(color::info, "xiloader v{}.{}.{} diagnostics ({})", version[0], version[1], version[2], languageName(config.language));
 
     std::vector<Check> all = checkEnvironment(config.language);
 
@@ -240,7 +240,7 @@ auto runDiagnostics(const Config& config) -> ExitCode
         return ExitCode::ServerUnreachable;
     }
 
-    console::output(color::success, "Nothing here would stop the game from starting.");
+    console::output(color::success, "No problems found.");
     return ExitCode::Success;
 }
 

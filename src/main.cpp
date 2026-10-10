@@ -173,7 +173,7 @@ auto __cdecl main(const int argc, char* argv[]) -> int
         xiloader::console::output(xiloader::color::error, "{}", config.error());
         if (xiloader::console::ownsWindow())
         {
-            xiloader::console::output(xiloader::color::error, "Press any key to close this window.");
+            xiloader::console::output(xiloader::color::error, "Press any key to exit.");
             _getch();
         }
 
@@ -200,7 +200,7 @@ auto __cdecl main(const int argc, char* argv[]) -> int
         if (!installed.empty() && !std::ranges::contains(installed, config->language))
         {
             config->language = installed.front();
-            xiloader::console::output(xiloader::color::info, "PlayOnline is installed for {}; using that. Pass --lang to choose another.", xiloader::languageName(config->language));
+            xiloader::console::output(xiloader::color::info, "Using the PlayOnline {} install.", xiloader::languageName(config->language));
         }
     }
 
@@ -216,18 +216,18 @@ auto __cdecl main(const int argc, char* argv[]) -> int
 
     if (result != ExitCode::Success && !config->diagnose)
     {
-        xiloader::console::output(xiloader::color::info, "Run xiloader with --diagnose for a report on the install and the server.");
+        xiloader::console::output(xiloader::color::info, "Run with --diagnose for more details.");
     }
 
     if ((result != ExitCode::Success || config->diagnose) && !xiloader::console::logFile().empty())
     {
-        xiloader::console::output(xiloader::color::info, "This output is saved in {}", xiloader::console::logFile().string());
+        xiloader::console::output(xiloader::color::info, "Log saved to {}", xiloader::console::logFile().string());
     }
 
     // A window made just for the loader would take the error with it
     if ((result != ExitCode::Success || config->diagnose) && xiloader::console::ownsWindow())
     {
-        xiloader::console::output(xiloader::color::error, "Press any key to close this window.");
+        xiloader::console::output(xiloader::color::error, "Press any key to exit.");
         _getch();
     }
     else

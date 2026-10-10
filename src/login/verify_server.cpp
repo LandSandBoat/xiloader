@@ -36,7 +36,7 @@ void save(const xiloader::KnownServers& servers, const std::string& server, cons
 {
     if (!servers.remember(server, fingerprint))
     {
-        xiloader::console::output(xiloader::color::warning, "The server's key couldn't be saved, so it will be asked about again.");
+        xiloader::console::output(xiloader::color::warning, "Failed to save the server key.");
     }
 }
 
@@ -76,7 +76,7 @@ auto verifyServer(const AuthConnection& connection, const std::string& name, con
         {
             if (known && *known != *presented)
             {
-                console::output(color::warning, "The key of server '{}' has changed to {}.", server, *presented);
+                console::output(color::warning, "Server key for '{}' changed to {}.", server, *presented);
             }
 
             if (known != *presented)
@@ -88,14 +88,13 @@ auto verifyServer(const AuthConnection& connection, const std::string& name, con
         }
         case ServerTrust::Ask:
         {
-            console::output(color::warning, "The authenticity of server '{}' can't be established.", server);
-            console::output(color::warning, "Its key fingerprint is {}", *presented);
-            console::output(color::warning, "Compare it with the one the server's operator published. Nothing has been sent yet.");
+            console::output(color::warning, "Unknown server '{}'.", server);
+            console::output(color::warning, "Key fingerprint: {}", *presented);
 
             const auto menu = ui::makeMenu(config.plainMenus);
             if (!ui::okCancelDialog(*menu, "Trust this server"))
             {
-                console::output(color::error, "The server was not trusted. To trust it without being asked, pass --fingerprint {}", *presented);
+                console::output(color::error, "Server not trusted. Use --fingerprint {} to skip this prompt.", *presented);
                 return false;
             }
 
@@ -105,20 +104,18 @@ auto verifyServer(const AuthConnection& connection, const std::string& name, con
         case ServerTrust::Changed:
         {
             console::output(color::error, "==========================================================");
-            console::output(color::error, "The key of server '{}' is not the one it was trusted with.", server);
-            console::output(color::error, "Someone may be intercepting the connection, or the server's certificate was replaced.");
-            console::output(color::error, "On record: {}", *known);
-            console::output(color::error, "Presented: {}", *presented);
-            console::output(color::error, "Nothing was sent. If the server's operator confirms the new key, start the loader once with --fingerprint {}", *presented);
+            console::output(color::error, "Server key for '{}' has changed!", server);
+            console::output(color::error, "Saved: {}", *known);
+            console::output(color::error, "Got:   {}", *presented);
+            console::output(color::error, "If this is expected, run once with --fingerprint {}", *presented);
             console::output(color::error, "==========================================================");
             return false;
         }
         case ServerTrust::PinMismatch:
         {
-            console::output(color::error, "The key of server '{}' is not the one --fingerprint asked for.", server);
-            console::output(color::error, "Asked for: {}", normalizeFingerprint(config.fingerprint));
-            console::output(color::error, "Presented: {}", *presented);
-            console::output(color::error, "Nothing was sent.");
+            console::output(color::error, "Server key for '{}' does not match --fingerprint.", server);
+            console::output(color::error, "Expected: {}", normalizeFingerprint(config.fingerprint));
+            console::output(color::error, "Got:      {}", *presented);
             return false;
         }
     }

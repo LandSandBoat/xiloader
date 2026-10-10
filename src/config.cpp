@@ -194,7 +194,7 @@ auto Config::load(const int argc, const char* const argv[]) -> std::expected<Con
         .append();
 
     args.add_argument("--email")
-        .help("Ignored; accepted so existing shortcuts keep working.")
+        .help("(deprecated) Ignored.")
         .append();
 
     args.add_argument("--dataport")
@@ -237,12 +237,12 @@ auto Config::load(const int argc, const char* const argv[]) -> std::expected<Con
         .append();
 
     args.add_argument("--fingerprint")
-        .help("(optional) The server's key fingerprint, as the loader prints it (SHA256:...). The server is only trusted if its key matches.")
+        .help("(optional) The server key fingerprint to require (SHA256:...).")
         .append();
 
     args.add_argument("--diagnose")
         .implicit_value(true)
-        .help("(optional) Check the PlayOnline install and the server, print a report and exit. Nothing is changed and the game is not started.")
+        .help("(optional) Check the PlayOnline install and the server, then exit.")
         .append();
 
     args.add_argument("--trust")
