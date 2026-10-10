@@ -60,6 +60,25 @@ auto packetSize(const xiloader::LobbyDataRequest type) -> std::size_t
     return 0;
 }
 
+// Copies the characters of a list packet into polcore's list
+void applyList(char* const list, const char* const packet)
+{
+    const auto count = std::min(static_cast<int>(static_cast<uint8_t>(packet[1])), kMaxCharacters);
+
+    for (auto x = 0; x < count; x++)
+    {
+        list[0x00 + (x * kListEntrySize)] = 1;
+        list[0x02 + (x * kListEntrySize)] = 1;
+        list[0x10 + (x * kListEntrySize)] = (char)x;
+        list[0x11 + (x * kListEntrySize)] = 0x80u;
+        list[0x18 + (x * kListEntrySize)] = 0x20;
+        list[0x28 + (x * kListEntrySize)] = 0x20;
+
+        memcpy(list + 0x04 + (x * kListEntrySize), packet + kPacketEntrySize * (x + 1) + 0x04, 4); // Character Id
+        memcpy(list + 0x08 + (x * kListEntrySize), packet + kPacketEntrySize * (x + 1), 4);        // Content Id
+    }
+}
+
 } // namespace
 
 namespace xiloader
@@ -137,7 +156,15 @@ void LobbyDataConnection::start(const Session& session)
 
 void LobbyDataConnection::setCharacterList(char* const list)
 {
+    const std::lock_guard lock(listMutex);
+
     characterList = list;
+
+    if (list != nullptr && !heldList.empty())
+    {
+        applyList(list, heldList.data());
+        heldList.clear();
+    }
 }
 
 void LobbyDataConnection::run(const std::stop_token stop, const Session session)
@@ -215,25 +242,16 @@ void LobbyDataConnection::run(const std::stop_token stop, const Session session)
                 {
                     xiloader::console::output(xiloader::color::warning, "Receiving character list..");
 
-                    const auto list = characterList.load();
-                    if (list == nullptr)
+                    const std::lock_guard lock(listMutex);
+
+                    // Against a local server the list can arrive before polcore's buffer is known
+                    if (characterList == nullptr)
                     {
-                        break;
+                        heldList.assign(packet, packet + size);
                     }
-
-                    const auto count = std::min(static_cast<int>(static_cast<uint8_t>(packet[1])), kMaxCharacters);
-
-                    for (auto x = 0; x < count; x++)
+                    else
                     {
-                        list[0x00 + (x * kListEntrySize)] = 1;
-                        list[0x02 + (x * kListEntrySize)] = 1;
-                        list[0x10 + (x * kListEntrySize)] = (char)x;
-                        list[0x11 + (x * kListEntrySize)] = 0x80u;
-                        list[0x18 + (x * kListEntrySize)] = 0x20;
-                        list[0x28 + (x * kListEntrySize)] = 0x20;
-
-                        memcpy(list + 0x04 + (x * kListEntrySize), packet + kPacketEntrySize * (x + 1) + 0x04, 4); // Character Id
-                        memcpy(list + 0x08 + (x * kListEntrySize), packet + kPacketEntrySize * (x + 1), 4);        // Content Id
+                        applyList(characterList, packet);
                     }
                     break;
                 }

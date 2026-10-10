@@ -25,11 +25,12 @@
 
 #include "login/session.h"
 
-#include <atomic>
 #include <cstdint>
+#include <mutex>
 #include <stop_token>
 #include <string>
 #include <thread>
+#include <vector>
 
 namespace xiloader
 {
@@ -51,16 +52,21 @@ public:
     // Sends the session hash and starts answering the server
     void start(const Session& session);
 
-    // Where polcore keeps its character list; until this is set an incoming list is dropped
+    // Where polcore keeps its character list. A list that arrived before this is applied now.
     void setCharacterList(char* list);
 
 private:
     void run(std::stop_token stop, Session session);
 
-    SOCKET             socket        = INVALID_SOCKET;
-    ULONG              serverAddress = INADDR_NONE;
-    std::atomic<char*> characterList = nullptr;
-    std::jthread       thread;
+    SOCKET socket        = INVALID_SOCKET;
+    ULONG  serverAddress = INADDR_NONE;
+
+    // The list is written from the thread, or from setCharacterList when it arrived first
+    std::mutex        listMutex;
+    char*             characterList = nullptr;
+    std::vector<char> heldList;
+
+    std::jthread thread;
 };
 
 } // namespace xiloader

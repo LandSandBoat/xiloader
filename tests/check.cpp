@@ -217,7 +217,7 @@ void checkLobbyData()
         const auto hello = server.read(28);
         assert(static_cast<uint8_t>(hello[0]) == 0xFE && hello[12] == 0x5A && hello[27] == 0x5A);
 
-        // A list that arrives before polcore's buffer is known is dropped
+        // A list that arrives before polcore's buffer is known is kept for later
         char early[0x148] = { 0x03, 2 };
         send(server.client, early, sizeof(early), 0);
 
@@ -234,6 +234,7 @@ void checkLobbyData()
         assert(static_cast<uint8_t>(key[0]) == 0xA2 && static_cast<uint8_t>(key[17]) == 0x58);
 
         connection.setCharacterList(list.data());
+        assert(list[0] == 1 && list[kEntry] == 1 && list[kEntry * 2] == 0x77);
 
         // Claims 200 characters; the packet has room for 20
         char packet[0x148] = { 0x03, static_cast<char>(200) };
