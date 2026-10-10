@@ -87,6 +87,16 @@ DWORD xiloader::ApplyHairpinFixThread(LPVOID lpParam)
         return 0;
     }
 
+    // The game's code may be read-only
+    DWORD hairpinProtection = 0;
+    DWORD zoneProtection    = 0;
+    if (!VirtualProtect((LPVOID)hairpinAddress, 8, PAGE_EXECUTE_READWRITE, &hairpinProtection) ||
+        !VirtualProtect((LPVOID)(zoneChangeAddress + 0x06), 2, PAGE_EXECUTE_READWRITE, &zoneProtection))
+    {
+        xiloader::console::output(xiloader::color::error, "Failed to apply the hairpin fix (error %lu). Security software may be blocking changes to the game's code.", GetLastError());
+        return 0;
+    }
+
     /* Apply the hairpin fix.. */
     auto caveDest          = ((int)HairpinFixCave - ((int)hairpinAddress)) - 5;
     g_HairpinReturnAddress = hairpinAddress + 0x08;
@@ -99,6 +109,11 @@ DWORD xiloader::ApplyHairpinFixThread(LPVOID lpParam)
 
     /* Apply zone ip change patch.. */
     memset((LPVOID)(zoneChangeAddress + 0x06), 0x90, 2);
+
+    VirtualProtect((LPVOID)hairpinAddress, 8, hairpinProtection, &hairpinProtection);
+    VirtualProtect((LPVOID)(zoneChangeAddress + 0x06), 2, zoneProtection, &zoneProtection);
+    FlushInstructionCache(GetCurrentProcess(), (LPCVOID)hairpinAddress, 8);
+    FlushInstructionCache(GetCurrentProcess(), (LPCVOID)(zoneChangeAddress + 0x06), 2);
 
     xiloader::console::output(xiloader::color::success, "Hairpin fix applied!");
     return 0;
