@@ -23,6 +23,8 @@
 
 #include <cstdint>
 
+#include "enums/pol_function.h"
+
 namespace xiloader
 {
 
@@ -50,8 +52,8 @@ static_assert(sizeof(ConnectionData) == 0x20, "polcore reads 8 dwords");
 struct Load
 {
     const char* name;
-    int         setup; // returns the ticket
-    int         check; // 0 pending, 1 done, negative failed
+    PolFunction setup; // returns the ticket
+    PolFunction check; // 0 pending, 1 done, negative failed
     int         ticket;
     int         result;
 };

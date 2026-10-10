@@ -24,6 +24,7 @@
 #include "playonline.h"
 
 #include "enums/polcon_state.h"
+#include "enums/reconnect.h"
 
 #include "console.h"
 #include "functions.h"
@@ -35,17 +36,13 @@
 #include <random>
 #include <span>
 
-namespace globals
-{
-
-extern xiloader::Language g_Language;
-
-} // namespace globals
-
 namespace
 {
 
 using xiloader::PolconState;
+using xiloader::PolFunction;
+using xiloader::Reconnect;
+using xiloader::tableIndex;
 using xiloader::playonline::CommandTable;
 using xiloader::playonline::ConnectionData;
 using xiloader::playonline::Load;
@@ -64,14 +61,14 @@ constexpr ULONGLONG kRetryDelayMaxMs   = 45000;
 
 // Lists the viewer loads after login; status first, then the rest in parallel (polcore has 4 profile slots)
 constexpr Load kStatusLoads[] = {
-    { .name = "status", .setup = POLFUNC_LOAD_MY_STATUS, .check = POLFUNC_CHECK_MY_STATUS },
+    { .name = "status", .setup = PolFunction::LoadMyStatus, .check = PolFunction::CheckMyStatus },
 };
 
 constexpr Load kListLoads[] = {
-    { .name = "friends", .setup = POLFUNC_LOAD_FRIEND_LIST, .check = POLFUNC_CHECK_FRIEND_LIST },
-    { .name = "handles", .setup = POLFUNC_LOAD_HANDLE_NAME_LIST, .check = POLFUNC_CHECK_HANDLE_NAME_LIST },
-    { .name = "characters", .setup = POLFUNC_LOAD_CHARACTER_LIST, .check = POLFUNC_CHECK_CHARACTER_LIST },
-    { .name = "groups", .setup = POLFUNC_LOAD_GROUP_LIST, .check = POLFUNC_CHECK_GROUP_LIST },
+    { .name = "friends", .setup = PolFunction::LoadFriendList, .check = PolFunction::CheckFriendList },
+    { .name = "handles", .setup = PolFunction::LoadHandleNameList, .check = PolFunction::CheckHandleNameList },
+    { .name = "characters", .setup = PolFunction::LoadCharacterList, .check = PolFunction::CheckCharacterList },
+    { .name = "groups", .setup = PolFunction::LoadGroupList, .check = PolFunction::CheckGroupList },
 };
 
 // Kept from logIn for reconnecting
@@ -88,17 +85,6 @@ Command setEventHandler = nullptr;
 
 // FFXiMain's event handler; each IRC open resets it to polcore's no-op default
 void* gameEventHandler = nullptr;
-
-// Reconnect progress, advanced one step per frame from the game's poll
-enum class Reconnect
-{
-    Connected,
-    Waiting,
-    Opening,
-    LoadingStatus,
-    LoadingLists,
-    Reloading,
-};
 
 struct Reconnection
 {
@@ -118,9 +104,9 @@ void __cdecl PlainCrypt(const uint8_t* source, uint8_t* destination, const int32
     }
 }
 
-auto call(const int index) -> Command
+auto call(const PolFunction function) -> Command
 {
-    return reinterpret_cast<Command>(session.table[index]);
+    return reinterpret_cast<Command>(session.table[tableIndex(function)]);
 }
 
 // polcore reads the five dial-up settings through these pointers, so they point at an empty buffer
@@ -130,19 +116,19 @@ void openConnection()
     static uint8_t        zero[0x400] = {};
     static ConnectionData connection  = { .kind = 1, .dialUp = { zero, zero, zero, zero, zero } };
 
-    call(POLFUNC_POLCON_OPEN)(3, &connection);
-    call(POLFUNC_SET_PASSWORD)(session.encodedPassword, 0);
+    call(PolFunction::PolconOpen)(3, &connection);
+    call(PolFunction::SetPassword)(session.encodedPassword, 0);
 
     uint8_t encodedHost[0x42] = {};
-    call(POLFUNC_ENCODE_HOST)(encodedHost, "ci000.pol.com");
-    call(POLFUNC_SET_POLCOM_HOST)(encodedHost);
+    call(PolFunction::EncodeHost)(encodedHost, "ci000.pol.com");
+    call(PolFunction::SetPolcomHost)(encodedHost);
 }
 
 // The user slot picks the local message folder; without message notices polcore marks every incoming message as lost
 void configureSession()
 {
-    call(POLFUNC_SET_USER_SLOT)(session.slot);
-    call(POLFUNC_MESSAGE_NOTICES)(1);
+    call(PolFunction::SetUserSlot)(session.slot);
+    call(PolFunction::MessageNotices)(1);
 }
 
 void startLoads(const std::span<Load> loads)
@@ -195,7 +181,7 @@ auto runLoads(const std::span<Load> loads) -> bool
 
     while (!checkLoads(loads))
     {
-        call(POLFUNC_POLCON_IDLE)();
+        call(PolFunction::PolconIdle)();
         Sleep(1);
     }
 
@@ -216,8 +202,8 @@ void keepGameEventHandler()
         return;
     }
 
-    void* handlers[6] = { nullptr, session.table[POLFUNC_NOTICE_HANDLER], nullptr, session.table[POLFUNC_POLCON_HANDLER_3], nullptr, gameEventHandler };
-    call(POLFUNC_POLCON_SET_HANDLERS)(handlers);
+    void* handlers[6] = { nullptr, session.table[tableIndex(PolFunction::NoticeHandler)], nullptr, session.table[tableIndex(PolFunction::PolconHandler3)], nullptr, gameEventHandler };
+    call(PolFunction::PolconSetHandlers)(handlers);
 }
 
 // Randomized so clients dropped by a server restart don't all reconnect at once
@@ -280,11 +266,11 @@ void stepReconnect(const int pollResult)
 
         case Reconnect::Opening:
         {
-            const auto state = static_cast<PolconState>(call(POLFUNC_POLCON_STEP)());
+            const auto state = static_cast<PolconState>(call(PolFunction::PolconStep)());
             if (state == PolconState::Connected)
             {
                 // The poll keeps reporting the old error until it is cleared
-                call(POLFUNC_POLCON_CLEAR_ERROR)();
+                call(PolFunction::PolconClearError)();
                 configureSession();
                 xiloader::console::output(xiloader::color::success, "Reconnected to the profile server.");
                 startStatusLoads();
@@ -363,7 +349,7 @@ namespace xiloader::playonline
 
 auto disableCipher() -> bool
 {
-    const char* const module = (globals::g_Language == xiloader::Language::European) ? "polcoreeu.dll" : "polcore.dll";
+    const char* const module = (xiloader::config.language == xiloader::Language::European) ? "polcoreeu.dll" : "polcore.dll";
 
     // The IRC send path: push 1; push edx; lea eax,[ebx+8]; push edi; lea ecx,[esp+0x1c]; push eax; push ecx; call cipher
     const unsigned char site[] = { 0x6A, 0x01, 0x52, 0x8D, 0x43, 0x08, 0x57, 0x8D, 0x4C, 0x24, 0x1C, 0x50, 0x51, 0xE8 };
@@ -423,14 +409,14 @@ void setEnglishMessageTexts(CommandTable table)
 
     for (std::size_t i = 0; i < std::size(titles); ++i)
     {
-        table[POLFUNC_SET_MESSAGE_TITLE](i, titles[i]);
+        table[tableIndex(PolFunction::SetMessageTitle)](i, titles[i]);
     }
 
     for (std::size_t i = 0; i < std::size(texts); ++i)
     {
         if (texts[i] != nullptr)
         {
-            table[POLFUNC_SET_MESSAGE_TEXT](i, texts[i]);
+            table[tableIndex(PolFunction::SetMessageText)](i, texts[i]);
         }
     }
 }
@@ -441,9 +427,9 @@ auto logIn(CommandTable table, const uint32_t accountId) -> bool
 
     // Step 1: Compute a POL ID - we'll use the account ID, masked then formatted by polcore
     using MaskPolId     = uint64_t(__cdecl*)(uint32_t, uint32_t);
-    const auto masked   = reinterpret_cast<MaskPolId>(session.table[POLFUNC_MASK_POLID])(accountId, 0);
+    const auto masked   = reinterpret_cast<MaskPolId>(session.table[tableIndex(PolFunction::MaskPolid)])(accountId, 0);
     char       polId[9] = {};
-    call(POLFUNC_FORMAT_POLID)(static_cast<uint32_t>(masked), static_cast<uint32_t>(masked >> 32), polId);
+    call(PolFunction::FormatPolid)(static_cast<uint32_t>(masked), static_cast<uint32_t>(masked >> 32), polId);
 
     // Step 2.1.: Pick a POL Password - polcore signs with it, but the relay authenticates the connection so the server never checks it
     char               password[16] = {};
@@ -454,12 +440,12 @@ auto logIn(CommandTable table, const uint32_t accountId) -> bool
     }
 
     // Step 2.2.: Encode the password as polcore stores it
-    call(POLFUNC_ENCODE_PASSWORD)(session.encodedPassword, password);
+    call(PolFunction::EncodePassword)(session.encodedPassword, password);
 
     // Step 3: Encode and store the POL ID
     uint8_t encodedPolId[8] = {};
-    call(POLFUNC_ENCODE_POLID)(encodedPolId, polId);
-    call(POLFUNC_SET_POLID)(encodedPolId);
+    call(PolFunction::EncodePolid)(encodedPolId, polId);
+    call(PolFunction::SetPolid)(encodedPolId);
 
     // Step 4: Pick a user slot - it selects pub\homeNN, where the game keeps local message copies
     //
@@ -470,7 +456,7 @@ auto logIn(CommandTable table, const uint32_t accountId) -> bool
     //
     // polcore is not capable of creating the folders directly so we have to do it ourselves.
     session.slot    = 50 + static_cast<int>(accountId % 50);
-    const auto home = std::filesystem::path(xiloader::functions::GetRegistryPlayOnlineInstallFolder(globals::g_Language)) / std::format("pub/home{:02}/msg", session.slot);
+    const auto home = std::filesystem::path(xiloader::functions::GetRegistryPlayOnlineInstallFolder(xiloader::config.language)) / std::format("pub/home{:02}/msg", session.slot);
     for (const char* folder : { "s/a", "s/b", "r/a", "r/b" })
     {
         std::error_code error;
@@ -489,13 +475,13 @@ auto logIn(CommandTable table, const uint32_t accountId) -> bool
     auto       state    = PolconState::Init;
     while (GetTickCount64() < deadline)
     {
-        state = static_cast<PolconState>(call(POLFUNC_POLCON_STEP)());
+        state = static_cast<PolconState>(call(PolFunction::PolconStep)());
         if (state == PolconState::Connected || state == PolconState::Failed || static_cast<int>(state) < 0)
         {
             break;
         }
 
-        call(POLFUNC_POLCON_IDLE)();
+        call(PolFunction::PolconIdle)();
         Sleep(1);
     }
 
@@ -530,11 +516,11 @@ auto logIn(CommandTable table, const uint32_t accountId) -> bool
 
 void keepGameOnDisconnect(CommandFunc** table)
 {
-    polconPoll                 = reinterpret_cast<Command>(table[POLFUNC_POLCON_POLL]);
-    table[POLFUNC_POLCON_POLL] = reinterpret_cast<CommandFunc*>(&pollIgnoringDisconnect);
+    polconPoll                                 = reinterpret_cast<Command>(table[tableIndex(PolFunction::PolconPoll)]);
+    table[tableIndex(PolFunction::PolconPoll)] = reinterpret_cast<CommandFunc*>(&pollIgnoringDisconnect);
 
-    setEventHandler                  = reinterpret_cast<Command>(table[POLFUNC_SET_EVENT_HANDLER]);
-    table[POLFUNC_SET_EVENT_HANDLER] = reinterpret_cast<CommandFunc*>(&recordEventHandler);
+    setEventHandler                                 = reinterpret_cast<Command>(table[tableIndex(PolFunction::SetEventHandler)]);
+    table[tableIndex(PolFunction::SetEventHandler)] = reinterpret_cast<CommandFunc*>(&recordEventHandler);
 }
 
 } // namespace xiloader::playonline

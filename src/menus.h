@@ -28,20 +28,7 @@
 
 #include "trust_token.h"
 
-enum class MenuSelection : uint8_t
-{
-    None                           = 0,
-    Login                          = 1,
-    CreateAccount                  = 2,
-    ChangePassword                 = 3,
-    TwoFactorSubmenu               = 4, // Not a command to be processed
-    RegisterTwoFactorOTP           = 5,
-    RemoveTwoFactorOTP             = 6,
-    RegenerateTwoFactorRemovalCode = 7,
-    ValidateTwoFactorOTP           = 8,
-    RevokeComputerTrust            = 9,
-    Exit                           = 255,
-};
+#include "enums/menu_selection.h"
 
 namespace menus
 {

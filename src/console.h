@@ -28,49 +28,10 @@ This file is part of DarkStar-server source code.
 #include <string>
 #include <windows.h>
 
+#include "enums/console_color.h"
+
 namespace xiloader
 {
-
-/**
- * @brief Console color enumeration.
- */
-enum class color
-{
-    /* Red color codes. */
-    red      = FOREGROUND_RED,
-    lightred = FOREGROUND_RED | FOREGROUND_INTENSITY,
-
-    /* Green color codes. */
-    green      = FOREGROUND_GREEN,
-    lightgreen = FOREGROUND_GREEN | FOREGROUND_INTENSITY,
-
-    /* Blue color codes. */
-    blue      = FOREGROUND_BLUE,
-    lightblue = FOREGROUND_BLUE | FOREGROUND_INTENSITY,
-
-    /* Cyan color codes. */
-    cyan      = FOREGROUND_BLUE | FOREGROUND_GREEN,
-    lightcyan = FOREGROUND_BLUE | FOREGROUND_GREEN | FOREGROUND_INTENSITY,
-
-    /* Yellow color codes. */
-    yellow       = FOREGROUND_GREEN | FOREGROUND_RED,
-    lightyelllow = FOREGROUND_GREEN | FOREGROUND_RED | FOREGROUND_INTENSITY,
-
-    /* Purple color codes. */
-    purple      = FOREGROUND_BLUE | FOREGROUND_RED,
-    lightpurple = FOREGROUND_BLUE | FOREGROUND_RED | FOREGROUND_INTENSITY,
-
-    /* White color codes. */
-    grey  = FOREGROUND_RED | FOREGROUND_GREEN | FOREGROUND_BLUE,
-    white = FOREGROUND_RED | FOREGROUND_GREEN | FOREGROUND_BLUE | FOREGROUND_INTENSITY,
-
-    /* Common color codes. */
-    debug   = lightcyan,
-    error   = lightred,
-    info    = white,
-    success = lightgreen,
-    warning = lightyelllow
-};
 
 /**
  * @brief Console class containing helper functions for console output.

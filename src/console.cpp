@@ -23,15 +23,9 @@ This file is part of DarkStar-server source code.
 
 #include "console.h"
 
+#include "app.h"
+
 #include <shobjidl.h>
-
-/* Global Externs */
-namespace globals
-{
-
-extern bool g_Hide;
-
-};
 
 namespace xiloader
 {
@@ -60,7 +54,7 @@ void console::print(xiloader::color c, const std::string& message)
  */
 void console::visible(bool visible)
 {
-    if (!globals::g_Hide)
+    if (!xiloader::config.hide)
         return;
 
     auto console = ::GetConsoleWindow();

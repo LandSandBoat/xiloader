@@ -35,14 +35,6 @@
 #include <system_error>
 #include <thread>
 
-namespace globals
-{
-
-extern std::string g_ServerAddress;
-extern char        g_SessionHash[16];
-
-} // namespace globals
-
 namespace
 {
 
@@ -576,13 +568,13 @@ Connection::~Connection()
 
 auto start(const uint16_t profilePort, const uint32_t accountId) -> bool
 {
-    hello.resize(sizeof(accountId) + sizeof(globals::g_SessionHash));
+    hello.resize(sizeof(accountId) + sizeof(xiloader::state.sessionHash));
     std::memcpy(hello.data(), &accountId, sizeof(accountId));
-    std::memcpy(hello.data() + sizeof(accountId), globals::g_SessionHash, sizeof(globals::g_SessionHash));
+    std::memcpy(hello.data() + sizeof(accountId), xiloader::state.sessionHash, sizeof(xiloader::state.sessionHash));
 
-    if (inet_pton(AF_INET, globals::g_ServerAddress.c_str(), &serverAddress) != 1)
+    if (inet_pton(AF_INET, xiloader::config.serverAddress.c_str(), &serverAddress) != 1)
     {
-        xiloader::console::output(xiloader::color::error, "The profile server relay needs a resolved server address (%s).", globals::g_ServerAddress.c_str());
+        xiloader::console::output(xiloader::color::error, "The profile server relay needs a resolved server address (%s).", xiloader::config.serverAddress.c_str());
         return false;
     }
 

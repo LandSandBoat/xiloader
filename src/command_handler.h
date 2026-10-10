@@ -21,32 +21,12 @@
 
 #pragma once
 
-/* Externals */
-namespace globals
-{
-
-extern std::string            g_ServerAddress;
-extern std::string            g_Username;
-extern std::string            g_Password;
-extern std::string            g_OtpCode;
-extern char                   g_SessionHash[16];
-extern std::string            g_Email;
-extern std::array<uint8_t, 3> g_VersionNumber;
-extern uint16_t               g_LoginDataPort;
-extern uint16_t               g_LoginViewPort;
-extern uint16_t               g_LoginAuthPort;
-extern char*                  g_CharacterList;
-extern bool                   g_IsRunning;
-extern bool                   g_FirstLogin;
-extern std::string            g_TrustToken;
-extern bool                   g_TrustThisComputer;
-
-} // namespace globals
-
 #include "defines.h"
 #include "helpers.h"
 #include "network.h"
 #include "trust_token.h"
+
+#include "enums/login_result.h"
 
 #include <shellapi.h>
 
@@ -55,12 +35,12 @@ extern bool                   g_TrustThisComputer;
 
 using json = nlohmann::json;
 
-bool handleLoginCommand(int8_t command, json& login_reply_json, uint32_t& accountId, SOCKET& sock)
+bool handleLoginCommand(xiloader::LoginResult command, json& login_reply_json, uint32_t& accountId, SOCKET& sock)
 {
     /* Handle the obtained result.. */
     switch (command)
     {
-        case 0x0001: // Success (Login)
+        case xiloader::LoginResult::LoginSuccess:
         {
             std::optional maybeAccountId = jsonGet<uint32_t>(login_reply_json, "account_id");
             if (maybeAccountId.has_value())
@@ -77,7 +57,7 @@ bool handleLoginCommand(int8_t command, json& login_reply_json, uint32_t& accoun
 
             if (maybeSessionHash.has_value())
             {
-                std::memcpy(&globals::g_SessionHash, maybeSessionHash.value().data(), maybeSessionHash.value().size());
+                std::memcpy(&xiloader::state.sessionHash, maybeSessionHash.value().data(), maybeSessionHash.value().size());
             }
             else
             {
@@ -85,7 +65,7 @@ bool handleLoginCommand(int8_t command, json& login_reply_json, uint32_t& accoun
                 break;
             }
 
-            xiloader::console::output(xiloader::color::success, "Successfully logged in as %s!", globals::g_Username.c_str());
+            xiloader::console::output(xiloader::color::success, "Successfully logged in as %s!", xiloader::config.username.c_str());
 
             auto maybeTrustToken = jsonGet<std::string>(login_reply_json, "trust_token");
             if (maybeTrustToken.has_value() && !maybeTrustToken.value().empty())
@@ -93,7 +73,7 @@ bool handleLoginCommand(int8_t command, json& login_reply_json, uint32_t& accoun
                 // Use server-provided expiry; fall back to 30 days if absent
                 int64_t expires = jsonGet<int64_t>(login_reply_json, "trust_expires")
                                       .value_or(static_cast<int64_t>(time(nullptr)) + (30 * 24 * 60 * 60));
-                saveTrustToken(globals::g_ServerAddress, globals::g_Username, maybeTrustToken.value(), expires);
+                saveTrustToken(xiloader::config.serverAddress, xiloader::config.username, maybeTrustToken.value(), expires);
                 int64_t days = (expires - static_cast<int64_t>(time(nullptr))) / (24 * 60 * 60);
                 xiloader::console::output(xiloader::color::info, "This computer is now trusted for %lld day%s.", days, days == 1 ? "" : "s");
             }
@@ -102,58 +82,55 @@ bool handleLoginCommand(int8_t command, json& login_reply_json, uint32_t& accoun
 
             return true;
         }
-        case 0x0002: // Error (Login)
+        case xiloader::LoginResult::LoginError:
         {
             xiloader::console::output(xiloader::color::error, "Failed to login. Invalid username or password.");
 
             return false;
         }
-        case 0x0003: // Success (Create Account)
+        case xiloader::LoginResult::CreateAccountSuccess:
         {
             xiloader::console::output(xiloader::color::success, "Account successfully created!");
 
             return false;
         }
-        case 0x0004: // Error (Create Account)
+        case xiloader::LoginResult::CreateAccountError:
         {
             xiloader::console::output(xiloader::color::error, "Failed to create the new account. Username already taken.");
 
             return false;
         }
-        case 0x0006: // Success (Changed Password)
+        case xiloader::LoginResult::ChangePasswordSuccess:
         {
             xiloader::console::output(xiloader::color::success, "Password updated successfully!");
-            globals::g_Password.clear();
+            xiloader::config.password.clear();
 
             return false;
         }
-        case 0x0007: // Error (Changed Password)
+        case xiloader::LoginResult::ChangePasswordError:
         {
             xiloader::console::output(xiloader::color::error, "Failed to change password.");
-            globals::g_Password.clear();
+            xiloader::config.password.clear();
 
             return false;
         }
 
-            // Commands 0x0008 through 0x0008 are currently unused
-
-        case 0x000A:
+        case xiloader::LoginResult::AlreadyLoggedIn:
         {
             xiloader::console::output(xiloader::color::error, "Failed to login. Account already logged in.");
 
             return false;
         }
-        case 0x000B:
+        case xiloader::LoginResult::VersionMismatch:
         {
             xiloader::console::output(xiloader::color::error, "Failed to login. Expected xiloader version mismatch; check with your provider.");
 
             return false;
         }
 
-        // LOGIN_ERROR_TRUST_TOKEN_INVALID
-        case 0x0013:
+        case xiloader::LoginResult::TrustTokenInvalid:
         {
-            removeTrustToken(globals::g_ServerAddress, globals::g_Username);
+            removeTrustToken(xiloader::config.serverAddress, xiloader::config.username);
             xiloader::console::output(xiloader::color::error, "==========================================================");
             xiloader::console::output(xiloader::color::error, "Trust token rejected! It has been cleared from this computer.");
             xiloader::console::output(xiloader::color::error, "Please log in again and enter your OTP code.");
@@ -162,8 +139,7 @@ bool handleLoginCommand(int8_t command, json& login_reply_json, uint32_t& accoun
             return false;
         }
 
-        // LOGIN_SUCCESS_CREATE_TOTP
-        case 0x0010:
+        case xiloader::LoginResult::CreateTotpSuccess:
         {
             std::string                uri      = "";
             std::optional<std::string> maybeURI = jsonGet<std::string>(login_reply_json, "TOTP_uri");
@@ -200,8 +176,7 @@ bool handleLoginCommand(int8_t command, json& login_reply_json, uint32_t& accoun
             return false;
         }
 
-        // LOGIN_SUCCESS_VERIFY_TOTP
-        case 0x0011:
+        case xiloader::LoginResult::VerifyTotpSuccess:
         {
             xiloader::console::output(xiloader::color::info, "Your TOTP has been registered with the server");
             xiloader::console::output(xiloader::color::info, "You are now required to use an OTP to login.");
@@ -223,13 +198,12 @@ bool handleLoginCommand(int8_t command, json& login_reply_json, uint32_t& accoun
             return false;
         }
 
-        // LOGIN_SUCCESS_REMOVE_TOTP
-        case 0x0012:
+        case xiloader::LoginResult::RemoveTotpSuccess:
         {
             xiloader::console::output(xiloader::color::info, "Your TOTP has been removed.");
             xiloader::console::output(xiloader::color::info, "You no longer need to use an OTP code to login.");
 
-            removeTrustToken(globals::g_ServerAddress, globals::g_Username);
+            removeTrustToken(xiloader::config.serverAddress, xiloader::config.username);
 
             return false;
         }

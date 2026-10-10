@@ -32,6 +32,8 @@
 
 #include <winsock2.h>
 
+#include "enums/relay_phase.h"
+
 namespace xiloader
 {
 
@@ -56,13 +58,6 @@ struct Tls
     mbedtls_entropy_context  entropy;
     mbedtls_ctr_drbg_context random;
     mbedtls_ssl_config       config;
-};
-
-enum class Phase
-{
-    Connecting,
-    Handshaking,
-    Relaying,
 };
 
 // One polcore connection: plain on the loopback side, TLS to the server

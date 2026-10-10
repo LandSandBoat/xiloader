@@ -76,8 +76,10 @@ DWORD functions::FindPattern(const char* moduleName, const unsigned char* lpPatt
  *
  * @return registry pathname.
  */
-const char* functions::GetRegistryPlayOnlineKey(int lang)
+const char* functions::GetRegistryPlayOnlineKey(xiloader::Language language)
 {
+    int lang = static_cast<int>(language);
+
     static const char* RegistryKeys[3] = {
         "SOFTWARE\\PlayOnline",   // xiloader::Japanese
         "SOFTWARE\\PlayOnlineUS", // xiloader::English
@@ -99,12 +101,14 @@ const char* functions::GetRegistryPlayOnlineKey(int lang)
  *
  * @return The language id from the registry, 1 otherwise.
  */
-int functions::GetRegistryPlayOnlineLanguage(int lang)
+int functions::GetRegistryPlayOnlineLanguage(xiloader::Language language)
 {
+    int lang = static_cast<int>(language);
+
     const char* SquareEnix = (lang == 0 /*xiloader::Japanese*/) ? "Square" : "SquareEnix";
 
     char szRegistryPath[MAX_PATH];
-    sprintf_s(szRegistryPath, MAX_PATH, "%s\\%s\\PlayOnlineViewer\\Settings", functions::GetRegistryPlayOnlineKey(lang), SquareEnix);
+    sprintf_s(szRegistryPath, MAX_PATH, "%s\\%s\\PlayOnlineViewer\\Settings", functions::GetRegistryPlayOnlineKey(language), SquareEnix);
 
     HKEY  hKey       = NULL;
     DWORD dwRegValue = 0;
@@ -132,12 +136,12 @@ int functions::GetRegistryPlayOnlineLanguage(int lang)
  *
  * @return installation folder path.
  */
-const char* functions::GetRegistryPlayOnlineInstallFolder(int lang)
+const char* functions::GetRegistryPlayOnlineInstallFolder(xiloader::Language language)
 {
     static char InstallFolder[MAX_PATH] = { 0 };
 
     char szRegistryPath[MAX_PATH];
-    sprintf_s(szRegistryPath, MAX_PATH, "%s\\InstallFolder", functions::GetRegistryPlayOnlineKey(lang));
+    sprintf_s(szRegistryPath, MAX_PATH, "%s\\InstallFolder", functions::GetRegistryPlayOnlineKey(language));
 
     HKEY  hKey      = NULL;
     DWORD dwRegSize = sizeof(InstallFolder);

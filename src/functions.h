@@ -29,6 +29,8 @@ This file is part of DarkStar-server source code.
 #endif
 
 #include <string>
+
+#include "enums/pol_language.h"
 #include <windows.h>
 #include <winsock2.h>
 #include <ws2tcpip.h>
@@ -74,7 +76,7 @@ public:
      *
      * @return registry pathname.
      */
-    static const char* GetRegistryPlayOnlineKey(int lang);
+    static const char* GetRegistryPlayOnlineKey(xiloader::Language language);
 
     /**
      * @brief Obtains the PlayOnline language id from the system registry.
@@ -83,7 +85,7 @@ public:
      *
      * @return The language id from the registry, 1 otherwise.
      */
-    static int GetRegistryPlayOnlineLanguage(int lang);
+    static int GetRegistryPlayOnlineLanguage(xiloader::Language language);
 
     /**
      * @brief Obtains the PlayOnlineViewer folder from the system registry.
@@ -93,7 +95,7 @@ public:
      *
      * @return installation folder path.
      */
-    static const char* GetRegistryPlayOnlineInstallFolder(int lang);
+    static const char* GetRegistryPlayOnlineInstallFolder(xiloader::Language language);
 };
 
 }; // namespace xiloader

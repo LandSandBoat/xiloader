@@ -1,4 +1,5 @@
 cmake_minimum_required(VERSION 3.15)
+
 # C is enabled here so the flag fix below reaches the C dependencies
 project(xiloader C CXX)
 
@@ -40,13 +41,24 @@ configure_file(
 
 # xiloader
 add_executable(xiloader
+    src/app.h
     src/client/sdk/ffxi.h
     src/client/sdk/polcore.h
     src/command_handler.h
     src/console.cpp
     src/console.h
     src/defines.h
+    src/enums/console_color.h
+    src/enums/lobby_command.h
+    src/enums/lobby_data.h
+    src/enums/login_command.h
+    src/enums/login_result.h
+    src/enums/menu_selection.h
+    src/enums/pol_function.h
+    src/enums/pol_language.h
     src/enums/polcon_state.h
+    src/enums/reconnect.h
+    src/enums/relay_phase.h
     src/functions.cpp
     src/functions.h
     src/main.cpp

@@ -30,29 +30,10 @@ This file is part of DarkStar-server source code.
 #include <vector>
 
 #include "command_handler.h"
+
+#include "enums/lobby_data.h"
+#include "enums/login_command.h"
 #include "helpers.h"
-
-/* Externals */
-namespace globals
-{
-
-extern std::string            g_ServerAddress;
-extern std::string            g_Username;
-extern std::string            g_Password;
-extern std::string            g_OtpCode;
-extern char                   g_SessionHash[16];
-extern std::string            g_Email;
-extern std::array<uint8_t, 3> g_VersionNumber;
-extern uint16_t               g_LoginDataPort;
-extern uint16_t               g_LoginViewPort;
-extern uint16_t               g_LoginAuthPort;
-extern char*                  g_CharacterList;
-extern bool                   g_IsRunning;
-extern bool                   g_FirstLogin;
-extern std::string            g_TrustToken;
-extern bool                   g_TrustThisComputer;
-
-} // namespace globals
 
 // mbed tls state
 namespace sslState
@@ -90,7 +71,7 @@ bool network::CreateConnection(datasocket* sock, const char* port)
 
     /* Attempt to get the server information. */
     struct addrinfo* addr = NULL;
-    if (getaddrinfo(globals::g_ServerAddress.c_str(), port, &hints, &addr))
+    if (getaddrinfo(xiloader::config.serverAddress.c_str(), port, &hints, &addr))
     {
         xiloader::console::output(xiloader::color::error, "Failed to obtain remote server information.");
         return 0;
@@ -135,7 +116,7 @@ bool network::CreateConnection(datasocket* sock, const char* port)
     }
 
     sock->LocalAddress  = inet_addr(localAddress.c_str());
-    sock->ServerAddress = inet_addr(globals::g_ServerAddress.c_str());
+    sock->ServerAddress = inet_addr(xiloader::config.serverAddress.c_str());
 
     return 1;
 }
@@ -159,7 +140,7 @@ bool network::CreateAuthConnection(datasocket* sock, const char* port)
 
     /* Attempt to get the server information. */
     struct addrinfo* addr = NULL;
-    if (getaddrinfo(globals::g_ServerAddress.c_str(), port, &hints, &addr))
+    if (getaddrinfo(xiloader::config.serverAddress.c_str(), port, &hints, &addr))
     {
         xiloader::console::output(xiloader::color::error, "Failed to obtain remote server information.");
         return 0;
@@ -167,7 +148,7 @@ bool network::CreateAuthConnection(datasocket* sock, const char* port)
 
     int ret = 0;
 
-    ret = mbedtls_net_connect(&sslState::server_fd, globals::g_ServerAddress.c_str(), port, MBEDTLS_NET_PROTO_TCP);
+    ret = mbedtls_net_connect(&sslState::server_fd, xiloader::config.serverAddress.c_str(), port, MBEDTLS_NET_PROTO_TCP);
     if (ret != 0)
     {
         xiloader::console::output(xiloader::color::error, "mbedtls_net_connect failed, (%s)", mbedtls_low_level_strerr(ret));
@@ -224,7 +205,7 @@ bool network::CreateAuthConnection(datasocket* sock, const char* port)
     }
     else
     {
-        xiloader::console::output(xiloader::color::info, "Remote server (%s) certificate is valid.", globals::g_ServerAddress.c_str());
+        xiloader::console::output(xiloader::color::info, "Remote server (%s) certificate is valid.", xiloader::config.serverAddress.c_str());
     }
 
     sockaddr clientAddr  = {};
@@ -234,7 +215,7 @@ bool network::CreateAuthConnection(datasocket* sock, const char* port)
     struct sockaddr_in* their_inaddr_ptr = (struct sockaddr_in*)&clientAddr;
 
     sock->LocalAddress  = their_inaddr_ptr->sin_addr.S_un.S_addr;
-    sock->ServerAddress = inet_addr(globals::g_ServerAddress.c_str());
+    sock->ServerAddress = inet_addr(xiloader::config.serverAddress.c_str());
 
     unsigned char recvBuffer[4096] = {};
 
@@ -282,7 +263,7 @@ bool network::VerifyAccount(datasocket* sock)
     unsigned char sendBuffer[8192] = { 0 };
     std::string   new_password     = "";
 
-    int8_t command = 0; // Same datatype as in xi_connect
+    auto command = xiloader::LoginCommand::None;
 
     /* Create connection if required.. */
 
@@ -294,7 +275,7 @@ bool network::VerifyAccount(datasocket* sock)
     }*/
 
     /* Determine if we should auto-login.. */
-    bool bUseAutoLogin = !globals::g_Username.empty() && !globals::g_Password.empty() && globals::g_FirstLogin;
+    bool bUseAutoLogin = !xiloader::config.username.empty() && !xiloader::config.password.empty() && xiloader::state.firstLogin;
     if (bUseAutoLogin)
         xiloader::console::output(xiloader::color::lightgreen, "Autologin activated!");
 
@@ -316,21 +297,21 @@ bool network::VerifyAccount(datasocket* sock)
             }
         }
 
-        globals::g_Username   = "";
-        globals::g_Password   = "";
-        globals::g_OtpCode    = "";
-        globals::g_TrustToken = "";
+        xiloader::config.username  = "";
+        xiloader::config.password  = "";
+        xiloader::config.otpCode   = "";
+        xiloader::state.trustToken = "";
 
         switch (selected)
         {
             case MenuSelection::Login:
             {
-                menus::enterCredentialsWithOTP(globals::g_Username, globals::g_Password, globals::g_OtpCode, &globals::g_TrustThisComputer, globals::g_ServerAddress);
+                menus::enterCredentialsWithOTP(xiloader::config.username, xiloader::config.password, xiloader::config.otpCode, &xiloader::config.trustThisComputer, xiloader::config.serverAddress);
 
                 // Load trust token for this server+user combination
-                globals::g_TrustToken = loadTrustToken(globals::g_ServerAddress, globals::g_Username);
+                xiloader::state.trustToken = loadTrustToken(xiloader::config.serverAddress, xiloader::config.username);
 
-                command = 0x10; // login
+                command = xiloader::LoginCommand::Login;
                 break;
             }
             case MenuSelection::CreateAccount:
@@ -339,12 +320,12 @@ bool network::VerifyAccount(datasocket* sock)
                 xiloader::console::output("Username (3-15 characters)");
                 xiloader::console::output("Password (6-32 characters)");
 
-                while (!menus::createNewAccount(globals::g_Username, globals::g_Password))
+                while (!menus::createNewAccount(xiloader::config.username, xiloader::config.password))
                 {
                     xiloader::console::output(xiloader::color::error, "Passwords did not match! Please try again.");
                 }
 
-                command = 0x20; // create account
+                command = xiloader::LoginCommand::CreateAccount;
                 break;
             }
 
@@ -353,7 +334,7 @@ bool network::VerifyAccount(datasocket* sock)
                 xiloader::console::output("Before resetting your password, first verify your account details.");
                 xiloader::console::output("Please enter your login information. The OTP code is only necessary if you have one registered.");
 
-                menus::enterCredentialsWithOTP(globals::g_Username, globals::g_Password, globals::g_OtpCode);
+                menus::enterCredentialsWithOTP(xiloader::config.username, xiloader::config.password, xiloader::config.otpCode);
 
                 xiloader::console::output("Enter new password (6-32 characters): ");
 
@@ -362,39 +343,39 @@ bool network::VerifyAccount(datasocket* sock)
                     xiloader::console::output(xiloader::color::error, "Passwords did not match! Please try again.");
                 }
 
-                command = 0x30; // change password
+                command = xiloader::LoginCommand::ChangePassword;
                 break;
             }
             case MenuSelection::RegisterTwoFactorOTP:
             {
-                menus::enterCredentialsNoOTP(globals::g_Username, globals::g_Password);
+                menus::enterCredentialsNoOTP(xiloader::config.username, xiloader::config.password);
 
-                command = 0x31; // create TOTP
+                command = xiloader::LoginCommand::CreateTotp;
                 break;
             }
 
             case MenuSelection::RemoveTwoFactorOTP:
             {
                 xiloader::console::output("Please enter your login information; your OTP code may be substituted for the recovery code");
-                menus::enterCredentialsWithOTP(globals::g_Username, globals::g_Password, globals::g_OtpCode);
+                menus::enterCredentialsWithOTP(xiloader::config.username, xiloader::config.password, xiloader::config.otpCode);
 
-                command = 0x32;
+                command = xiloader::LoginCommand::RemoveTotp;
                 break;
             }
 
             case MenuSelection::RegenerateTwoFactorRemovalCode:
             {
                 xiloader::console::output("Please enter your login information; your OTP code may be substituted for the recovery code");
-                menus::enterCredentialsWithOTP(globals::g_Username, globals::g_Password, globals::g_OtpCode);
+                menus::enterCredentialsWithOTP(xiloader::config.username, xiloader::config.password, xiloader::config.otpCode);
 
-                command = 0x33; // Regenerate recovery code
+                command = xiloader::LoginCommand::RegenerateRecoveryCode;
                 break;
             }
             case MenuSelection::ValidateTwoFactorOTP: // also enables OTP
             {
-                menus::enterCredentialsWithOTP(globals::g_Username, globals::g_Password, globals::g_OtpCode);
+                menus::enterCredentialsWithOTP(xiloader::config.username, xiloader::config.password, xiloader::config.otpCode);
 
-                command = 0x34;
+                command = xiloader::LoginCommand::VerifyTotp;
                 break;
             }
             case MenuSelection::RevokeComputerTrust:
@@ -402,7 +383,7 @@ bool network::VerifyAccount(datasocket* sock)
                 std::string revokeUsername;
                 xiloader::console::output("Enter the username to revoke trust for:");
                 menus::enterUsernameOnly(revokeUsername);
-                removeTrustToken(globals::g_ServerAddress, revokeUsername);
+                removeTrustToken(xiloader::config.serverAddress, revokeUsername);
                 xiloader::console::output(xiloader::color::info, "Computer trust revoked for '%s'.", revokeUsername.c_str());
                 return 0; // Return to menu
             }
@@ -422,25 +403,25 @@ bool network::VerifyAccount(datasocket* sock)
     else
     {
         /* User has auto-login enabled.. */
-        command               = 0x10;
-        globals::g_FirstLogin = false;
+        command                    = xiloader::LoginCommand::Login;
+        xiloader::state.firstLogin = false;
 
         // Load trust token for autologin
-        globals::g_TrustToken = loadTrustToken(globals::g_ServerAddress, globals::g_Username);
+        xiloader::state.trustToken = loadTrustToken(xiloader::config.serverAddress, xiloader::config.username);
     }
 
     json login_json;
-    login_json["username"]     = globals::g_Username;
-    login_json["password"]     = globals::g_Password;
-    login_json["otp"]          = globals::g_OtpCode;
+    login_json["username"]     = xiloader::config.username;
+    login_json["password"]     = xiloader::config.password;
+    login_json["otp"]          = xiloader::config.otpCode;
     login_json["new_password"] = new_password;
-    login_json["version"]      = globals::g_VersionNumber;
-    login_json["command"]      = command;
+    login_json["version"]      = xiloader::Config::versionNumber;
+    login_json["command"]      = static_cast<int8_t>(command);
 
-    if (command == 0x10) // Only send trust fields for login
+    if (command == xiloader::LoginCommand::Login) // Only send trust fields for login
     {
-        login_json["trust_token"]         = globals::g_TrustToken;
-        login_json["trust_this_computer"] = globals::g_TrustThisComputer;
+        login_json["trust_token"]         = xiloader::state.trustToken;
+        login_json["trust_this_computer"] = xiloader::config.trustThisComputer;
     }
 
     std::string str          = login_json.dump();
@@ -477,10 +458,11 @@ bool network::VerifyAccount(datasocket* sock)
 
     if (errorMessage.empty())
     {
+        auto result       = xiloader::LoginResult{};
         auto maybeCommand = jsonGet<int8_t>(login_reply_json, "result");
         if (maybeCommand.has_value())
         {
-            command = maybeCommand.value();
+            result = static_cast<xiloader::LoginResult>(maybeCommand.value());
         }
         else
         {
@@ -490,7 +472,7 @@ bool network::VerifyAccount(datasocket* sock)
             return false;
         }
 
-        retval = handleLoginCommand(command, login_reply_json, sock->AccountId, sock->s);
+        retval = handleLoginCommand(result, login_reply_json, sock->AccountId, sock->s);
     }
     else
     {
@@ -529,8 +511,8 @@ DWORD __stdcall network::FFXiDataComm(LPVOID lpParam)
     unsigned int       socksize = sizeof(client);
 
     // send session hash
-    sendBuffer[0] = 0xFE;
-    memcpy(sendBuffer + 12, globals::g_SessionHash, 16);
+    sendBuffer[0] = static_cast<char>(xiloader::LobbyDataReply::SessionHash);
+    memcpy(sendBuffer + 12, xiloader::state.sessionHash, 16);
 
     auto result = send(sock->s, sendBuffer, 28, 0);
     if (result == SOCKET_ERROR)
@@ -544,7 +526,7 @@ DWORD __stdcall network::FFXiDataComm(LPVOID lpParam)
     }
     memset(sendBuffer, 0, 28);
 
-    while (globals::g_IsRunning)
+    while (xiloader::state.isRunning)
     {
         /* Attempt to receive the incoming data.. */
         if (recvfrom(sock->s, recvBuffer, sizeof(recvBuffer), 0, (struct sockaddr*)&client, (int*)&socksize) <= 0)
@@ -560,39 +542,40 @@ DWORD __stdcall network::FFXiDataComm(LPVOID lpParam)
             continue;
         }
 
-        switch (recvBuffer[0])
+        switch (static_cast<xiloader::LobbyDataRequest>(recvBuffer[0]))
         {
-            case 0x0001:
-                sendBuffer[0] = 0xA1u;
+            case xiloader::LobbyDataRequest::AccountId:
+                sendBuffer[0] = static_cast<char>(xiloader::LobbyDataReply::AccountId);
                 memcpy(sendBuffer + 0x01, &sock->AccountId, 4);
                 memcpy(sendBuffer + 0x05, &sock->ServerAddress, 4);
-                memcpy(sendBuffer + 12, globals::g_SessionHash, 16);
+                memcpy(sendBuffer + 12, xiloader::state.sessionHash, 16);
 
                 xiloader::console::output(xiloader::color::warning, "Sending account id..");
                 sendSize = 28;
                 break;
 
-            case 0x0002:
-            case 0x0015:
+            case xiloader::LobbyDataRequest::Key:
+            case xiloader::LobbyDataRequest::KeyAlternate:
+                // The packet starts with LobbyDataReply::Key
                 memcpy(sendBuffer, (char*)"\xA2\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x58\xE0\x5D\xAD\x00\x00\x00\x00", 25);
 
                 xiloader::console::output(xiloader::color::warning, "Sending key..");
                 sendSize = 28;
                 break;
 
-            case 0x0003:
+            case xiloader::LobbyDataRequest::CharacterList:
                 xiloader::console::output(xiloader::color::warning, "Receiving character list..");
                 for (auto x = 0; x < recvBuffer[1]; x++)
                 {
-                    globals::g_CharacterList[0x00 + (x * 0x68)] = 1;
-                    globals::g_CharacterList[0x02 + (x * 0x68)] = 1;
-                    globals::g_CharacterList[0x10 + (x * 0x68)] = (char)x;
-                    globals::g_CharacterList[0x11 + (x * 0x68)] = 0x80u;
-                    globals::g_CharacterList[0x18 + (x * 0x68)] = 0x20;
-                    globals::g_CharacterList[0x28 + (x * 0x68)] = 0x20;
+                    xiloader::state.characterList[0x00 + (x * 0x68)] = 1;
+                    xiloader::state.characterList[0x02 + (x * 0x68)] = 1;
+                    xiloader::state.characterList[0x10 + (x * 0x68)] = (char)x;
+                    xiloader::state.characterList[0x11 + (x * 0x68)] = 0x80u;
+                    xiloader::state.characterList[0x18 + (x * 0x68)] = 0x20;
+                    xiloader::state.characterList[0x28 + (x * 0x68)] = 0x20;
 
-                    memcpy(globals::g_CharacterList + 0x04 + (x * 0x68), recvBuffer + 0x10 * (x + 1) + 0x04, 4); // Character Id
-                    memcpy(globals::g_CharacterList + 0x08 + (x * 0x68), recvBuffer + 0x10 * (x + 1), 4);        // Content Id
+                    memcpy(xiloader::state.characterList + 0x04 + (x * 0x68), recvBuffer + 0x10 * (x + 1) + 0x04, 4); // Character Id
+                    memcpy(xiloader::state.characterList + 0x08 + (x * 0x68), recvBuffer + 0x10 * (x + 1), 4);        // Content Id
                 }
                 sendSize = 0;
                 break;
