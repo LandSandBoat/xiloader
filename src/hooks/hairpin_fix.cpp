@@ -26,7 +26,7 @@
 #include "app.h"
 #include "console.h"
 #include "functions.h"
-#include "network.h"
+#include "net/resolve.h"
 
 namespace
 {
@@ -61,7 +61,7 @@ DWORD xiloader::ApplyHairpinFixThread(LPVOID lpParam)
     } while (GetModuleHandleA("FFXiMain.dll") == NULL);
 
     /* Convert server address.. */
-    if (!xiloader::network::ResolveHostname(xiloader::config.serverAddress.c_str(), &g_NewServerAddress))
+    if (!xiloader::resolveHostname(xiloader::config.serverAddress.c_str(), &g_NewServerAddress))
     {
         xiloader::console::output(xiloader::color::error, "Hairpin fix failed to resolve the server address %s (winsock error %d).", xiloader::config.serverAddress.c_str(), WSAGetLastError());
     }

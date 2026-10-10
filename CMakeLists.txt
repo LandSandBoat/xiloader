@@ -68,15 +68,17 @@ add_executable(xiloader
     src/hooks/hairpin_fix.h
     src/hooks/socket_hooks.cpp
     src/hooks/socket_hooks.h
+    src/lobby/data_connection.cpp
+    src/lobby/data_connection.h
     src/login/auth_connection.cpp
     src/login/auth_connection.h
     src/login/login.cpp
     src/login/login.h
     src/main.cpp
+    src/net/resolve.cpp
+    src/net/resolve.h
     src/net/tls_client_config.cpp
     src/net/tls_client_config.h
-    src/network.cpp
-    src/network.h
     src/otp/qr_code.cpp
     src/otp/qr_code.h
     src/otp/trust_token_manager.cpp
@@ -108,7 +110,6 @@ target_link_libraries(xiloader PUBLIC
     crypt32
     psapi
     ws2_32
-    iphlpapi
     MbedTLS::mbedtls
     MbedTLS::mbedcrypto
     MbedTLS::mbedx509    
@@ -121,13 +122,15 @@ target_link_libraries(xiloader PUBLIC
 # Assert-based checks for the parts that run without the game
 add_executable(xiloader_check
     src/config.cpp
+    src/console.cpp
+    src/lobby/data_connection.cpp
     src/ui/plain_menu.cpp
     tests/check.cpp
 )
 
 target_include_directories(xiloader_check PRIVATE ${PROJECT_SOURCE_DIR}/src)
 target_compile_definitions(xiloader_check PRIVATE NOMINMAX WIN32_LEAN_AND_MEAN)
-target_link_libraries(xiloader_check PRIVATE argparse nlohmann_json::nlohmann_json)
+target_link_libraries(xiloader_check PRIVATE argparse nlohmann_json::nlohmann_json ws2_32)
 
 message(STATUS "CMAKE_VERSION: ${CMAKE_VERSION}")
 message(STATUS "CMAKE_BUILD_TYPE: ${CMAKE_BUILD_TYPE}")

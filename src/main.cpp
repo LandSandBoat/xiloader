@@ -40,9 +40,10 @@ This file is part of DarkStar-server source code.
 #include "helpers.h"
 #include "hooks/hairpin_fix.h"
 #include "hooks/socket_hooks.h"
+#include "lobby/data_connection.h"
 #include "login/auth_connection.h"
 #include "login/login.h"
-#include "network.h"
+#include "net/resolve.h"
 #include "playonline.h"
 #include "polrelay.h"
 
@@ -134,29 +135,28 @@ int run()
 
     xiloader::console::output(xiloader::color::info, "Resolving '%s' ...", xiloader::config.serverAddress.c_str());
 
-    if (xiloader::network::ResolveHostname(xiloader::config.serverAddress.c_str(), &ulAddress))
+    if (xiloader::resolveHostname(xiloader::config.serverAddress.c_str(), &ulAddress))
     {
         xiloader::config.serverAddress = inet_ntoa(*((struct in_addr*)&ulAddress));
 
         xiloader::console::output(xiloader::color::info, "Resolved server address to '%s:%d'", xiloader::config.serverAddress.c_str(), xiloader::config.loginAuthPort);
 
         /* Attempt to create socket to server..*/
-        xiloader::datasocket sock;
-        std::string          loginport = std::to_string(xiloader::config.loginDataPort);
+        uint32_t                      accountId = 0;
+        xiloader::LobbyDataConnection lobbyData;
 
         /* Attempt to verify the users account info.. */
-        if (auth.connect(xiloader::config.serverAddress, xiloader::config.loginAuthPort) && xiloader::login::run(auth, sock.AccountId))
+        if (auth.connect(xiloader::config.serverAddress, xiloader::config.loginAuthPort) && xiloader::login::run(auth, accountId))
         {
             /* Attempt to create connection to the login server.. */
-            if (!xiloader::network::CreateConnection(&sock, loginport.c_str()))
+            const bool connected = lobbyData.connect(xiloader::config.serverAddress, xiloader::config.loginDataPort);
+            if (!connected)
             {
-                sock.s  = INVALID_SOCKET;
                 int err = WSAGetLastError();
-                xiloader::console::output(xiloader::color::error, "Failed to initialize connection to server on port %s, winsock error: %d", loginport.c_str(), err);
+                xiloader::console::output(xiloader::color::error, "Failed to initialize connection to server on port %u, winsock error: %d", xiloader::config.loginDataPort, err);
             }
 
-            // Check if sockets are invalid
-            if (sock.s != INVALID_SOCKET)
+            if (connected)
             {
                 /* Start hairpin hack thread if required.. */
                 if (xiloader::config.hairpin)
@@ -169,12 +169,7 @@ int run()
                 }
 
                 // Create lobby data thread
-                xiloader::state.isRunning = true;
-                const xiloader::LobbyThread lobbyThread{ CreateThread(NULL, 0, xiloader::network::FFXiServer, &sock, 0, NULL) };
-                if (lobbyThread.handle == NULL)
-                {
-                    xiloader::console::output(xiloader::color::error, "Failed to start the login data thread (error %lu).", GetLastError());
-                }
+                lobbyData.start(accountId);
 
                 /* Attempt to create polcore instance..*/
                 const auto                          languageId = static_cast<int>(xiloader::config.language);
@@ -215,7 +210,7 @@ int run()
                     memcpy(polConnection + 0x48, &enc, sizeof(char**));
 
                     /* Locate the character storage buffer.. */
-                    xiloader::state.characterList = (char*)FindCharacters((void**)lpCommandTable);
+                    lobbyData.setCharacterList((char*)FindCharacters((void**)lpCommandTable));
 
                     /* Invoke the setup functions for polcore.. */
                     lpCommandTable[xiloader::tableIndex(xiloader::PolFunction::RegistryLang)](languageId);
@@ -235,7 +230,7 @@ int run()
                         return 1;
                     }
 
-                    if (!xiloader::polrelay::start(xiloader::config.profilePort, sock.AccountId))
+                    if (!xiloader::polrelay::start(xiloader::config.profilePort, accountId))
                     {
                         return 1;
                     }
@@ -248,7 +243,7 @@ int run()
 
                     lpCommandTable[xiloader::tableIndex(xiloader::PolFunction::InetMutex)]();
 
-                    if (!xiloader::playonline::logIn(lpCommandTable, sock.AccountId))
+                    if (!xiloader::playonline::logIn(lpCommandTable, accountId))
                     {
                         return 1;
                     }

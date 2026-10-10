@@ -23,8 +23,8 @@
 
 #include "app.h"
 #include "auth_connection.h"
+#include "console.h"
 #include "helpers.h"
-#include "network.h"
 #include "otp/qr_code.h"
 #include "otp/trust_token_manager.h"
 #include "ui/prompts.h"

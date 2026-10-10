@@ -21,8 +21,11 @@
 
 #undef NDEBUG
 #include <cassert>
+#include <chrono>
 
+#include "app.h"
 #include "config.h"
+#include "lobby/data_connection.h"
 #include "ui/menu.h"
 
 #include <filesystem>
@@ -30,6 +33,18 @@
 #include <iostream>
 #include <sstream>
 #include <stdexcept>
+#include <thread>
+
+#include <ws2tcpip.h>
+
+// console.cpp and the lobby connection read these
+namespace xiloader
+{
+
+Config   config;
+AppState state;
+
+} // namespace xiloader
 
 namespace
 {
@@ -148,12 +163,123 @@ void checkConfig()
     assert(rejects({ "--json", writeJson("xiloader_check_bad4.json", "not json").c_str() }));
 }
 
+// Stands in for the login server's data port: one listener on a free loopback port
+struct DataServer
+{
+    SOCKET   listener = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
+    SOCKET   client   = INVALID_SOCKET;
+    uint16_t port     = 0;
+
+    DataServer()
+    {
+        sockaddr_in address = {};
+        address.sin_family  = AF_INET;
+        inet_pton(AF_INET, "127.0.0.1", &address.sin_addr);
+        assert(bind(listener, reinterpret_cast<sockaddr*>(&address), sizeof(address)) == 0);
+        assert(listen(listener, 1) == 0);
+
+        int length = sizeof(address);
+        getsockname(listener, reinterpret_cast<sockaddr*>(&address), &length);
+        port = ntohs(address.sin_port);
+    }
+
+    ~DataServer()
+    {
+        closesocket(client);
+        closesocket(listener);
+    }
+
+    auto read(const int size) -> std::string
+    {
+        std::string data(size, '\0');
+        int         total = 0;
+        while (total < size)
+        {
+            const auto got = recv(client, data.data() + total, size - total, 0);
+            assert(got > 0);
+            total += got;
+        }
+        return data;
+    }
+};
+
+void checkLobbyData()
+{
+    WSADATA wsa = {};
+    assert(WSAStartup(MAKEWORD(2, 2), &wsa) == 0);
+
+    std::memset(xiloader::state.sessionHash, 0x5A, sizeof(xiloader::state.sessionHash));
+
+    // Room for the 20 characters the connection may write, then a canary
+    constexpr int     kEntry = 0x68;
+    std::vector<char> list(kEntry * 20 + 64, 0x77);
+
+    {
+        DataServer                    server;
+        xiloader::LobbyDataConnection connection;
+        assert(connection.connect("127.0.0.1", server.port));
+        server.client = accept(server.listener, nullptr, nullptr);
+        assert(server.client != INVALID_SOCKET);
+
+        connection.start(0x11223344);
+
+        const auto hello = server.read(28);
+        assert(static_cast<uint8_t>(hello[0]) == 0xFE && hello[12] == 0x5A && hello[27] == 0x5A);
+
+        // A list that arrives before polcore's buffer is known is dropped
+        char early[0x30] = { 0x03, 2 };
+        send(server.client, early, sizeof(early), 0);
+
+        // The connection treats each read as one packet, so keep the next send out of it
+        std::this_thread::sleep_for(std::chrono::milliseconds(200));
+
+        const char accountRequest[1] = { 0x01 };
+        send(server.client, accountRequest, 1, 0);
+        const auto account = server.read(28);
+        assert(static_cast<uint8_t>(account[0]) == 0xA1);
+        assert(std::memcmp(account.data() + 1, "\x44\x33\x22\x11", 4) == 0);
+        assert(account[12] == 0x5A);
+
+        const char keyRequest[1] = { 0x02 };
+        send(server.client, keyRequest, 1, 0);
+        const auto key = server.read(28);
+        assert(static_cast<uint8_t>(key[0]) == 0xA2 && static_cast<uint8_t>(key[17]) == 0x58);
+
+        connection.setCharacterList(list.data());
+
+        // Claims 200 characters but only carries two
+        char           packet[0x30]   = { 0x03, static_cast<char>(200) };
+        const uint32_t contentIds[]   = { 0xAAAA0001, 0xAAAA0002 };
+        const uint32_t characterIds[] = { 0xBBBB0001, 0xBBBB0002 };
+        for (int i = 0; i < 2; ++i)
+        {
+            std::memcpy(packet + 0x10 * (i + 1), &contentIds[i], 4);
+            std::memcpy(packet + 0x10 * (i + 1) + 4, &characterIds[i], 4);
+        }
+        send(server.client, packet, sizeof(packet), 0);
+
+        std::this_thread::sleep_for(std::chrono::milliseconds(200));
+
+        // The key round trip proves the list packet before it was handled
+        send(server.client, keyRequest, 1, 0);
+        server.read(28);
+    }
+
+    assert(list[0] == 1 && list[kEntry] == 1 && list[kEntry + 0x10] == 1);
+    assert(std::memcmp(list.data() + kEntry + 0x04, "\x02\x00\xBB\xBB", 4) == 0);
+    assert(std::memcmp(list.data() + kEntry + 0x08, "\x02\x00\xAA\xAA", 4) == 0);
+    assert(list[kEntry * 2] == 0x77);
+
+    WSACleanup();
+}
+
 } // namespace
 
 auto main() -> int
 {
     checkPlainMenu();
     checkConfig();
+    checkLobbyData();
     std::cout << "ok" << std::endl;
     return 0;
 }

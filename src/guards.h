@@ -68,21 +68,4 @@ struct RelayStop
     }
 };
 
-// The lobby data thread, stopped when this goes out of scope
-struct LobbyThread
-{
-    HANDLE handle = NULL;
-
-    ~LobbyThread()
-    {
-        xiloader::state.isRunning = false;
-        if (handle != NULL)
-        {
-            TerminateThread(handle, 0);
-            WaitForSingleObject(handle, 1000);
-            CloseHandle(handle);
-        }
-    }
-};
-
 } // namespace xiloader

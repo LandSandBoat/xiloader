@@ -22,7 +22,6 @@
 #include "auth_connection.h"
 
 #include "console.h"
-#include "network.h"
 
 namespace xiloader
 {
@@ -52,7 +51,7 @@ auto AuthConnection::connect(const std::string& address, const uint16_t port) ->
     ret = mbedtls_net_connect(&server, address.c_str(), std::to_string(port).c_str(), MBEDTLS_NET_PROTO_TCP);
     if (ret != 0)
     {
-        xiloader::console::output(xiloader::color::error, "mbedtls_net_connect failed, (%s)", mbedtls_low_level_strerr(ret));
+        xiloader::console::output(xiloader::color::error, "mbedtls_net_connect failed, (%s)", mbedtlsErrorText(ret).c_str());
         return false;
     }
 
@@ -62,7 +61,7 @@ auto AuthConnection::connect(const std::string& address, const uint16_t port) ->
 
     if ((ret = mbedtls_ssl_setup(&ssl, config.get())) != 0)
     {
-        xiloader::console::output(xiloader::color::error, "mbedtls_ssl_setup failed, (%s)", mbedtls_low_level_strerr(ret));
+        xiloader::console::output(xiloader::color::error, "mbedtls_ssl_setup failed, (%s)", mbedtlsErrorText(ret).c_str());
         return false;
     }
 
