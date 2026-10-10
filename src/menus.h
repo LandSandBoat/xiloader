@@ -26,7 +26,7 @@
 #include "ftxui/component/component_options.hpp"  // for MenuOption
 #include "ftxui/component/screen_interactive.hpp" // for ScreenInteractive
 
-#include "trust_token.h"
+#include "otp/trust_token_manager.h"
 
 #include "enums/menu_selection.h"
 
@@ -215,13 +215,13 @@ MenuSelection mainMenu()
     return MenuSelection::None;
 }
 
-void enterCredentialsWithOTP(std::string& username, std::string& password, std::string& OTP, bool* trustThisComputer = nullptr, const std::string& serverAddress = "")
+void enterCredentialsWithOTP(std::string& username, std::string& password, std::string& OTP, bool* trustThisComputer = nullptr, const xiloader::TrustTokenManager* trustTokens = nullptr)
 {
     if (plainConsole())
     {
         username = promptLine("  Username: ");
         password = promptLine("  Password: ", true);
-        if (!serverAddress.empty() && !loadTrustToken(serverAddress, username).empty())
+        if (trustTokens && trustTokens->isTrusted(username))
         {
             return;
         }
@@ -305,10 +305,10 @@ void enterCredentialsWithOTP(std::string& username, std::string& password, std::
         auto renderer = ftxui::Renderer(component, [&]
         {
                 // Check trust status when username changes
-                if (!serverAddress.empty() && username != lastCheckedUser)
+                if (trustTokens && username != lastCheckedUser)
                 {
                     lastCheckedUser = username;
-                    isTrusted = !username.empty() && !loadTrustToken(serverAddress, username).empty();
+                    isTrusted = !username.empty() && trustTokens->isTrusted(username);
                     if (isTrusted)
                     {
                         OTP.clear();

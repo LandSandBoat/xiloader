@@ -25,7 +25,7 @@ This file is part of DarkStar-server source code.
 #include "network.h"
 #include "helpers.h"
 #include "menus.h"
-#include "trust_token.h"
+#include "otp/trust_token_manager.h"
 #include <iphlpapi.h>
 #include <vector>
 
@@ -265,6 +265,8 @@ bool network::VerifyAccount(datasocket* sock)
 
     auto command = xiloader::LoginCommand::None;
 
+    const xiloader::TrustTokenManager trustTokens(xiloader::config.serverAddress);
+
     /* Create connection if required.. */
 
     // TODO: fix this check for TLS
@@ -297,19 +299,15 @@ bool network::VerifyAccount(datasocket* sock)
             }
         }
 
-        xiloader::config.username  = "";
-        xiloader::config.password  = "";
-        xiloader::config.otpCode   = "";
-        xiloader::state.trustToken = "";
+        xiloader::config.username = "";
+        xiloader::config.password = "";
+        xiloader::config.otpCode  = "";
 
         switch (selected)
         {
             case MenuSelection::Login:
             {
-                menus::enterCredentialsWithOTP(xiloader::config.username, xiloader::config.password, xiloader::config.otpCode, &xiloader::config.trustThisComputer, xiloader::config.serverAddress);
-
-                // Load trust token for this server+user combination
-                xiloader::state.trustToken = loadTrustToken(xiloader::config.serverAddress, xiloader::config.username);
+                menus::enterCredentialsWithOTP(xiloader::config.username, xiloader::config.password, xiloader::config.otpCode, &xiloader::config.trustThisComputer, &trustTokens);
 
                 command = xiloader::LoginCommand::Login;
                 break;
@@ -383,7 +381,7 @@ bool network::VerifyAccount(datasocket* sock)
                 std::string revokeUsername;
                 xiloader::console::output("Enter the username to revoke trust for:");
                 menus::enterUsernameOnly(revokeUsername);
-                removeTrustToken(xiloader::config.serverAddress, revokeUsername);
+                trustTokens.revoke(revokeUsername);
                 xiloader::console::output(xiloader::color::info, "Computer trust revoked for '%s'.", revokeUsername.c_str());
                 return 0; // Return to menu
             }
@@ -405,9 +403,6 @@ bool network::VerifyAccount(datasocket* sock)
         /* User has auto-login enabled.. */
         command                    = xiloader::LoginCommand::Login;
         xiloader::state.firstLogin = false;
-
-        // Load trust token for autologin
-        xiloader::state.trustToken = loadTrustToken(xiloader::config.serverAddress, xiloader::config.username);
     }
 
     json login_json;
@@ -420,8 +415,7 @@ bool network::VerifyAccount(datasocket* sock)
 
     if (command == xiloader::LoginCommand::Login) // Only send trust fields for login
     {
-        login_json["trust_token"]         = xiloader::state.trustToken;
-        login_json["trust_this_computer"] = xiloader::config.trustThisComputer;
+        trustTokens.addToLoginRequest(login_json, xiloader::config.username, xiloader::config.trustThisComputer);
     }
 
     std::string str          = login_json.dump();
@@ -472,7 +466,7 @@ bool network::VerifyAccount(datasocket* sock)
             return false;
         }
 
-        retval = handleLoginCommand(result, login_reply_json, sock->AccountId, sock->s);
+        retval = handleLoginCommand(result, login_reply_json, sock->AccountId, sock->s, trustTokens);
     }
     else
     {

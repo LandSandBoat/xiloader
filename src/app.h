@@ -52,11 +52,10 @@ struct Config
 
 struct AppState
 {
-    char        sessionHash[16] = {};    // Session hash sent from auth
-    std::string trustToken;              // trust token loaded from disk or received from server
-    bool        firstLogin    = false;   // set to true when --user --pass are both set to allow for autologin
-    char*       characterList = nullptr; // Pointer to the character list data being sent from the server.
-    bool        isRunning     = false;   // Flag to determine if the network threads should hault.
+    char  sessionHash[16] = {};      // Session hash sent from auth
+    bool  firstLogin      = false;   // set to true when --user --pass are both set to allow for autologin
+    char* characterList   = nullptr; // Pointer to the character list data being sent from the server.
+    bool  isRunning       = false;   // Flag to determine if the network threads should hault.
 };
 
 extern Config   config;

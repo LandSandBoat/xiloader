@@ -65,12 +65,12 @@ add_executable(xiloader
     src/menus.h
     src/network.cpp
     src/network.h
+    src/otp/trust_token_manager.cpp
+    src/otp/trust_token_manager.h
     src/playonline.cpp
     src/playonline.h
     src/polrelay.cpp
     src/polrelay.h
-    src/trust_token.cpp
-    src/trust_token.h
     ${CMAKE_CURRENT_BINARY_DIR}/src/xiloader.rc
     xiloader.manifest
 )

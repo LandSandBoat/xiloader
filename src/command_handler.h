@@ -24,7 +24,7 @@
 #include "defines.h"
 #include "helpers.h"
 #include "network.h"
-#include "trust_token.h"
+#include "otp/trust_token_manager.h"
 
 #include "enums/login_result.h"
 
@@ -35,7 +35,7 @@
 
 using json = nlohmann::json;
 
-bool handleLoginCommand(xiloader::LoginResult command, json& login_reply_json, uint32_t& accountId, SOCKET& sock)
+bool handleLoginCommand(xiloader::LoginResult command, json& login_reply_json, uint32_t& accountId, SOCKET& sock, const xiloader::TrustTokenManager& trustTokens)
 {
     /* Handle the obtained result.. */
     switch (command)
@@ -67,16 +67,7 @@ bool handleLoginCommand(xiloader::LoginResult command, json& login_reply_json, u
 
             xiloader::console::output(xiloader::color::success, "Successfully logged in as %s!", xiloader::config.username.c_str());
 
-            auto maybeTrustToken = jsonGet<std::string>(login_reply_json, "trust_token");
-            if (maybeTrustToken.has_value() && !maybeTrustToken.value().empty())
-            {
-                // Use server-provided expiry; fall back to 30 days if absent
-                int64_t expires = jsonGet<int64_t>(login_reply_json, "trust_expires")
-                                      .value_or(static_cast<int64_t>(time(nullptr)) + (30 * 24 * 60 * 60));
-                saveTrustToken(xiloader::config.serverAddress, xiloader::config.username, maybeTrustToken.value(), expires);
-                int64_t days = (expires - static_cast<int64_t>(time(nullptr))) / (24 * 60 * 60);
-                xiloader::console::output(xiloader::color::info, "This computer is now trusted for %lld day%s.", days, days == 1 ? "" : "s");
-            }
+            trustTokens.acceptLoginReply(login_reply_json, xiloader::config.username);
 
             shutdown(sock, SD_BOTH);
 
@@ -130,7 +121,7 @@ bool handleLoginCommand(xiloader::LoginResult command, json& login_reply_json, u
 
         case xiloader::LoginResult::TrustTokenInvalid:
         {
-            removeTrustToken(xiloader::config.serverAddress, xiloader::config.username);
+            trustTokens.revoke(xiloader::config.username);
             xiloader::console::output(xiloader::color::error, "==========================================================");
             xiloader::console::output(xiloader::color::error, "Trust token rejected! It has been cleared from this computer.");
             xiloader::console::output(xiloader::color::error, "Please log in again and enter your OTP code.");
@@ -203,7 +194,7 @@ bool handleLoginCommand(xiloader::LoginResult command, json& login_reply_json, u
             xiloader::console::output(xiloader::color::info, "Your TOTP has been removed.");
             xiloader::console::output(xiloader::color::info, "You no longer need to use an OTP code to login.");
 
-            removeTrustToken(xiloader::config.serverAddress, xiloader::config.username);
+            trustTokens.revoke(xiloader::config.username);
 
             return false;
         }
