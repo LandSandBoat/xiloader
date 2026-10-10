@@ -40,20 +40,19 @@ configure_file(
 
 # xiloader
 add_executable(xiloader
+    src/client/sdk/ffxi.h
+    src/client/sdk/polcore.h
     src/command_handler.h
     src/console.cpp
     src/console.h
     src/defines.h
     src/enums/polcon_state.h
-    src/FFXi.h
-    src/FFXiMain.h
     src/functions.cpp
     src/functions.h
     src/main.cpp
     src/menus.h
     src/network.cpp
     src/network.h
-    src/polcore.h
     src/playonline.cpp
     src/playonline.h
     src/polrelay.cpp
@@ -69,7 +68,7 @@ set_target_properties(xiloader PROPERTIES LINK_FLAGS "/LARGEADDRESSAWARE")
 # Keeps windows.h from defining min/max and from pulling in winsock.h, so include order does not matter
 target_compile_definitions(xiloader PRIVATE NOMINMAX WIN32_LEAN_AND_MEAN)
 
-target_include_directories(xiloader PUBLIC ${PROJECT_SOURCE_DIR}/xiloader)
+target_include_directories(xiloader PRIVATE ${PROJECT_SOURCE_DIR}/src)
 
 target_link_libraries(xiloader PUBLIC
     detours

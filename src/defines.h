@@ -40,9 +40,8 @@ This file is part of DarkStar-server source code.
 
 #include "detours/detours.h"
 
-#include "ffxi.h"
-#include "ffximain.h"
-#include "polcore.h"
+#include "client/sdk/ffxi.h"
+#include "client/sdk/polcore.h"
 
 /* Function Offset Definitions */
 #define POLFUNC_INET_MUTEX     0x032F

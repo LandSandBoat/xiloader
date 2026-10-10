@@ -1,3 +1,1 @@
-src/polcore.h
-src/ffxi.h
-src/ffximain.h
+src/client/sdk/*
