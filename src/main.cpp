@@ -50,7 +50,7 @@ This file is part of DarkStar-server source code.
 /**
  * @brief Locates the INET mutex function call inside of polcore.dll
  *
- * @return The pointer to the function call.
+ * @return The pointer to the function call, 0 when it is not found.
  */
 inline DWORD FindINETMutex(const xiloader::Language language)
 {
@@ -59,6 +59,7 @@ inline DWORD FindINETMutex(const xiloader::Language language)
     if (result == 0)
     {
         xiloader::console::output(xiloader::color::error, "Failed to locate the INET mutex in %s. This PlayOnline version is not supported, or --lang doesn't match your install.", module);
+        return 0;
     }
     return (*(DWORD*)(result - 4) + (result));
 }
@@ -66,7 +67,7 @@ inline DWORD FindINETMutex(const xiloader::Language language)
 /**
  * @brief Locates the PlayOnline connection object inside of polcore.dll
  *
- * @return Pointer to the pol connection object.
+ * @return Pointer to the pol connection object, 0 when it is not found.
  */
 inline DWORD FindPolConn(const xiloader::Language language)
 {
@@ -75,6 +76,7 @@ inline DWORD FindPolConn(const xiloader::Language language)
     if (result == 0)
     {
         xiloader::console::output(xiloader::color::error, "Failed to locate the PlayOnline connection in %s. This PlayOnline version is not supported, or --lang doesn't match your install.", module);
+        return 0;
     }
     return (*(DWORD*)(result - 10));
 }
@@ -186,18 +188,27 @@ int run(xiloader::Config& config)
                     }
 
                     /* Obtain the common function table.. */
-                    xiloader::playonline::CommandFunc** lpCommandTable;
-                    if (const auto hr = polcore->GetCommonFunctionTable((unsigned long**)&lpCommandTable); FAILED(hr))
+                    xiloader::playonline::CommandFunc** lpCommandTable = nullptr;
+                    if (const auto hr = polcore->GetCommonFunctionTable((unsigned long**)&lpCommandTable); FAILED(hr) || lpCommandTable == nullptr)
                     {
                         xiloader::console::output(xiloader::color::error, "Failed to get polcore's function table (0x%08lX).", hr);
+                        return 1;
                     }
 
                     /* Invoke the inet mutex function.. */
                     auto findMutex = (void* (*)(...))FindINETMutex(config.language);
+                    if (findMutex == nullptr)
+                    {
+                        return 1;
+                    }
                     findMutex();
 
                     /* Locate and prepare the pol connection.. */
                     auto polConnection = (char*)FindPolConn(config.language);
+                    if (polConnection == nullptr)
+                    {
+                        return 1;
+                    }
                     memset(polConnection, 0x00, 0x68);
                     auto enc = (char*)malloc(0x1000);
                     memset(enc, 0x00, 0x1000);

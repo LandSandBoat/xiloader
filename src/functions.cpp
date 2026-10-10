@@ -60,7 +60,11 @@ DWORD functions::FindPattern(const char* moduleName, const unsigned char* lpPatt
     if (!GetModuleInformation(GetCurrentProcess(), GetModuleHandleA(moduleName), &mod, sizeof(MODULEINFO)))
         return 0;
 
-    for (DWORD x = 0; x < mod.SizeOfImage; x++)
+    const auto length = strlen(pszMask);
+    if (length > mod.SizeOfImage)
+        return 0;
+
+    for (DWORD x = 0; x <= mod.SizeOfImage - length; x++)
     {
         if (functions::MaskCompare(reinterpret_cast<unsigned char*>((DWORD)mod.lpBaseOfDll + x), lpPattern, pszMask))
             return ((DWORD)mod.lpBaseOfDll + x);
