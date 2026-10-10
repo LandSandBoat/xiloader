@@ -22,6 +22,7 @@
 #include "login.h"
 
 #include "app.h"
+#include "auth_connection.h"
 #include "helpers.h"
 #include "network.h"
 #include "otp/trust_token_manager.h"
@@ -38,6 +39,7 @@
 namespace
 {
 
+using xiloader::AuthConnection;
 using xiloader::LoginCommand;
 using xiloader::LoginOutcome;
 using xiloader::LoginResult;
@@ -358,7 +360,7 @@ auto handleReply(const std::string& text, uint32_t& accountId, const TrustTokenM
     return LoginOutcome::Retry;
 }
 
-auto attempt(uint32_t& accountId, const TrustTokenManager& trustTokens, Menu& menu) -> LoginOutcome
+auto attempt(AuthConnection& connection, uint32_t& accountId, const TrustTokenManager& trustTokens, Menu& menu) -> LoginOutcome
 {
     std::optional<Request> request;
 
@@ -387,7 +389,7 @@ auto attempt(uint32_t& accountId, const TrustTokenManager& trustTokens, Menu& me
     }
 
     /* Send info to server and obtain response.. */
-    const auto reply = xiloader::network::ExchangeAuth(toJson(*request, trustTokens).dump());
+    const auto reply = connection.exchange(toJson(*request, trustTokens).dump());
     if (!reply)
     {
         return LoginOutcome::Abort;
@@ -401,7 +403,7 @@ auto attempt(uint32_t& accountId, const TrustTokenManager& trustTokens, Menu& me
 namespace xiloader::login
 {
 
-auto run(uint32_t& accountId) -> bool
+auto run(AuthConnection& connection, uint32_t& accountId) -> bool
 {
     const TrustTokenManager trustTokens(xiloader::config.serverAddress);
     const auto              menu = xiloader::ui::makeMenu(xiloader::config.plainMenus);
@@ -409,7 +411,7 @@ auto run(uint32_t& accountId) -> bool
     auto outcome = LoginOutcome::Retry;
     while (outcome == LoginOutcome::Retry)
     {
-        outcome = attempt(accountId, trustTokens, *menu);
+        outcome = attempt(connection, accountId, trustTokens, *menu);
     }
 
     return outcome == LoginOutcome::LoggedIn;

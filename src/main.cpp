@@ -26,8 +26,6 @@ This file is part of DarkStar-server source code.
 
 #include "defines.h"
 
-#include <wincrypt.h>
-
 #include <algorithm>
 #include <chrono>
 #include <ctime>
@@ -38,6 +36,7 @@ This file is part of DarkStar-server source code.
 #include "console.h"
 #include "functions.h"
 #include "helpers.h"
+#include "login/auth_connection.h"
 #include "login/login.h"
 #include "network.h"
 #include "playonline.h"
@@ -65,20 +64,6 @@ DWORD g_NewServerAddress;     // Hairpin server address to be overriden with.
 DWORD g_HairpinReturnAddress; // Hairpin return address to allow the code cave to return properly.
 
 } // namespace
-
-namespace sslState
-{
-
-// mbed tls state
-mbedtls_net_context               server_fd = {};
-mbedtls_entropy_context           entropy   = {};
-mbedtls_ctr_drbg_context          ctr_drbg  = {};
-mbedtls_ssl_context               ssl       = {};
-mbedtls_ssl_config                conf      = {};
-mbedtls_x509_crt                  cacert    = {};
-std::unique_ptr<mbedtls_x509_crt> ca_chain  = {};
-
-}; // namespace sslState
 
 /**
  * @brief Detour function definitions.
@@ -321,62 +306,6 @@ inline LPVOID FindCharacters(void** commFuncs)
     LPVOID lpCharTable = NULL;
     memcpy(&lpCharTable, (char*)commFuncs[0xD3] + 31, sizeof(lpCharTable));
     return lpCharTable;
-}
-
-// Source: https://curl.se/mail/lib-2019-06/0057.html
-std::unique_ptr<mbedtls_x509_crt> extract_cert(PCCERT_CONTEXT certificateContext)
-{
-    // TODO: add delete!
-    std::unique_ptr<mbedtls_x509_crt> certificate(new mbedtls_x509_crt);
-    mbedtls_x509_crt_init(certificate.get());
-    mbedtls_x509_crt_parse(certificate.get(), certificateContext->pbCertEncoded, certificateContext->cbCertEncoded);
-    return std::move(certificate);
-}
-
-// Source: https://curl.se/mail/lib-2019-06/0057.html
-std::unique_ptr<mbedtls_x509_crt> build_windows_ca_chain()
-{
-    std::unique_ptr<mbedtls_x509_crt> ca_chain         = NULL;
-    HCERTSTORE                        certificateStore = NULL;
-
-    if (certificateStore = CertOpenStore(CERT_STORE_PROV_SYSTEM, 0, NULL, CERT_SYSTEM_STORE_CURRENT_USER, L"Root"))
-    {
-        std::unique_ptr<mbedtls_x509_crt> previousCertificate = NULL;
-        std::unique_ptr<mbedtls_x509_crt> currentCertificate  = NULL;
-        PCCERT_CONTEXT                    certificateContext  = NULL;
-
-        if (certificateContext = CertEnumCertificatesInStore(certificateStore, certificateContext))
-        {
-            if (certificateContext->dwCertEncodingType & X509_ASN_ENCODING)
-            {
-                ca_chain            = extract_cert(certificateContext);
-                previousCertificate = std::move(ca_chain);
-            }
-
-            while (certificateContext = CertEnumCertificatesInStore(certificateStore, certificateContext))
-            {
-                if (certificateContext->dwCertEncodingType & X509_ASN_ENCODING)
-                {
-                    currentCertificate        = extract_cert(certificateContext);
-                    previousCertificate->next = currentCertificate.get();
-                    previousCertificate       = std::move(currentCertificate);
-                }
-            }
-
-            if (!CertCloseStore(certificateStore, 0))
-            {
-                xiloader::console::output(xiloader::color::warning, "Failed to close the Windows root certificate store (error %lu).", GetLastError());
-                return NULL;
-            }
-        }
-    }
-    else
-    {
-        xiloader::console::output(xiloader::color::warning, "Failed to open the Windows root certificate store (error %lu). The server certificate can't be checked against it.", GetLastError());
-        return NULL;
-    }
-
-    return ca_chain;
 }
 
 /**
@@ -658,23 +587,7 @@ int __cdecl main(int argc, char* argv[])
         return 1;
     }
 
-    // init mbed tls
-    mbedtls_net_init(&sslState::server_fd);
-    mbedtls_ssl_init(&sslState::ssl);
-    mbedtls_ssl_config_init(&sslState::conf);
-    mbedtls_x509_crt_init(&sslState::cacert);
-    mbedtls_ctr_drbg_init(&sslState::ctr_drbg);
-    mbedtls_entropy_init(&sslState::entropy);
-
-    const char* pers = "xiloader";
-
-    if ((ret = mbedtls_ctr_drbg_seed(&sslState::ctr_drbg, mbedtls_entropy_func, &sslState::entropy, (const unsigned char*)pers, strlen(pers))) != 0)
-    {
-        xiloader::console::output(xiloader::color::error, "mbedtls_ctr_drbg_seed failed!");
-        return 1;
-    }
-
-    sslState::ca_chain = build_windows_ca_chain();
+    xiloader::AuthConnection auth;
 
     /* Attempt to resolve the server address.. */
     ULONG ulAddress = 0;
@@ -689,11 +602,10 @@ int __cdecl main(int argc, char* argv[])
 
         /* Attempt to create socket to server..*/
         xiloader::datasocket sock;
-        std::string          authport  = std::to_string(xiloader::config.loginAuthPort);
         std::string          loginport = std::to_string(xiloader::config.loginDataPort);
 
         /* Attempt to verify the users account info.. */
-        if (xiloader::network::CreateAuthConnection(&sock, authport.c_str()) && xiloader::login::run(sock.AccountId))
+        if (auth.connect(xiloader::config.serverAddress, xiloader::config.loginAuthPort) && xiloader::login::run(auth, sock.AccountId))
         {
             /* Attempt to create connection to the login server.. */
             if (!xiloader::network::CreateConnection(&sock, loginport.c_str()))
@@ -838,15 +750,6 @@ int __cdecl main(int argc, char* argv[])
     }
 
     xiloader::polrelay::stop();
-
-    mbedtls_net_free(&sslState::server_fd);
-    mbedtls_ssl_free(&sslState::ssl);
-    mbedtls_ssl_config_free(&sslState::conf);
-    mbedtls_ctr_drbg_free(&sslState::ctr_drbg);
-    mbedtls_entropy_free(&sslState::entropy);
-    mbedtls_x509_crt_free(&sslState::cacert);
-
-    sslState::ca_chain = nullptr;
 
     /* Detach detour for gethostbyname. */
     DetourTransactionBegin();

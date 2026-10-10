@@ -61,9 +61,13 @@ add_executable(xiloader
     src/enums/relay_phase.h
     src/functions.cpp
     src/functions.h
+    src/login/auth_connection.cpp
+    src/login/auth_connection.h
     src/login/login.cpp
     src/login/login.h
     src/main.cpp
+    src/net/tls_client_config.cpp
+    src/net/tls_client_config.h
     src/network.cpp
     src/network.h
     src/otp/trust_token_manager.cpp

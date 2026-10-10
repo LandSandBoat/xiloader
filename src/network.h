@@ -29,7 +29,6 @@ This file is part of DarkStar-server source code.
 #endif
 
 #include <conio.h>
-#include <optional>
 #include <string>
 #include <windows.h>
 #include <winsock2.h>
@@ -46,14 +45,6 @@ This file is part of DarkStar-server source code.
 
 namespace xiloader
 {
-
-// mbedTLS error code as readable text, e.g. "SSL - The connection indicated an EOF"
-inline std::string mbedtlsErrorText(const int ret)
-{
-    char text[128] = {};
-    mbedtls_strerror(ret, text, sizeof(text));
-    return text;
-}
 
 /**
  * @brief Socket object used to hold various important information.
@@ -100,16 +91,6 @@ public:
     static bool CreateConnection(datasocket* sock, const char* port);
 
     /**
-     * @brief Creates a connection to the auth server on the given port.
-     *
-     * @param sock          The datasocket object to store information within.
-     * @param port          The port to create the connection on.
-     *
-     * @return True on success, false otherwise.
-     */
-    static bool CreateAuthConnection(datasocket* sock, const char* port);
-
-    /**
      * @brief Resolves the given hostname to its long ip format.
      *
      * @param host          The host name to resolve.
@@ -118,15 +99,6 @@ public:
      * @return True on success, false otherwise.
      */
     static bool ResolveHostname(const char* host, PULONG lpOutput);
-
-    /**
-     * @brief Sends one request on the auth connection and waits for the reply.
-     *
-     * @param request       The request to send.
-     *
-     * @return The reply, or nothing when the connection failed.
-     */
-    static std::optional<std::string> ExchangeAuth(const std::string& request);
 
     /**
      * @brief Starts the data communication between the client and server.

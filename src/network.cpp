@@ -31,20 +31,6 @@ This file is part of DarkStar-server source code.
 #include "enums/lobby_data.h"
 #include "helpers.h"
 
-// mbed tls state
-namespace sslState
-{
-
-extern mbedtls_net_context               server_fd;
-extern mbedtls_entropy_context           entropy;
-extern mbedtls_ctr_drbg_context          ctr_drbg;
-extern mbedtls_ssl_context               ssl;
-extern mbedtls_ssl_config                conf;
-extern mbedtls_x509_crt                  cacert;
-extern std::unique_ptr<mbedtls_x509_crt> ca_chain;
-
-}; // namespace sslState
-
 namespace xiloader
 {
 
@@ -118,109 +104,6 @@ bool network::CreateConnection(datasocket* sock, const char* port)
 }
 
 /**
- * @brief Creates a connection to the auth server on the given port.
- *
- * @param sock      The datasocket object to store information within.
- * @param port      The port to create the connection on.
- *
- * @return True on success, false otherwise.
- */
-bool network::CreateAuthConnection(datasocket* sock, const char* port)
-{
-    struct addrinfo hints;
-    memset(&hints, 0x00, sizeof(hints));
-
-    hints.ai_family   = AF_UNSPEC;
-    hints.ai_socktype = SOCK_STREAM;
-    hints.ai_protocol = IPPROTO_TCP;
-
-    /* Attempt to get the server information. */
-    struct addrinfo* addr = NULL;
-    if (getaddrinfo(xiloader::config.serverAddress.c_str(), port, &hints, &addr))
-    {
-        xiloader::console::output(xiloader::color::error, "Failed to obtain remote server information.");
-        return 0;
-    }
-
-    int ret = 0;
-
-    ret = mbedtls_net_connect(&sslState::server_fd, xiloader::config.serverAddress.c_str(), port, MBEDTLS_NET_PROTO_TCP);
-    if (ret != 0)
-    {
-        xiloader::console::output(xiloader::color::error, "mbedtls_net_connect failed, (%s)", mbedtls_low_level_strerr(ret));
-        return 0;
-    }
-
-    if ((ret = mbedtls_ssl_config_defaults(&sslState::conf, MBEDTLS_SSL_IS_CLIENT, MBEDTLS_SSL_TRANSPORT_STREAM, MBEDTLS_SSL_PRESET_DEFAULT)) != 0)
-    {
-        xiloader::console::output(xiloader::color::error, "mbedtls_ssl_config_defaults failed, (%s)", mbedtls_low_level_strerr(ret));
-        return 0;
-    }
-
-    // MBEDTLS_SSL_VERIFY_OPTIONAL provides warnings, but doesn't stop connections.
-    mbedtls_ssl_conf_authmode(&sslState::conf, MBEDTLS_SSL_VERIFY_OPTIONAL);
-    mbedtls_ssl_conf_min_tls_version(&sslState::conf, MBEDTLS_SSL_VERSION_TLS1_3);
-    mbedtls_ssl_conf_ca_chain(&sslState::conf, sslState::ca_chain.get(), NULL);
-    mbedtls_ssl_conf_rng(&sslState::conf, mbedtls_ctr_drbg_random, &sslState::ctr_drbg);
-
-    if ((ret = mbedtls_ssl_setup(&sslState::ssl, &sslState::conf)) != 0)
-    {
-        xiloader::console::output(xiloader::color::error, "mbedtls_ssl_setup failed, (%s)", mbedtls_low_level_strerr(ret));
-        return 0;
-    }
-
-    mbedtls_ssl_set_bio(&sslState::ssl, &sslState::server_fd, mbedtls_net_send, mbedtls_net_recv, NULL);
-
-    while ((ret = mbedtls_ssl_handshake(&sslState::ssl)) != 0)
-    {
-        if (ret != MBEDTLS_ERR_SSL_WANT_READ && ret != MBEDTLS_ERR_SSL_WANT_WRITE)
-        {
-            xiloader::console::output(xiloader::color::error, "mbedtls_ssl_handshake returned -0x%x", (unsigned int)-ret);
-            return 0;
-        }
-    }
-
-    uint32_t flags = 0;
-
-    if ((flags = mbedtls_ssl_get_verify_result(&sslState::ssl)) != 0)
-    {
-        // We genuinely don't care if the error flags is ONLY that the cert isn't trusted,
-        // If this is the only warning, just don't print it.
-        if (flags != MBEDTLS_X509_BADCERT_NOT_TRUSTED)
-        {
-            char        vrfy_buf[1024] = {};
-            std::string timestamp      = xiloader::console::getTimestamp();
-
-            flags &= ~MBEDTLS_X509_BADCERT_NOT_TRUSTED; // Don't report the cert isn't trusted -- we don't care.
-
-            mbedtls_x509_crt_verify_info(vrfy_buf, sizeof(vrfy_buf), timestamp.c_str(), flags);
-
-            xiloader::console::output(xiloader::color::warning, "Remote server certificate warnings:", vrfy_buf);
-            xiloader::console::print(xiloader::color::warning, vrfy_buf);
-        }
-    }
-    else
-    {
-        xiloader::console::output(xiloader::color::info, "Remote server (%s) certificate is valid.", xiloader::config.serverAddress.c_str());
-    }
-
-    sockaddr clientAddr  = {};
-    int      sockaddrLen = sizeof(clientAddr);
-    getsockname(static_cast<SOCKET>(sslState::server_fd.fd), &clientAddr, &sockaddrLen);
-
-    struct sockaddr_in* their_inaddr_ptr = (struct sockaddr_in*)&clientAddr;
-
-    sock->LocalAddress  = their_inaddr_ptr->sin_addr.S_un.S_addr;
-    sock->ServerAddress = inet_addr(xiloader::config.serverAddress.c_str());
-
-    unsigned char recvBuffer[4096] = {};
-
-    mbedtls_ssl_conf_read_timeout(&sslState::conf, 1000);
-
-    return 1;
-}
-
-/**
  * @brief Resolves the given hostname to its long ip format.
  *
  * @param host      The host name to resolve.
@@ -244,39 +127,6 @@ bool network::ResolveHostname(const char* host, PULONG lpOutput)
 
     freeaddrinfo(info);
     return true;
-}
-
-/**
- * @brief Sends one request on the auth connection and waits for the reply.
- *
- * @param request   The request to send.
- *
- * @return The reply, or nothing when the connection failed.
- */
-std::optional<std::string> network::ExchangeAuth(const std::string& request)
-{
-    if (const auto written = mbedtls_ssl_write(&sslState::ssl, reinterpret_cast<const unsigned char*>(request.data()), request.size()); written < 0)
-    {
-        xiloader::console::output(xiloader::color::error, "Failed to send the login request (%s). The login server may have closed the connection.", xiloader::mbedtlsErrorText(written).c_str());
-        return std::nullopt;
-    }
-
-    unsigned char recvBuffer[8192] = { 0 };
-
-    const auto received = mbedtls_ssl_read(&sslState::ssl, recvBuffer, sizeof(recvBuffer));
-    if (received == MBEDTLS_ERR_SSL_TIMEOUT)
-    {
-        xiloader::console::output(xiloader::color::error, "Remote failed to reply within the timeout, exiting...");
-        return std::nullopt;
-    }
-
-    if (received <= 0)
-    {
-        xiloader::console::output(xiloader::color::error, "Failed to read the login reply (%s). The login server may have closed the connection.", xiloader::mbedtlsErrorText(received).c_str());
-        return std::nullopt;
-    }
-
-    return std::string(reinterpret_cast<const char*>(recvBuffer), received);
 }
 
 /**

@@ -24,6 +24,7 @@
 #include "polrelay.h"
 
 #include "console.h"
+#include "net/tls_client_config.h"
 
 #include <mbedtls/error.h>
 #include <ws2tcpip.h>
@@ -41,7 +42,6 @@ namespace
 using xiloader::polrelay::Connection;
 using xiloader::polrelay::Listener;
 using xiloader::polrelay::Phase;
-using xiloader::polrelay::Tls;
 
 // The ports polcore dials; the profile server's own port can differ
 constexpr uint16_t kIrcPort     = 51240;
@@ -64,7 +64,8 @@ constexpr std::size_t kChunkSize = 16384;
 
 Listener listeners[2] = {};
 
-Tls tls;
+// Shared by all relay connections
+std::optional<xiloader::TlsClientConfig> tls;
 
 in_addr serverAddress = {};
 
@@ -78,34 +79,18 @@ std::optional<mbedtls_ssl_session> ticket;
 
 std::jthread relayThread;
 
-auto errorText(const int ret) -> std::string
-{
-    char text[128] = {};
-    mbedtls_strerror(ret, text, sizeof(text));
-    return text;
-}
-
 auto setUpTls() -> int
 {
-    mbedtls_entropy_init(&tls.entropy);
-    mbedtls_ctr_drbg_init(&tls.random);
-    mbedtls_ssl_config_init(&tls.config);
+    tls.emplace();
 
-    if (const auto ret = mbedtls_ctr_drbg_seed(&tls.random, mbedtls_entropy_func, &tls.entropy, nullptr, 0); ret != 0)
-    {
-        return ret;
-    }
-
-    if (const auto ret = mbedtls_ssl_config_defaults(&tls.config, MBEDTLS_SSL_IS_CLIENT, MBEDTLS_SSL_TRANSPORT_STREAM, MBEDTLS_SSL_PRESET_DEFAULT); ret != 0)
+    if (const auto ret = tls->setUp(); ret != 0)
     {
         return ret;
     }
 
     // Servers typically use self-signed certificates
-    mbedtls_ssl_conf_authmode(&tls.config, MBEDTLS_SSL_VERIFY_NONE);
-    mbedtls_ssl_conf_min_tls_version(&tls.config, MBEDTLS_SSL_VERSION_TLS1_3);
-    mbedtls_ssl_conf_rng(&tls.config, mbedtls_ctr_drbg_random, &tls.random);
-    mbedtls_ssl_conf_tls13_enable_signal_new_session_tickets(&tls.config, MBEDTLS_SSL_TLS1_3_SIGNAL_NEW_SESSION_TICKETS_ENABLED);
+    mbedtls_ssl_conf_authmode(tls->get(), MBEDTLS_SSL_VERIFY_NONE);
+    mbedtls_ssl_conf_tls13_enable_signal_new_session_tickets(tls->get(), MBEDTLS_SSL_TLS1_3_SIGNAL_NEW_SESSION_TICKETS_ENABLED);
     return 0;
 }
 
@@ -117,9 +102,7 @@ void freeTls()
         ticket.reset();
     }
 
-    mbedtls_ssl_config_free(&tls.config);
-    mbedtls_ctr_drbg_free(&tls.random);
-    mbedtls_entropy_free(&tls.entropy);
+    tls.reset();
 }
 
 // Keeps the ports, which redirect reads from polcore's threads
@@ -192,9 +175,9 @@ auto open(Connection& connection) -> bool
         return false;
     }
 
-    if (const auto ret = mbedtls_ssl_setup(&connection.ssl, &tls.config); ret != 0)
+    if (const auto ret = mbedtls_ssl_setup(&connection.ssl, tls->get()); ret != 0)
     {
-        fail(connection, errorText(ret));
+        fail(connection, xiloader::mbedtlsErrorText(ret));
         return false;
     }
 
@@ -341,7 +324,7 @@ auto step(Connection& connection, const fd_set& writable, const fd_set& failed, 
 
         if (ret != 0)
         {
-            fail(connection, errorText(ret));
+            fail(connection, xiloader::mbedtlsErrorText(ret));
             return false;
         }
 
@@ -588,7 +571,7 @@ auto start(const uint16_t profilePort, const uint32_t accountId) -> bool
 
     if (const auto ret = setUpTls(); ret != 0)
     {
-        return abort(errorText(ret));
+        return abort(xiloader::mbedtlsErrorText(ret));
     }
 
     if (!listen(listeners[0], kIrcPort, kIrcPort) || !listen(listeners[1], kProfilePort, profilePort))

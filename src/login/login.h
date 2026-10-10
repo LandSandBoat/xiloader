@@ -23,12 +23,19 @@
 
 #include <cstdint>
 
+namespace xiloader
+{
+
+class AuthConnection;
+
+}
+
 namespace xiloader::login
 {
 
-// Runs the login menu against xi_connect over the open auth connection until an account is logged in.
+// Runs the login menu against xi_connect until an account is logged in.
 // Also handles creating accounts, changing passwords and the 2FA options.
 // Returns false when the user quits or the connection is lost.
-auto run(uint32_t& accountId) -> bool;
+auto run(AuthConnection& connection, uint32_t& accountId) -> bool;
 
 } // namespace xiloader::login

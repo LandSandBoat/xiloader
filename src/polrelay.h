@@ -21,8 +21,6 @@
 
 #pragma once
 
-#include <mbedtls/ctr_drbg.h>
-#include <mbedtls/entropy.h>
 #include <mbedtls/net_sockets.h>
 #include <mbedtls/ssl.h>
 
@@ -50,14 +48,6 @@ struct Listener
     uint16_t dialedPort = 0;
     uint16_t serverPort = 0;
     uint16_t localPort  = 0;
-};
-
-// Shared by all relay connections
-struct Tls
-{
-    mbedtls_entropy_context  entropy;
-    mbedtls_ctr_drbg_context random;
-    mbedtls_ssl_config       config;
 };
 
 // One polcore connection: plain on the loopback side, TLS to the server
