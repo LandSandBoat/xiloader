@@ -60,15 +60,6 @@ struct Com
     }
 };
 
-// The socket detours, attached for as long as this lives
-struct SocketHooks
-{
-    bool attached = false;
-
-    SocketHooks();
-    ~SocketHooks();
-};
-
 struct RelayStop
 {
     ~RelayStop()

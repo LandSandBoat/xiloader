@@ -64,6 +64,10 @@ add_executable(xiloader
     src/functions.cpp
     src/functions.h
     src/guards.h
+    src/hooks/hairpin_fix.cpp
+    src/hooks/hairpin_fix.h
+    src/hooks/socket_hooks.cpp
+    src/hooks/socket_hooks.h
     src/login/auth_connection.cpp
     src/login/auth_connection.h
     src/login/login.cpp
