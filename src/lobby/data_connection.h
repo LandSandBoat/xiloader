@@ -23,6 +23,8 @@
 
 #include <winsock2.h>
 
+#include "login/session.h"
+
 #include <atomic>
 #include <cstdint>
 #include <stop_token>
@@ -47,13 +49,13 @@ public:
     auto connect(const std::string& server, uint16_t port) -> bool;
 
     // Sends the session hash and starts answering the server
-    void start(uint32_t accountId);
+    void start(const Session& session);
 
     // Where polcore keeps its character list; until this is set an incoming list is dropped
     void setCharacterList(char* list);
 
 private:
-    void run(std::stop_token stop, uint32_t accountId);
+    void run(std::stop_token stop, Session session);
 
     SOCKET             socket        = INVALID_SOCKET;
     ULONG              serverAddress = INADDR_NONE;

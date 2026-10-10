@@ -23,7 +23,6 @@
 #include <cassert>
 #include <chrono>
 
-#include "app.h"
 #include "config.h"
 #include "lobby/data_connection.h"
 #include "ui/menu.h"
@@ -36,15 +35,6 @@
 #include <thread>
 
 #include <ws2tcpip.h>
-
-// console.cpp and the lobby connection read these
-namespace xiloader
-{
-
-Config   config;
-AppState state;
-
-} // namespace xiloader
 
 namespace
 {
@@ -208,7 +198,8 @@ void checkLobbyData()
     WSADATA wsa = {};
     assert(WSAStartup(MAKEWORD(2, 2), &wsa) == 0);
 
-    std::memset(xiloader::state.sessionHash, 0x5A, sizeof(xiloader::state.sessionHash));
+    xiloader::Session session{ .accountId = 0x11223344 };
+    std::memset(session.hash, 0x5A, sizeof(session.hash));
 
     // Room for the 20 characters the connection may write, then a canary
     constexpr int     kEntry = 0x68;
@@ -221,7 +212,7 @@ void checkLobbyData()
         server.client = accept(server.listener, nullptr, nullptr);
         assert(server.client != INVALID_SOCKET);
 
-        connection.start(0x11223344);
+        connection.start(session);
 
         const auto hello = server.read(28);
         assert(static_cast<uint8_t>(hello[0]) == 0xFE && hello[12] == 0x5A && hello[27] == 0x5A);

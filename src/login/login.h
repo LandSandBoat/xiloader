@@ -21,21 +21,25 @@
 
 #pragma once
 
-#include <cstdint>
+#include "session.h"
+
+#include <optional>
 
 namespace xiloader
 {
 
 class AuthConnection;
+struct Config;
 
-}
+} // namespace xiloader
 
 namespace xiloader::login
 {
 
 // Runs the login menu against xi_connect until an account is logged in.
 // Also handles creating accounts, changing passwords and the 2FA options.
-// Returns false when the user quits or the connection is lost.
-auto run(AuthConnection& connection, uint32_t& accountId) -> bool;
+// The menus overwrite the credentials in config.
+// Returns nothing when the user quits or the connection is lost.
+auto run(AuthConnection& connection, Config& config) -> std::optional<Session>;
 
 } // namespace xiloader::login

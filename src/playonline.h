@@ -24,6 +24,7 @@
 #include <cstdint>
 
 #include "enums/pol_function.h"
+#include "enums/pol_language.h"
 
 namespace xiloader
 {
@@ -61,7 +62,7 @@ struct Load
 // Replaces polcore's PlayOnline cipher with a plain copy; the relay encrypts the traffic instead.
 // The cipher is located through its call on the IRC send path.
 // Returns false when that call isn't found.
-auto disableCipher() -> bool;
+auto disableCipher(Language language) -> bool;
 
 // Sets the English friend, group and character-name message texts the viewer normally loads from its StringTable.bin
 void setEnglishMessageTexts(CommandTable table);
@@ -69,7 +70,7 @@ void setEnglishMessageTexts(CommandTable table);
 // Logs in to PlayOnline the way the viewer does: POL id and password, IRC session, then the lists FFXiMain expects.
 // A list that fails to load is retried in game.
 // Returns false when the profile server can't be reached; the game can't start without it.
-auto logIn(CommandTable table, uint32_t accountId) -> bool;
+auto logIn(CommandTable table, uint32_t accountId, Language language) -> bool;
 
 // Keeps the game running when the PlayOnline connection drops, e.g. when xi_profile restarts.
 // FFXiMain's per-frame poll would end the game with POL-0008; the error is hidden, and the session reopens every 15 to 45 seconds and reloads the lists.

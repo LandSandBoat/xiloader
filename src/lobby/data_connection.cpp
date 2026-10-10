@@ -23,7 +23,6 @@
 
 #include <ws2tcpip.h>
 
-#include "app.h"
 #include "console.h"
 
 #include "enums/lobby_data.h"
@@ -108,11 +107,11 @@ auto LobbyDataConnection::connect(const std::string& server, const uint16_t port
     return true;
 }
 
-void LobbyDataConnection::start(const uint32_t accountId)
+void LobbyDataConnection::start(const Session& session)
 {
-    thread = std::jthread([this, accountId](std::stop_token stop)
+    thread = std::jthread([this, session](std::stop_token stop)
                           {
-                              run(std::move(stop), accountId);
+                              run(std::move(stop), session);
                           });
 }
 
@@ -121,7 +120,7 @@ void LobbyDataConnection::setCharacterList(char* const list)
     characterList = list;
 }
 
-void LobbyDataConnection::run(const std::stop_token stop, const uint32_t accountId)
+void LobbyDataConnection::run(const std::stop_token stop, const Session session)
 {
     int  sendSize         = 0;
     char recvBuffer[4096] = { 0 };
@@ -129,7 +128,7 @@ void LobbyDataConnection::run(const std::stop_token stop, const uint32_t account
 
     // send session hash
     sendBuffer[0] = static_cast<char>(xiloader::LobbyDataReply::SessionHash);
-    memcpy(sendBuffer + 12, xiloader::state.sessionHash, 16);
+    memcpy(sendBuffer + 12, session.hash, 16);
 
     if (send(socket, sendBuffer, 28, 0) == SOCKET_ERROR)
     {
@@ -152,9 +151,9 @@ void LobbyDataConnection::run(const std::stop_token stop, const uint32_t account
         {
             case xiloader::LobbyDataRequest::AccountId:
                 sendBuffer[0] = static_cast<char>(xiloader::LobbyDataReply::AccountId);
-                memcpy(sendBuffer + 0x01, &accountId, 4);
+                memcpy(sendBuffer + 0x01, &session.accountId, 4);
                 memcpy(sendBuffer + 0x05, &serverAddress, 4);
-                memcpy(sendBuffer + 12, xiloader::state.sessionHash, 16);
+                memcpy(sendBuffer + 12, session.hash, 16);
 
                 xiloader::console::output(xiloader::color::warning, "Sending account id..");
                 sendSize = 28;

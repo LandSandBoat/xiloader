@@ -23,7 +23,6 @@
 
 #include "defines.h"
 
-#include "app.h"
 #include "console.h"
 #include "polrelay.h"
 
@@ -32,6 +31,15 @@
 #include <algorithm>
 #include <intrin.h>
 #include <string_view>
+
+namespace
+{
+
+// The detours can't take arguments, so what they need is kept here
+const xiloader::Config* config          = nullptr;
+char                    sessionHash[16] = {};
+
+} // namespace
 
 /**
  * @brief Detour function definitions.
@@ -57,7 +65,7 @@ hostent* __stdcall Mine_gethostbyname(const char* name)
 
     if (!strcmp("ffxi00.pol.com", name))
     {
-        return Real_gethostbyname(xiloader::config.serverAddress.c_str());
+        return Real_gethostbyname(config->serverAddress.c_str());
     }
 
     // PlayOnline profile and IRC hosts (friend list and presence) go through the local TLS relay
@@ -81,7 +89,7 @@ static bool isLobbyCommand(const char* buffer, SOCKET socket)
 
     auto port = ntohs(sin.sin_port);
 
-    if (port != xiloader::config.loginDataPort && port != xiloader::config.loginViewPort)
+    if (port != config->loginDataPort && port != config->loginViewPort)
     {
         return false;
     }
@@ -118,7 +126,7 @@ int WINAPI Mine_send(SOCKET s, const char* buf, int len, int flags)
     if (isLobbyCommand(buf, s))
     {
         // always send server provided session hash in packets with XIFF commands and is a lobby command
-        std::memcpy((char*)buf + 12, xiloader::state.sessionHash, 16);
+        std::memcpy((char*)buf + 12, sessionHash, 16);
     }
 
     return Real_send(s, buf, len, flags);
@@ -156,8 +164,10 @@ int WINAPI Mine_connect(SOCKET s, const sockaddr* name, int namelen)
     return ret;
 }
 
-xiloader::SocketHooks::SocketHooks()
+xiloader::SocketHooks::SocketHooks(const Config& config)
 {
+    ::config = &config;
+
     DetourTransactionBegin();
     DetourUpdateThread(GetCurrentThread());
     DetourAttach(&(PVOID&)Real_gethostbyname, Mine_gethostbyname);
@@ -181,4 +191,9 @@ xiloader::SocketHooks::~SocketHooks()
     DetourDetach(&(PVOID&)Real_recv, Mine_recv);
     DetourDetach(&(PVOID&)Real_connect, Mine_connect);
     DetourTransactionCommit();
+}
+
+void xiloader::SocketHooks::useSession(const Session& session)
+{
+    std::memcpy(sessionHash, session.hash, sizeof(sessionHash));
 }

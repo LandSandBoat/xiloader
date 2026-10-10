@@ -347,9 +347,9 @@ auto __cdecl pollIgnoringDisconnect() -> int
 namespace xiloader::playonline
 {
 
-auto disableCipher() -> bool
+auto disableCipher(const Language language) -> bool
 {
-    const char* const module = (xiloader::config.language == xiloader::Language::European) ? "polcoreeu.dll" : "polcore.dll";
+    const char* const module = (language == Language::European) ? "polcoreeu.dll" : "polcore.dll";
 
     // The IRC send path: push 1; push edx; lea eax,[ebx+8]; push edi; lea ecx,[esp+0x1c]; push eax; push ecx; call cipher
     const unsigned char site[] = { 0x6A, 0x01, 0x52, 0x8D, 0x43, 0x08, 0x57, 0x8D, 0x4C, 0x24, 0x1C, 0x50, 0x51, 0xE8 };
@@ -421,7 +421,7 @@ void setEnglishMessageTexts(CommandTable table)
     }
 }
 
-auto logIn(CommandTable table, const uint32_t accountId) -> bool
+auto logIn(CommandTable table, const uint32_t accountId, const Language language) -> bool
 {
     session.table = table;
 
@@ -456,7 +456,7 @@ auto logIn(CommandTable table, const uint32_t accountId) -> bool
     //
     // polcore is not capable of creating the folders directly so we have to do it ourselves.
     session.slot    = 50 + static_cast<int>(accountId % 50);
-    const auto home = std::filesystem::path(xiloader::functions::GetRegistryPlayOnlineInstallFolder(xiloader::config.language)) / std::format("pub/home{:02}/msg", session.slot);
+    const auto home = std::filesystem::path(xiloader::functions::GetRegistryPlayOnlineInstallFolder(language)) / std::format("pub/home{:02}/msg", session.slot);
     for (const char* folder : { "s/a", "s/b", "r/a", "r/b" })
     {
         std::error_code error;

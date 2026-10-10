@@ -40,7 +40,7 @@ This file is part of DarkStar-server source code.
 
 #include "detours/detours.h"
 
-#include "app.h"
+#include "config.h"
 #include "enums/pol_function.h"
 
 #include "client/sdk/ffxi.h"

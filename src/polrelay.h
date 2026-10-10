@@ -31,6 +31,7 @@
 #include <winsock2.h>
 
 #include "enums/relay_phase.h"
+#include "login/session.h"
 
 namespace xiloader
 {
@@ -83,7 +84,7 @@ struct Connection
 // Starts the relay thread, listening on free local ports for the IRC port and the profile port polcore dials.
 // Every connection to the server opens with the account id and session hash, which is how the server knows who it is.
 // Returns true once both listeners are up.
-auto start(uint16_t profilePort, uint32_t accountId) -> bool;
+auto start(const std::string& server, uint16_t profilePort, const Session& session) -> bool;
 
 // Closes every relay connection and joins the relay thread; call before removing the socket hooks
 void stop();

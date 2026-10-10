@@ -21,8 +21,8 @@
 
 #include "login.h"
 
-#include "app.h"
 #include "auth_connection.h"
+#include "config.h"
 #include "console.h"
 #include "helpers.h"
 #include "otp/qr_code.h"
@@ -39,9 +39,11 @@ namespace
 {
 
 using xiloader::AuthConnection;
+using xiloader::Config;
 using xiloader::LoginCommand;
 using xiloader::LoginOutcome;
 using xiloader::LoginResult;
+using xiloader::Session;
 using xiloader::TrustTokenManager;
 using xiloader::ui::Menu;
 
@@ -73,10 +75,8 @@ auto selectAction(Menu& menu) -> MenuSelection
 }
 
 // Asks for what the selected action needs. Returns nothing when there is no request to send.
-auto promptRequest(const MenuSelection selected, Menu& menu, const TrustTokenManager& trustTokens) -> std::optional<Request>
+auto promptRequest(const MenuSelection selected, Config& config, Menu& menu, const TrustTokenManager& trustTokens) -> std::optional<Request>
 {
-    auto& config = xiloader::config;
-
     config.username = "";
     config.password = "";
     config.otpCode  = "";
@@ -164,25 +164,25 @@ auto promptRequest(const MenuSelection selected, Menu& menu, const TrustTokenMan
     }
 }
 
-auto toJson(const Request& request, const TrustTokenManager& trustTokens) -> json
+auto toJson(const Request& request, const Config& config, const TrustTokenManager& trustTokens) -> json
 {
     json login_json;
-    login_json["username"]     = xiloader::config.username;
-    login_json["password"]     = xiloader::config.password;
-    login_json["otp"]          = xiloader::config.otpCode;
+    login_json["username"]     = config.username;
+    login_json["password"]     = config.password;
+    login_json["otp"]          = config.otpCode;
     login_json["new_password"] = request.newPassword;
     login_json["version"]      = xiloader::Config::versionNumber;
     login_json["command"]      = static_cast<int8_t>(request.command);
 
     if (request.command == LoginCommand::Login) // Only send trust fields for login
     {
-        trustTokens.addToLoginRequest(login_json, xiloader::config.username, xiloader::config.trustThisComputer);
+        trustTokens.addToLoginRequest(login_json, config.username, config.trustThisComputer);
     }
 
     return login_json;
 }
 
-auto onLoginSuccess(const json& reply, uint32_t& accountId, const TrustTokenManager& trustTokens) -> LoginOutcome
+auto onLoginSuccess(const json& reply, Session& session, const Config& config, const TrustTokenManager& trustTokens) -> LoginOutcome
 {
     const auto maybeAccountId = jsonGet<uint32_t>(reply, "account_id");
     if (!maybeAccountId.has_value())
@@ -198,12 +198,12 @@ auto onLoginSuccess(const json& reply, uint32_t& accountId, const TrustTokenMana
         return LoginOutcome::Retry;
     }
 
-    accountId = maybeAccountId.value();
-    std::memcpy(&xiloader::state.sessionHash, maybeSessionHash.value().data(), maybeSessionHash.value().size());
+    session.accountId = maybeAccountId.value();
+    std::memcpy(&session.hash, maybeSessionHash.value().data(), maybeSessionHash.value().size());
 
-    xiloader::console::output(xiloader::color::success, "Successfully logged in as %s!", xiloader::config.username.c_str());
+    xiloader::console::output(xiloader::color::success, "Successfully logged in as %s!", config.username.c_str());
 
-    trustTokens.acceptLoginReply(reply, xiloader::config.username);
+    trustTokens.acceptLoginReply(reply, config.username);
 
     return LoginOutcome::LoggedIn;
 }
@@ -245,7 +245,7 @@ void onVerifyTotpSuccess(const json& reply)
     xiloader::otp::removeQrCode();
 }
 
-auto handleReply(const std::string& text, uint32_t& accountId, const TrustTokenManager& trustTokens, Menu& menu) -> LoginOutcome
+auto handleReply(const std::string& text, Session& session, Config& config, const TrustTokenManager& trustTokens, Menu& menu) -> LoginOutcome
 {
     const auto reply = json::parse(text, nullptr, false);
     if (reply.is_discarded())
@@ -273,7 +273,7 @@ auto handleReply(const std::string& text, uint32_t& accountId, const TrustTokenM
     {
         case LoginResult::LoginSuccess:
         {
-            return onLoginSuccess(reply, accountId, trustTokens);
+            return onLoginSuccess(reply, session, config, trustTokens);
         }
         case LoginResult::LoginError:
         {
@@ -293,13 +293,13 @@ auto handleReply(const std::string& text, uint32_t& accountId, const TrustTokenM
         case LoginResult::ChangePasswordSuccess:
         {
             xiloader::console::output(xiloader::color::success, "Password updated successfully!");
-            xiloader::config.password.clear();
+            config.password.clear();
             break;
         }
         case LoginResult::ChangePasswordError:
         {
             xiloader::console::output(xiloader::color::error, "Failed to change password.");
-            xiloader::config.password.clear();
+            config.password.clear();
             break;
         }
         case LoginResult::AlreadyLoggedIn:
@@ -314,7 +314,7 @@ auto handleReply(const std::string& text, uint32_t& accountId, const TrustTokenM
         }
         case LoginResult::TrustTokenInvalid:
         {
-            trustTokens.revoke(xiloader::config.username);
+            trustTokens.revoke(config.username);
             xiloader::console::output(xiloader::color::error, "==========================================================");
             xiloader::console::output(xiloader::color::error, "Trust token rejected! It has been cleared from this computer.");
             xiloader::console::output(xiloader::color::error, "Please log in again and enter your OTP code.");
@@ -336,7 +336,7 @@ auto handleReply(const std::string& text, uint32_t& accountId, const TrustTokenM
             xiloader::console::output(xiloader::color::info, "Your TOTP has been removed.");
             xiloader::console::output(xiloader::color::info, "You no longer need to use an OTP code to login.");
 
-            trustTokens.revoke(xiloader::config.username);
+            trustTokens.revoke(config.username);
             break;
         }
         default:
@@ -349,15 +349,15 @@ auto handleReply(const std::string& text, uint32_t& accountId, const TrustTokenM
     return LoginOutcome::Retry;
 }
 
-auto attempt(AuthConnection& connection, uint32_t& accountId, const TrustTokenManager& trustTokens, Menu& menu) -> LoginOutcome
+auto attempt(AuthConnection& connection, Session& session, Config& config, bool& autoLogin, const TrustTokenManager& trustTokens, Menu& menu) -> LoginOutcome
 {
     std::optional<Request> request;
 
     /* Determine if we should auto-login.. */
-    if (!xiloader::config.username.empty() && !xiloader::config.password.empty() && xiloader::state.firstLogin)
+    if (!config.username.empty() && !config.password.empty() && autoLogin)
     {
         xiloader::console::output(xiloader::color::lightgreen, "Autologin activated!");
-        xiloader::state.firstLogin = false;
+        autoLogin = false;
 
         request = Request{ .command = LoginCommand::Login };
     }
@@ -369,7 +369,7 @@ auto attempt(AuthConnection& connection, uint32_t& accountId, const TrustTokenMa
             return LoginOutcome::Abort;
         }
 
-        request = promptRequest(selected, menu, trustTokens);
+        request = promptRequest(selected, config, menu, trustTokens);
     }
 
     if (!request)
@@ -378,13 +378,13 @@ auto attempt(AuthConnection& connection, uint32_t& accountId, const TrustTokenMa
     }
 
     /* Send info to server and obtain response.. */
-    const auto reply = connection.exchange(toJson(*request, trustTokens).dump());
+    const auto reply = connection.exchange(toJson(*request, config, trustTokens).dump());
     if (!reply)
     {
         return LoginOutcome::Abort;
     }
 
-    return handleReply(*reply, accountId, trustTokens, menu);
+    return handleReply(*reply, session, config, trustTokens, menu);
 }
 
 } // namespace
@@ -392,18 +392,27 @@ auto attempt(AuthConnection& connection, uint32_t& accountId, const TrustTokenMa
 namespace xiloader::login
 {
 
-auto run(AuthConnection& connection, uint32_t& accountId) -> bool
+auto run(AuthConnection& connection, Config& config) -> std::optional<Session>
 {
-    const TrustTokenManager trustTokens(xiloader::config.serverAddress);
-    const auto              menu = xiloader::ui::makeMenu(xiloader::config.plainMenus);
+    const TrustTokenManager trustTokens(config.serverAddress);
+    const auto              menu = xiloader::ui::makeMenu(config.plainMenus);
 
-    auto outcome = LoginOutcome::Retry;
+    // Credentials supplied up front are tried once before the menu shows
+    bool autoLogin = !config.username.empty() && !config.password.empty();
+
+    Session session;
+    auto    outcome = LoginOutcome::Retry;
     while (outcome == LoginOutcome::Retry)
     {
-        outcome = attempt(connection, accountId, trustTokens, *menu);
+        outcome = attempt(connection, session, config, autoLogin, trustTokens, *menu);
     }
 
-    return outcome == LoginOutcome::LoggedIn;
+    if (outcome != LoginOutcome::LoggedIn)
+    {
+        return std::nullopt;
+    }
+
+    return session;
 }
 
 } // namespace xiloader::login

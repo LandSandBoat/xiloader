@@ -549,15 +549,15 @@ Connection::~Connection()
     closesocket(local);
 }
 
-auto start(const uint16_t profilePort, const uint32_t accountId) -> bool
+auto start(const std::string& server, const uint16_t profilePort, const Session& session) -> bool
 {
-    hello.resize(sizeof(accountId) + sizeof(xiloader::state.sessionHash));
-    std::memcpy(hello.data(), &accountId, sizeof(accountId));
-    std::memcpy(hello.data() + sizeof(accountId), xiloader::state.sessionHash, sizeof(xiloader::state.sessionHash));
+    hello.resize(sizeof(session.accountId) + sizeof(session.hash));
+    std::memcpy(hello.data(), &session.accountId, sizeof(session.accountId));
+    std::memcpy(hello.data() + sizeof(session.accountId), session.hash, sizeof(session.hash));
 
-    if (inet_pton(AF_INET, xiloader::config.serverAddress.c_str(), &serverAddress) != 1)
+    if (inet_pton(AF_INET, server.c_str(), &serverAddress) != 1)
     {
-        xiloader::console::output(xiloader::color::error, "The profile server relay needs a resolved server address (%s).", xiloader::config.serverAddress.c_str());
+        xiloader::console::output(xiloader::color::error, "The profile server relay needs a resolved server address (%s).", server.c_str());
         return false;
     }
 

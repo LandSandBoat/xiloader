@@ -21,18 +21,16 @@
 
 #pragma once
 
-#include "config.h"
+#include <cstdint>
 
 namespace xiloader
 {
 
-struct AppState
+// What a successful login gives back
+struct Session
 {
-    char sessionHash[16] = {};    // Session hash sent from auth
-    bool firstLogin      = false; // set to true when --user --pass are both set to allow for autologin
+    uint32_t accountId = 0;
+    char     hash[16]  = {}; // Session hash sent from auth
 };
-
-extern Config   config;
-extern AppState state;
 
 } // namespace xiloader

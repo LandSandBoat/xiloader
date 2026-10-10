@@ -21,6 +21,9 @@
 
 #pragma once
 
+#include "config.h"
+#include "login/session.h"
+
 namespace xiloader
 {
 
@@ -29,8 +32,12 @@ struct SocketHooks
 {
     bool attached = false;
 
-    SocketHooks();
+    // config has to outlive the hooks
+    explicit SocketHooks(const Config& config);
     ~SocketHooks();
+
+    // Stamped into the lobby commands the client sends from then on
+    void useSession(const Session& session);
 };
 
 } // namespace xiloader

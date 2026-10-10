@@ -29,7 +29,7 @@ namespace xiloader
 /**
  * @brief Applies the hairpin fix modifications.
  *
- * @param lpParam       Thread param object.
+ * @param lpParam       The server address to route to, as inet_addr returns it.
  *
  * @return Non-important return.
  */

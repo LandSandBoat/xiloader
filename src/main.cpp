@@ -47,22 +47,14 @@ This file is part of DarkStar-server source code.
 #include "playonline.h"
 #include "polrelay.h"
 
-namespace xiloader
-{
-
-Config   config;
-AppState state;
-
-} // namespace xiloader
-
 /**
  * @brief Locates the INET mutex function call inside of polcore.dll
  *
  * @return The pointer to the function call.
  */
-inline DWORD FindINETMutex(void)
+inline DWORD FindINETMutex(const xiloader::Language language)
 {
-    const char* module = (xiloader::config.language == xiloader::Language::European) ? "polcoreeu.dll" : "polcore.dll";
+    const char* module = (language == xiloader::Language::European) ? "polcoreeu.dll" : "polcore.dll";
     auto        result = (DWORD)xiloader::functions::FindPattern(module, (BYTE*)"\x8B\x56\x2C\x8B\x46\x28\x8B\x4E\x24\x52\x50\x51", "xxxxxxxxxxxx");
     if (result == 0)
     {
@@ -76,9 +68,9 @@ inline DWORD FindINETMutex(void)
  *
  * @return Pointer to the pol connection object.
  */
-inline DWORD FindPolConn(void)
+inline DWORD FindPolConn(const xiloader::Language language)
 {
-    const char* module = (xiloader::config.language == xiloader::Language::European) ? "polcoreeu.dll" : "polcore.dll";
+    const char* module = (language == xiloader::Language::European) ? "polcoreeu.dll" : "polcore.dll";
     auto        result = (DWORD)xiloader::functions::FindPattern(module, (BYTE*)"\x81\xC6\x38\x03\x00\x00\x83\xC4\x04\x81\xFE", "xxxxxxxxxxx");
     if (result == 0)
     {
@@ -101,7 +93,7 @@ inline LPVOID FindCharacters(void** commFuncs)
 
 // Everything between the banner and "Closing...": logs in, then hosts polcore and the game until it exits.
 // Whatever was set up is torn down in reverse order on every way out.
-int run()
+int run(xiloader::Config& config)
 {
     /* Initialize Winsock */
     const xiloader::Winsock winsock;
@@ -120,7 +112,7 @@ int run()
     }
 
     /* Attach detour for gethostbyname.. */
-    const xiloader::SocketHooks hooks;
+    xiloader::SocketHooks hooks(config);
     if (!hooks.attached)
     {
         xiloader::console::output(xiloader::color::error, "Failed to detour function 'gethostbyname'. Cannot continue!");
@@ -133,46 +125,48 @@ int run()
     /* Attempt to resolve the server address.. */
     ULONG ulAddress = 0;
 
-    xiloader::console::output(xiloader::color::info, "Resolving '%s' ...", xiloader::config.serverAddress.c_str());
+    xiloader::console::output(xiloader::color::info, "Resolving '%s' ...", config.serverAddress.c_str());
 
-    if (xiloader::resolveHostname(xiloader::config.serverAddress.c_str(), &ulAddress))
+    if (xiloader::resolveHostname(config.serverAddress.c_str(), &ulAddress))
     {
-        xiloader::config.serverAddress = inet_ntoa(*((struct in_addr*)&ulAddress));
+        config.serverAddress = inet_ntoa(*((struct in_addr*)&ulAddress));
 
-        xiloader::console::output(xiloader::color::info, "Resolved server address to '%s:%d'", xiloader::config.serverAddress.c_str(), xiloader::config.loginAuthPort);
+        xiloader::console::output(xiloader::color::info, "Resolved server address to '%s:%d'", config.serverAddress.c_str(), config.loginAuthPort);
 
         /* Attempt to create socket to server..*/
-        uint32_t                      accountId = 0;
-        xiloader::LobbyDataConnection lobbyData;
+        std::optional<xiloader::Session> session;
+        xiloader::LobbyDataConnection    lobbyData;
 
         /* Attempt to verify the users account info.. */
-        if (auth.connect(xiloader::config.serverAddress, xiloader::config.loginAuthPort) && xiloader::login::run(auth, accountId))
+        if (auth.connect(config.serverAddress, config.loginAuthPort) && (session = xiloader::login::run(auth, config)))
         {
+            hooks.useSession(*session);
+
             /* Attempt to create connection to the login server.. */
-            const bool connected = lobbyData.connect(xiloader::config.serverAddress, xiloader::config.loginDataPort);
+            const bool connected = lobbyData.connect(config.serverAddress, config.loginDataPort);
             if (!connected)
             {
                 int err = WSAGetLastError();
-                xiloader::console::output(xiloader::color::error, "Failed to initialize connection to server on port %u, winsock error: %d", xiloader::config.loginDataPort, err);
+                xiloader::console::output(xiloader::color::error, "Failed to initialize connection to server on port %u, winsock error: %d", config.loginDataPort, err);
             }
 
             if (connected)
             {
                 /* Start hairpin hack thread if required.. */
-                if (xiloader::config.hairpin)
+                if (config.hairpin)
                 {
                     // TODO: this is not terminated? Does it need to be?
-                    if (CreateThread(NULL, 0, (LPTHREAD_START_ROUTINE)xiloader::ApplyHairpinFixThread, NULL, 0, NULL) == NULL)
+                    if (CreateThread(NULL, 0, (LPTHREAD_START_ROUTINE)xiloader::ApplyHairpinFixThread, reinterpret_cast<LPVOID>(static_cast<DWORD_PTR>(ulAddress)), 0, NULL) == NULL)
                     {
                         xiloader::console::output(xiloader::color::error, "Failed to start the hairpin fix thread (error %lu).", GetLastError());
                     }
                 }
 
                 // Create lobby data thread
-                lobbyData.start(accountId);
+                lobbyData.start(*session);
 
                 /* Attempt to create polcore instance..*/
-                const auto                          languageId = static_cast<int>(xiloader::config.language);
+                const auto                          languageId = static_cast<int>(config.language);
                 Microsoft::WRL::ComPtr<IPOLCoreCom> polcore;
                 if (CoCreateInstance(xiloader::CLSID_POLCoreCom[languageId], NULL, 0x17, xiloader::IID_IPOLCoreCom[languageId], (LPVOID*)polcore.GetAddressOf()) != S_OK)
                 {
@@ -182,7 +176,7 @@ int run()
                 {
                     /* Invoke the setup functions for polcore.. */
                     // Create string for the login view port
-                    std::string polcorecmd = " /game eAZcFcB -net 3 -port " + std::to_string(xiloader::config.loginViewPort);
+                    std::string polcorecmd = " /game eAZcFcB -net 3 -port " + std::to_string(config.loginViewPort);
                     // Cast to an LPSTR
                     LPSTR cmd = const_cast<char*>(polcorecmd.c_str());
                     polcore->SetAreaCode(languageId);
@@ -199,11 +193,11 @@ int run()
                     }
 
                     /* Invoke the inet mutex function.. */
-                    auto findMutex = (void* (*)(...))FindINETMutex();
+                    auto findMutex = (void* (*)(...))FindINETMutex(config.language);
                     findMutex();
 
                     /* Locate and prepare the pol connection.. */
-                    auto polConnection = (char*)FindPolConn();
+                    auto polConnection = (char*)FindPolConn(config.language);
                     memset(polConnection, 0x00, 0x68);
                     auto enc = (char*)malloc(0x1000);
                     memset(enc, 0x00, 0x1000);
@@ -214,36 +208,36 @@ int run()
 
                     /* Invoke the setup functions for polcore.. */
                     lpCommandTable[xiloader::tableIndex(xiloader::PolFunction::RegistryLang)](languageId);
-                    lpCommandTable[xiloader::tableIndex(xiloader::PolFunction::FfxiLang)](xiloader::functions::GetRegistryPlayOnlineLanguage(xiloader::config.language));
-                    lpCommandTable[xiloader::tableIndex(xiloader::PolFunction::RegistryKey)](xiloader::functions::GetRegistryPlayOnlineKey(xiloader::config.language));
-                    const char* installFolder = xiloader::functions::GetRegistryPlayOnlineInstallFolder(xiloader::config.language);
+                    lpCommandTable[xiloader::tableIndex(xiloader::PolFunction::FfxiLang)](xiloader::functions::GetRegistryPlayOnlineLanguage(config.language));
+                    lpCommandTable[xiloader::tableIndex(xiloader::PolFunction::RegistryKey)](xiloader::functions::GetRegistryPlayOnlineKey(config.language));
+                    const char* installFolder = xiloader::functions::GetRegistryPlayOnlineInstallFolder(config.language);
                     if (installFolder[0] == '\0')
                     {
-                        xiloader::console::output(xiloader::color::error, "PlayOnline install folder not found in the registry (HKLM\\%s\\InstallFolder). Check PlayOnline is installed and --lang matches your install.", xiloader::functions::GetRegistryPlayOnlineKey(xiloader::config.language));
+                        xiloader::console::output(xiloader::color::error, "PlayOnline install folder not found in the registry (HKLM\\%s\\InstallFolder). Check PlayOnline is installed and --lang matches your install.", xiloader::functions::GetRegistryPlayOnlineKey(config.language));
                     }
                     lpCommandTable[xiloader::tableIndex(xiloader::PolFunction::InstallFolder)](installFolder);
                     lpCommandTable[xiloader::tableIndex(xiloader::PolFunction::FileInit)](); // Initialize polcore file system
 
-                    if (!xiloader::playonline::disableCipher())
+                    if (!xiloader::playonline::disableCipher(config.language))
                     {
                         xiloader::console::output(xiloader::color::error, "Unsupported polcore version.");
                         return 1;
                     }
 
-                    if (!xiloader::polrelay::start(xiloader::config.profilePort, accountId))
+                    if (!xiloader::polrelay::start(config.serverAddress, config.profilePort, *session))
                     {
                         return 1;
                     }
 
                     // Without the viewer, polcore keeps its built-in Japanese message texts
-                    if (xiloader::config.language != xiloader::Language::Japanese)
+                    if (config.language != xiloader::Language::Japanese)
                     {
                         xiloader::playonline::setEnglishMessageTexts(lpCommandTable);
                     }
 
                     lpCommandTable[xiloader::tableIndex(xiloader::PolFunction::InetMutex)]();
 
-                    if (!xiloader::playonline::logIn(lpCommandTable, accountId))
+                    if (!xiloader::playonline::logIn(lpCommandTable, session->accountId, config.language))
                     {
                         return 1;
                     }
@@ -260,9 +254,17 @@ int run()
                     {
                         /* Attempt to start Final Fantasy.. */
                         IUnknown* message = NULL;
-                        xiloader::console::hide();
+                        if (config.hide)
+                        {
+                            xiloader::console::hide();
+                        }
+
                         ffxi->GameStart(polcore.Get(), &message);
-                        xiloader::console::show();
+
+                        if (config.hide)
+                        {
+                            xiloader::console::show();
+                        }
                     }
                 }
             }
@@ -286,18 +288,17 @@ int run()
  */
 int __cdecl main(int argc, char* argv[])
 {
+    xiloader::Config config;
+
     try
     {
-        xiloader::config = xiloader::Config::load(argc, argv);
+        config = xiloader::Config::load(argc, argv);
     }
     catch (const std::exception& err)
     {
         std::cerr << err.what() << std::endl;
         return 1;
     }
-
-    // Autologin when both were supplied
-    xiloader::state.firstLogin = !xiloader::config.username.empty() && !xiloader::config.password.empty();
 
     std::array<uint8_t, 3> version = xiloader::Config::versionNumber;
 
@@ -312,7 +313,7 @@ int __cdecl main(int argc, char* argv[])
     xiloader::console::output(xiloader::color::lightpurple, "Bug Reports: https://github.com/LandSandBoat/xiloader/issues");
     xiloader::console::output(xiloader::color::lightred, "==========================================================");
 
-    const int result = run();
+    const int result = run(config);
 
     xiloader::console::output(xiloader::color::error, "Closing...");
     Sleep(2000);

@@ -23,10 +23,8 @@
 
 #include "defines.h"
 
-#include "app.h"
 #include "console.h"
 #include "functions.h"
-#include "net/resolve.h"
 
 namespace
 {
@@ -52,19 +50,13 @@ __declspec(naked) void HairpinFixCave(void){
  */
 DWORD xiloader::ApplyHairpinFixThread(LPVOID lpParam)
 {
-    UNREFERENCED_PARAMETER(lpParam);
-
     do
     {
         /* Sleep until we find FFXiMain loaded.. */
         Sleep(100);
     } while (GetModuleHandleA("FFXiMain.dll") == NULL);
 
-    /* Convert server address.. */
-    if (!xiloader::resolveHostname(xiloader::config.serverAddress.c_str(), &g_NewServerAddress))
-    {
-        xiloader::console::output(xiloader::color::error, "Hairpin fix failed to resolve the server address %s (winsock error %d).", xiloader::config.serverAddress.c_str(), WSAGetLastError());
-    }
+    g_NewServerAddress = static_cast<DWORD>(reinterpret_cast<DWORD_PTR>(lpParam));
 
     // Locate the main hairpin location..
     //

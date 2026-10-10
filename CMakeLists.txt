@@ -41,7 +41,6 @@ configure_file(
 
 # xiloader
 add_executable(xiloader
-    src/app.h
     src/client/sdk/ffxi.h
     src/client/sdk/polcore.h
     src/config.cpp
@@ -74,6 +73,7 @@ add_executable(xiloader
     src/login/auth_connection.h
     src/login/login.cpp
     src/login/login.h
+    src/login/session.h
     src/main.cpp
     src/net/resolve.cpp
     src/net/resolve.h

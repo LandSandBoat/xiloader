@@ -23,8 +23,6 @@ This file is part of DarkStar-server source code.
 
 #include "console.h"
 
-#include "app.h"
-
 #include <shobjidl.h>
 
 namespace xiloader
@@ -54,9 +52,6 @@ void console::print(xiloader::color c, const std::string& message)
  */
 void console::visible(bool visible)
 {
-    if (!xiloader::config.hide)
-        return;
-
     auto console = ::GetConsoleWindow();
 
     // Adjust the task bar
