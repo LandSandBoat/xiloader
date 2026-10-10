@@ -27,6 +27,7 @@ namespace xiloader
 {
 
 // POLCON_STEP's states (polcore 0x10044a50, state at 0x10099408); negative values are errors
+// NOLINTNEXTLINE(performance-enum-size): what polcore returns is an int, and a negative one is an error
 enum class PolconState : int32_t
 {
     Init                = 0x00,

@@ -46,6 +46,8 @@ public:
 
     LobbyDataConnection(const LobbyDataConnection&)            = delete;
     LobbyDataConnection& operator=(const LobbyDataConnection&) = delete;
+    LobbyDataConnection(LobbyDataConnection&&)                 = delete;
+    LobbyDataConnection& operator=(LobbyDataConnection&&)      = delete;
 
     // The error says why the server can't be reached
     auto connect(const std::string& server, uint16_t port) -> std::expected<void, std::string>;
@@ -57,7 +59,7 @@ public:
     void setCharacterList(char* list);
 
 private:
-    void run(std::stop_token stop, Session session);
+    void run(const std::stop_token& stop, const Session& session);
 
     SOCKET socket        = INVALID_SOCKET;
     ULONG  serverAddress = INADDR_NONE;

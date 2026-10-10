@@ -82,7 +82,7 @@ auto getTemporaryPath() -> std::string
 
 // Return filename for later deletion
 // Only input filename as "name.ext" and don't include the path
-auto writeSvgToDisk(std::string filename, const std::string contents) -> std::string
+auto writeSvgToDisk(std::string filename, const std::string& contents) -> std::string
 {
     filename = getTemporaryPath() + filename;
     std::ofstream svg(filename, std::ios::out | std::ios::trunc);

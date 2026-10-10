@@ -93,11 +93,11 @@ void* gameEventHandler = nullptr;
 
 struct Reconnection
 {
-    Reconnect phase        = Reconnect::Connected;
-    ULONGLONG until        = 0;
-    bool      statusLoaded = false;
-    Load      status[std::size(kStatusLoads)];
-    Load      lists[std::size(kListLoads)];
+    Reconnect phase                           = Reconnect::Connected;
+    ULONGLONG until                           = 0;
+    bool      statusLoaded                    = false;
+    Load      status[std::size(kStatusLoads)] = {};
+    Load      lists[std::size(kListLoads)]    = {};
 } reconnection;
 
 // Replaces polcore's PlayOnline cipher; the relay encrypts the traffic instead
@@ -410,7 +410,7 @@ auto disableCipher(const Language language) -> bool
     const char* const module = xiloader::registry::GetPolcoreModule(language);
 
     // The IRC send path: push 1; push edx; lea eax,[ebx+8]; push edi; lea ecx,[esp+0x1c]; push eax; push ecx; call cipher
-    const unsigned char site[] = { 0x6A, 0x01, 0x52, 0x8D, 0x43, 0x08, 0x57, 0x8D, 0x4C, 0x24, 0x1C, 0x50, 0x51, 0xE8 };
+    const uint8_t site[] = { 0x6A, 0x01, 0x52, 0x8D, 0x43, 0x08, 0x57, 0x8D, 0x4C, 0x24, 0x1C, 0x50, 0x51, 0xE8 };
 
     const auto found = xiloader::memory::FindPattern(module, site, "xxxxxxxxxxxxxx");
     if (!found)
@@ -419,7 +419,7 @@ auto disableCipher(const Language language) -> bool
         return false;
     }
 
-    const auto callSite = reinterpret_cast<uint8_t*>(found) + sizeof(site) - 1;
+    const auto callSite = found + sizeof(site) - 1;
     const auto cipher   = callSite + 5 + *reinterpret_cast<const int32_t*>(callSite + 1);
 
     // jmp PlainCrypt over the cipher's first bytes; both take the same cdecl arguments

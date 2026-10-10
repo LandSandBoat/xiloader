@@ -35,11 +35,17 @@
 #include <algorithm>
 #include <intrin.h>
 #include <string_view>
+#include <vector>
 
 namespace
 {
 
-constexpr size_t           kSessionHashSize   = 16;
+constexpr size_t kSessionHashSize = 16;
+
+// A lobby packet starts with its size, the XIFF magic and the command, then the session hash
+constexpr int kSessionHashOffset = 12;
+constexpr int kLobbyHeaderSize   = 28;
+
 constexpr std::string_view kPlayOnlineHosts[] = { "pp000.pol.com", "ci000.pol.com", "gm000.pol.com", "gd000.pol.com" };
 
 // The detours can't take arguments, so what they need is kept here
@@ -81,7 +87,7 @@ auto __stdcall Mine_gethostbyname(const char* name) -> hostent*
 // This way, we know we want to send.
 static auto isLobbyCommand(const char* const buffer, const SOCKET socket) -> bool
 {
-    struct sockaddr_in sin;
+    struct sockaddr_in sin     = {};
     int                addrlen = sizeof(sin);
 
     getpeername(socket, reinterpret_cast<struct sockaddr*>(&sin), &addrlen);
@@ -120,10 +126,13 @@ auto WINAPI Mine_send(SOCKET s, const char* buf, int len, int flags) -> int
     std::ignore    = ret;
 
     // check for lobby specific commands
-    if (isLobbyCommand(buf, s))
+    if (len >= kLobbyHeaderSize && isLobbyCommand(buf, s))
     {
         // always send server provided session hash in packets with XIFF commands and is a lobby command
-        std::memcpy((char*)buf + 12, sessionHash, kSessionHashSize);
+        std::vector<char> packet(buf, buf + len);
+        std::memcpy(packet.data() + kSessionHashOffset, sessionHash, kSessionHashSize);
+
+        return Real_send(s, packet.data(), len, flags);
     }
 
     return Real_send(s, buf, len, flags);
@@ -163,10 +172,10 @@ xiloader::SocketHooks::SocketHooks(const Config& config)
 
     DetourTransactionBegin();
     DetourUpdateThread(GetCurrentThread());
-    DetourAttach(&(PVOID&)Real_gethostbyname, Mine_gethostbyname);
-    DetourAttach(&(PVOID&)Real_send, Mine_send);
-    DetourAttach(&(PVOID&)Real_recv, Mine_recv);
-    DetourAttach(&(PVOID&)Real_connect, Mine_connect);
+    DetourAttach(reinterpret_cast<PVOID*>(&Real_gethostbyname), Mine_gethostbyname);
+    DetourAttach(reinterpret_cast<PVOID*>(&Real_send), Mine_send);
+    DetourAttach(reinterpret_cast<PVOID*>(&Real_recv), Mine_recv);
+    DetourAttach(reinterpret_cast<PVOID*>(&Real_connect), Mine_connect);
     attached = DetourTransactionCommit() == NO_ERROR;
 }
 
@@ -179,10 +188,10 @@ xiloader::SocketHooks::~SocketHooks()
 
     DetourTransactionBegin();
     DetourUpdateThread(GetCurrentThread());
-    DetourDetach(&(PVOID&)Real_gethostbyname, Mine_gethostbyname);
-    DetourDetach(&(PVOID&)Real_send, Mine_send);
-    DetourDetach(&(PVOID&)Real_recv, Mine_recv);
-    DetourDetach(&(PVOID&)Real_connect, Mine_connect);
+    DetourDetach(reinterpret_cast<PVOID*>(&Real_gethostbyname), Mine_gethostbyname);
+    DetourDetach(reinterpret_cast<PVOID*>(&Real_send), Mine_send);
+    DetourDetach(reinterpret_cast<PVOID*>(&Real_recv), Mine_recv);
+    DetourDetach(reinterpret_cast<PVOID*>(&Real_connect), Mine_connect);
     DetourTransactionCommit();
 }
 

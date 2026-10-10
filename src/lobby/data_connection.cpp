@@ -73,7 +73,7 @@ void applyList(char* const list, const char* const packet)
     {
         list[0x00 + (x * kListEntrySize)] = 1;
         list[0x02 + (x * kListEntrySize)] = 1;
-        list[0x10 + (x * kListEntrySize)] = (char)x;
+        list[0x10 + (x * kListEntrySize)] = static_cast<char>(x);
         list[0x11 + (x * kListEntrySize)] = 0x80u;
         list[0x18 + (x * kListEntrySize)] = 0x20;
         list[0x28 + (x * kListEntrySize)] = 0x20;
@@ -102,22 +102,21 @@ LobbyDataConnection::~LobbyDataConnection()
 
 auto LobbyDataConnection::connect(const std::string& server, const uint16_t port) -> std::expected<void, std::string>
 {
-    struct addrinfo hints;
-    memset(&hints, 0x00, sizeof(hints));
+    struct addrinfo hints = {};
 
     hints.ai_family   = AF_UNSPEC;
     hints.ai_socktype = SOCK_STREAM;
     hints.ai_protocol = IPPROTO_TCP;
 
     // Attempt to get the server information.
-    struct addrinfo* addr = NULL;
+    struct addrinfo* addr = nullptr;
     if (getaddrinfo(server.c_str(), std::to_string(port).c_str(), &hints, &addr))
     {
         return std::unexpected("Failed to obtain remote server information.");
     }
 
     // Determine which address is valid to connect..
-    for (auto ptr = addr; ptr != NULL && socket == INVALID_SOCKET; ptr = ptr->ai_next)
+    for (auto ptr = addr; ptr != nullptr && socket == INVALID_SOCKET; ptr = ptr->ai_next)
     {
         const auto candidate = ::socket(ptr->ai_family, ptr->ai_socktype, ptr->ai_protocol);
         if (candidate == INVALID_SOCKET)
@@ -150,9 +149,9 @@ auto LobbyDataConnection::connect(const std::string& server, const uint16_t port
 
 void LobbyDataConnection::start(const Session& session)
 {
-    thread = std::jthread([this, session](std::stop_token stop)
+    thread = std::jthread([this, session](const std::stop_token& stop)
                           {
-                              run(std::move(stop), session);
+                              run(stop, session);
                           });
 }
 
@@ -169,7 +168,7 @@ void LobbyDataConnection::setCharacterList(char* const list)
     }
 }
 
-void LobbyDataConnection::run(const std::stop_token stop, const Session session)
+void LobbyDataConnection::run(const std::stop_token& stop, const Session& session)
 {
     char recvBuffer[kBufferSize] = { 0 };
     char sendBuffer[kBufferSize] = { 0 };
@@ -234,7 +233,7 @@ void LobbyDataConnection::run(const std::stop_token stop, const Session session)
                 case xiloader::LobbyDataRequest::Key:
                 case xiloader::LobbyDataRequest::KeyAlternate:
                     // The packet starts with LobbyDataReply::Key
-                    memcpy(sendBuffer, (char*)"\xA2\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x58\xE0\x5D\xAD\x00\x00\x00\x00", 25);
+                    memcpy(sendBuffer, "\xA2\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x58\xE0\x5D\xAD\x00\x00\x00\x00", 25);
 
                     xiloader::console::output(xiloader::color::warning, "Sending key..");
                     sendSize = kReplySize;

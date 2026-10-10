@@ -48,7 +48,7 @@ auto promptLine(const std::string& label, const bool hidden = false) -> std::str
     if (hidden)
     {
         ::SetConsoleMode(stdinHandle, mode);
-        std::cout << std::endl;
+        std::println(std::cout);
     }
 
     return line;

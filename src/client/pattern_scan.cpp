@@ -21,41 +21,99 @@
 
 #include "pattern_scan.h"
 
+#include <windows.h>
+
 #include <psapi.h>
 
-#include <cstring>
+#include <algorithm>
+#include <cstddef>
 
 namespace xiloader
 {
 
 // Compares a pattern against a given memory pointer.
 // Returns true if pattern was found, false otherwise.
-static auto MaskCompare(const unsigned char* lpDataPtr, const unsigned char* lpPattern, const char* pszMask) -> bool
+static auto MaskCompare(const uint8_t* const data, const std::span<const uint8_t> pattern, const std::string_view mask) -> bool
 {
-    for (; *pszMask; ++pszMask, ++lpDataPtr, ++lpPattern)
+    for (std::size_t i = 0; i < mask.size(); ++i)
     {
-        if (*pszMask == 'x' && *lpDataPtr != *lpPattern)
+        if (mask[i] == 'x' && data[i] != pattern[i])
+        {
             return false;
+        }
     }
-    return (*pszMask) == NULL;
+
+    return true;
 }
 
-auto memory::FindPattern(const char* const moduleName, const unsigned char* const lpPattern, const char* const pszMask) -> DWORD
+// Searches one run of readable memory
+static auto searchRun(uint8_t* const start, uint8_t* const end, const std::span<const uint8_t> pattern, const std::string_view mask) -> uint8_t*
 {
-    MODULEINFO mod = { 0 };
-    if (!GetModuleInformation(GetCurrentProcess(), GetModuleHandleA(moduleName), &mod, sizeof(MODULEINFO)))
-        return 0;
-
-    const auto length = strlen(pszMask);
-    if (length > mod.SizeOfImage)
-        return 0;
-
-    for (DWORD x = 0; x <= mod.SizeOfImage - length; x++)
+    for (auto candidate = start; candidate + mask.size() <= end; ++candidate)
     {
-        if (MaskCompare(reinterpret_cast<unsigned char*>((DWORD)mod.lpBaseOfDll + x), lpPattern, pszMask))
-            return ((DWORD)mod.lpBaseOfDll + x);
+        if (MaskCompare(candidate, pattern, mask))
+        {
+            return candidate;
+        }
     }
-    return 0;
+
+    return nullptr;
+}
+
+auto memory::FindPattern(const char* const moduleName, const std::span<const uint8_t> pattern, const std::string_view mask) -> uint8_t*
+{
+    MODULEINFO mod = {};
+    if (!GetModuleInformation(GetCurrentProcess(), GetModuleHandleA(moduleName), &mod, sizeof(MODULEINFO)))
+    {
+        return nullptr;
+    }
+
+    if (mask.size() > pattern.size() || mask.size() > mod.SizeOfImage)
+    {
+        return nullptr;
+    }
+
+    const auto base = static_cast<uint8_t*>(mod.lpBaseOfDll);
+    const auto end  = base + mod.SizeOfImage;
+
+    // Not every page of a loaded module is readable, so only runs of committed, readable pages are searched
+    uint8_t* runStart = nullptr;
+    for (auto region = base; region < end;)
+    {
+        MEMORY_BASIC_INFORMATION info = {};
+        if (VirtualQuery(region, &info, sizeof(info)) == 0)
+        {
+            break;
+        }
+
+        const auto regionEnd = std::min(end, static_cast<uint8_t*>(info.BaseAddress) + info.RegionSize);
+        const bool readable  = info.State == MEM_COMMIT && (info.Protect & (PAGE_NOACCESS | PAGE_GUARD)) == 0;
+
+        if (readable && runStart == nullptr)
+        {
+            runStart = region;
+        }
+
+        if (runStart != nullptr && (!readable || regionEnd == end))
+        {
+            auto runEnd = region;
+            if (readable)
+            {
+                runEnd = regionEnd;
+            }
+
+            if (const auto found = searchRun(runStart, runEnd, pattern, mask))
+            {
+                return found;
+            }
+
+            runStart = nullptr;
+        }
+
+        region = regionEnd;
+    }
+
+    return nullptr;
 }
 
 } // namespace xiloader

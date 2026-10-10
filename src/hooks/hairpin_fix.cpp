@@ -24,6 +24,9 @@
 #include "client/pattern_scan.h"
 #include "console.h"
 
+#include <cstdint>
+#include <cstring>
+
 namespace
 {
 
@@ -40,15 +43,16 @@ __declspec(naked) void HairpinFixCave(void)
     __asm mov eax, g_NewServerAddress __asm mov[edx + 0x012E90], eax __asm mov[edx], eax __asm jmp g_HairpinReturnAddress
 }
 
-auto xiloader::ApplyHairpinFixThread(const LPVOID lpParam) -> DWORD
+namespace
+{
+
+auto WINAPI ApplyHairpinFixThread([[maybe_unused]] const LPVOID lpParam) -> DWORD
 {
     do
     {
         // Sleep until we find FFXiMain loaded..
         Sleep(kModulePollIntervalMs);
-    } while (GetModuleHandleA("FFXiMain.dll") == NULL);
-
-    g_NewServerAddress = static_cast<DWORD>(reinterpret_cast<DWORD_PTR>(lpParam));
+    } while (GetModuleHandleA("FFXiMain.dll") == nullptr);
 
     // Locate the main hairpin location..
     //
@@ -56,8 +60,10 @@ auto xiloader::ApplyHairpinFixThread(const LPVOID lpParam) -> DWORD
     //      8B 82 902E0100        - mov eax, [edx+00012E90]
     //      89 02                 - mov [edx], eax <-- edit this
 
-    const auto hairpinAddress = (DWORD)xiloader::memory::FindPattern("FFXiMain.dll", (BYTE*)"\x8B\x82\xFF\xFF\xFF\xFF\x89\x02\x8B\x0D", "xx????xxxx");
-    if (hairpinAddress == 0)
+    constexpr uint8_t kHairpinPattern[] = { 0x8B, 0x82, 0xFF, 0xFF, 0xFF, 0xFF, 0x89, 0x02, 0x8B, 0x0D };
+
+    const auto hairpinAddress = xiloader::memory::FindPattern("FFXiMain.dll", kHairpinPattern, "xx????xxxx");
+    if (hairpinAddress == nullptr)
     {
         xiloader::console::output(xiloader::color::error, "Failed to locate main hairpin hack address!");
         return 0;
@@ -72,8 +78,10 @@ auto xiloader::ApplyHairpinFixThread(const LPVOID lpParam) -> DWORD
     //      8B 46 0C              - mov eax, [esi+0C]
     //      85 C0                 - test eax, eax
 
-    const auto zoneChangeAddress = (DWORD)xiloader::memory::FindPattern("FFXiMain.dll", (BYTE*)"\x8B\x0D\xFF\xFF\xFF\xFF\x89\x01\x8B\x46", "xx????xxxx");
-    if (zoneChangeAddress == 0)
+    constexpr uint8_t kZoneChangePattern[] = { 0x8B, 0x0D, 0xFF, 0xFF, 0xFF, 0xFF, 0x89, 0x01, 0x8B, 0x46 };
+
+    const auto zoneChangeAddress = xiloader::memory::FindPattern("FFXiMain.dll", kZoneChangePattern, "xx????xxxx");
+    if (zoneChangeAddress == nullptr)
     {
         xiloader::console::output(xiloader::color::error, "Failed to locate zone change hairpin address!");
         return 0;
@@ -82,31 +90,41 @@ auto xiloader::ApplyHairpinFixThread(const LPVOID lpParam) -> DWORD
     // The game's code may be read-only
     DWORD hairpinProtection = 0;
     DWORD zoneProtection    = 0;
-    if (!VirtualProtect((LPVOID)hairpinAddress, 8, PAGE_EXECUTE_READWRITE, &hairpinProtection) ||
-        !VirtualProtect((LPVOID)(zoneChangeAddress + 0x06), 2, PAGE_EXECUTE_READWRITE, &zoneProtection))
+    if (!VirtualProtect(hairpinAddress, 8, PAGE_EXECUTE_READWRITE, &hairpinProtection) ||
+        !VirtualProtect(zoneChangeAddress + 0x06, 2, PAGE_EXECUTE_READWRITE, &zoneProtection))
     {
         xiloader::console::output(xiloader::color::error, "Failed to apply the hairpin fix (error {}). Security software may be blocking changes to the game's code.", GetLastError());
         return 0;
     }
 
     // Apply the hairpin fix..
-    const auto caveDest    = ((int)HairpinFixCave - ((int)hairpinAddress)) - 5;
-    g_HairpinReturnAddress = hairpinAddress + 0x08;
+    const auto caveDest    = static_cast<int32_t>(reinterpret_cast<intptr_t>(&HairpinFixCave) - reinterpret_cast<intptr_t>(hairpinAddress) - 5);
+    g_HairpinReturnAddress = reinterpret_cast<DWORD>(hairpinAddress + 0x08);
 
-    *(BYTE*)(hairpinAddress + 0x00) = 0xE9; // jmp
-    *(UINT*)(hairpinAddress + 0x01) = caveDest;
-    *(BYTE*)(hairpinAddress + 0x05) = 0x90; // nop
-    *(BYTE*)(hairpinAddress + 0x06) = 0x90; // nop
-    *(BYTE*)(hairpinAddress + 0x07) = 0x90; // nop
+    hairpinAddress[0x00] = 0xE9; // jmp
+    memcpy(hairpinAddress + 0x01, &caveDest, sizeof(caveDest));
+    hairpinAddress[0x05] = 0x90; // nop
+    hairpinAddress[0x06] = 0x90; // nop
+    hairpinAddress[0x07] = 0x90; // nop
 
     // Apply zone ip change patch..
-    memset((LPVOID)(zoneChangeAddress + 0x06), 0x90, 2);
+    memset(zoneChangeAddress + 0x06, 0x90, 2);
 
-    VirtualProtect((LPVOID)hairpinAddress, 8, hairpinProtection, &hairpinProtection);
-    VirtualProtect((LPVOID)(zoneChangeAddress + 0x06), 2, zoneProtection, &zoneProtection);
-    FlushInstructionCache(GetCurrentProcess(), (LPCVOID)hairpinAddress, 8);
-    FlushInstructionCache(GetCurrentProcess(), (LPCVOID)(zoneChangeAddress + 0x06), 2);
+    VirtualProtect(hairpinAddress, 8, hairpinProtection, &hairpinProtection);
+    VirtualProtect(zoneChangeAddress + 0x06, 2, zoneProtection, &zoneProtection);
+    FlushInstructionCache(GetCurrentProcess(), hairpinAddress, 8);
+    FlushInstructionCache(GetCurrentProcess(), zoneChangeAddress + 0x06, 2);
 
     xiloader::console::output(xiloader::color::success, "Hairpin fix applied!");
     return 0;
+}
+
+} // namespace
+
+auto xiloader::startHairpinFix(const ULONG serverAddress) -> bool
+{
+    g_NewServerAddress = serverAddress;
+
+    // TODO: this is not terminated? Does it need to be?
+    return CreateThread(nullptr, 0, ApplyHairpinFixThread, nullptr, 0, nullptr) != nullptr;
 }

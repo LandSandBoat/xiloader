@@ -43,6 +43,8 @@ public:
 
     TlsClientConfig(const TlsClientConfig&)            = delete;
     TlsClientConfig& operator=(const TlsClientConfig&) = delete;
+    TlsClientConfig(TlsClientConfig&&)                 = delete;
+    TlsClientConfig& operator=(TlsClientConfig&&)      = delete;
 
     // Seeds the generator and applies the client defaults. Returns an mbedTLS error code, 0 on success.
     auto setUp() -> int;
@@ -51,9 +53,9 @@ public:
     auto get() -> mbedtls_ssl_config*;
 
 private:
-    mbedtls_entropy_context  entropy;
-    mbedtls_ctr_drbg_context random;
-    mbedtls_ssl_config       config;
+    mbedtls_entropy_context  entropy = {};
+    mbedtls_ctr_drbg_context random  = {};
+    mbedtls_ssl_config       config  = {};
 };
 
 } // namespace xiloader

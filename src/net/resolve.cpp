@@ -35,8 +35,8 @@ namespace xiloader
 
 auto resolveHostname(const char* const host, const PULONG lpOutput) -> bool
 {
-    struct addrinfo hints, *info = 0;
-    memset(&hints, 0, sizeof(hints));
+    struct addrinfo  hints = {};
+    struct addrinfo* info  = nullptr;
 
     hints.ai_family   = AF_INET;
     hints.ai_socktype = SOCK_STREAM;
@@ -45,7 +45,7 @@ auto resolveHostname(const char* const host, const PULONG lpOutput) -> bool
     if (getaddrinfo(host, kServiceName, &hints, &info))
         return false;
 
-    *lpOutput = ((struct sockaddr_in*)info->ai_addr)->sin_addr.S_un.S_addr;
+    *lpOutput = (reinterpret_cast<struct sockaddr_in*>(info->ai_addr))->sin_addr.S_un.S_addr;
 
     freeaddrinfo(info);
     return true;

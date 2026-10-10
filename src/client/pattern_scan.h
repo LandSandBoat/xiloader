@@ -21,13 +21,15 @@
 
 #pragma once
 
-#include <windows.h>
+#include <cstdint>
+#include <span>
+#include <string_view>
 
 namespace xiloader::memory
 {
 
 // Locates a signature of bytes using the given mask within the given module.
-// Returns start address of where the pattern was found, NULL otherwise.
-auto FindPattern(const char* moduleName, const unsigned char* lpPattern, const char* pszMask) -> DWORD;
+// Returns start address of where the pattern was found, nullptr otherwise.
+auto FindPattern(const char* moduleName, std::span<const uint8_t> pattern, std::string_view mask) -> uint8_t*;
 
 } // namespace xiloader::memory

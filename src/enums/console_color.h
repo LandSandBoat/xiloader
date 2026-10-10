@@ -28,7 +28,7 @@ namespace xiloader
 {
 
 // Console color enumeration.
-enum class color : uint16_t
+enum class color : uint8_t
 {
     // Red color codes.
     red      = FOREGROUND_RED,

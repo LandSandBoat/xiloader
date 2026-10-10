@@ -65,17 +65,17 @@ auto registry::GetPlayOnlineLanguage(const xiloader::Language language) -> int
     char szRegistryPath[MAX_PATH];
     sprintf_s(szRegistryPath, MAX_PATH, "%s\\%s\\PlayOnlineViewer\\Settings", registry::GetPlayOnlineKey(language), SquareEnix);
 
-    HKEY  hKey       = NULL;
+    HKEY  hKey       = nullptr;
     DWORD dwRegValue = 0;
     DWORD dwRegSize  = sizeof(DWORD);
     DWORD dwRegType  = REG_DWORD;
 
     if (::RegOpenKeyExA(HKEY_LOCAL_MACHINE, szRegistryPath, 0, KEY_QUERY_VALUE | KEY_WOW64_32KEY, &hKey) == ERROR_SUCCESS)
     {
-        if (::RegQueryValueExA(hKey, "Language", NULL, &dwRegType, (LPBYTE)&dwRegValue, &dwRegSize) == ERROR_SUCCESS)
+        if (::RegQueryValueExA(hKey, "Language", nullptr, &dwRegType, reinterpret_cast<LPBYTE>(&dwRegValue), &dwRegSize) == ERROR_SUCCESS)
         {
             if (dwRegType == REG_DWORD && dwRegSize == sizeof(DWORD))
-                lang = (int)dwRegValue;
+                lang = static_cast<int>(dwRegValue);
         }
         ::RegCloseKey(hKey);
     }
@@ -90,14 +90,14 @@ auto registry::GetPlayOnlineInstallFolder(const xiloader::Language language) -> 
     char szRegistryPath[MAX_PATH];
     sprintf_s(szRegistryPath, MAX_PATH, "%s\\InstallFolder", registry::GetPlayOnlineKey(language));
 
-    HKEY  hKey      = NULL;
+    HKEY  hKey      = nullptr;
     DWORD dwRegSize = sizeof(InstallFolder);
     DWORD dwRegType = REG_SZ;
     bool  found     = false;
 
     if (::RegOpenKeyExA(HKEY_LOCAL_MACHINE, szRegistryPath, 0, KEY_QUERY_VALUE | KEY_WOW64_32KEY, &hKey) == ERROR_SUCCESS)
     {
-        if (::RegQueryValueExA(hKey, "1000", NULL, &dwRegType, (LPBYTE)InstallFolder, &dwRegSize) == ERROR_SUCCESS)
+        if (::RegQueryValueExA(hKey, "1000", nullptr, &dwRegType, reinterpret_cast<LPBYTE>(InstallFolder), &dwRegSize) == ERROR_SUCCESS)
         {
             if (dwRegType == REG_SZ && dwRegSize > 0 && dwRegSize < sizeof(InstallFolder))
                 found = true;

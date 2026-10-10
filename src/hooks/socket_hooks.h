@@ -36,6 +36,11 @@ struct SocketHooks
     explicit SocketHooks(const Config& config);
     ~SocketHooks();
 
+    SocketHooks(const SocketHooks&)            = delete;
+    SocketHooks& operator=(const SocketHooks&) = delete;
+    SocketHooks(SocketHooks&&)                 = delete;
+    SocketHooks& operator=(SocketHooks&&)      = delete;
+
     // Stamped into the lobby commands the client sends from then on
     void useSession(const Session& session);
 };

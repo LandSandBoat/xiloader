@@ -126,6 +126,7 @@ target_link_libraries(xiloader PUBLIC
 
 # Assert-based checks for the parts that run without the game
 add_executable(xiloader_check
+    src/client/pattern_scan.cpp
     src/config.cpp
     src/console.cpp
     src/lobby/data_connection.cpp
@@ -135,7 +136,7 @@ add_executable(xiloader_check
 
 target_include_directories(xiloader_check PRIVATE ${PROJECT_SOURCE_DIR}/src)
 target_compile_definitions(xiloader_check PRIVATE NOMINMAX WIN32_LEAN_AND_MEAN)
-target_link_libraries(xiloader_check PRIVATE argparse nlohmann_json::nlohmann_json ws2_32)
+target_link_libraries(xiloader_check PRIVATE argparse nlohmann_json::nlohmann_json psapi ws2_32)
 
 message(STATUS "CMAKE_VERSION: ${CMAKE_VERSION}")
 message(STATUS "CMAKE_BUILD_TYPE: ${CMAKE_BUILD_TYPE}")

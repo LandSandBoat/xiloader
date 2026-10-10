@@ -45,7 +45,13 @@ struct Field
 class Menu
 {
 public:
+    Menu()          = default;
     virtual ~Menu() = default;
+
+    Menu(const Menu&)            = delete;
+    Menu& operator=(const Menu&) = delete;
+    Menu(Menu&&)                 = delete;
+    Menu& operator=(Menu&&)      = delete;
 
     // Shows a numbered menu and returns the selected index. Entries are expected to be prefixed "1) ", "2) ", ...
     virtual auto pick(const std::vector<std::string>& entries) -> int = 0;

@@ -96,7 +96,7 @@ auto run(xiloader::Config& config) -> int
         return ERROR_SUCCESS;
     }
 
-    config.serverAddress = inet_ntoa(*((struct in_addr*)&ulAddress));
+    config.serverAddress = inet_ntoa(*(reinterpret_cast<struct in_addr*>(&ulAddress)));
 
     xiloader::console::output(xiloader::color::info, "Resolved server address to '{}:{}'", config.serverAddress, config.loginAuthPort);
 
@@ -128,8 +128,7 @@ auto run(xiloader::Config& config) -> int
     // Start hairpin hack thread if required..
     if (config.hairpin)
     {
-        // TODO: this is not terminated? Does it need to be?
-        if (CreateThread(NULL, 0, (LPTHREAD_START_ROUTINE)xiloader::ApplyHairpinFixThread, reinterpret_cast<LPVOID>(static_cast<DWORD_PTR>(ulAddress)), 0, NULL) == NULL)
+        if (!xiloader::startHairpinFix(ulAddress))
         {
             xiloader::console::output(xiloader::color::error, "Failed to start the hairpin fix thread (error {}).", GetLastError());
         }
@@ -155,7 +154,7 @@ auto __cdecl main(const int argc, char* argv[]) -> int
     const std::array<uint8_t, 3> version = xiloader::Config::versionNumber;
 
     // Output the banner..
-    const time_t currentTime = time(NULL);
+    const time_t currentTime = time(nullptr);
     const int    currentYear = localtime(&currentTime)->tm_year + 1900; // Year is returned as the number of years since 1900.
     xiloader::console::output(xiloader::color::lightred, "==========================================================");
     xiloader::console::output(xiloader::color::lightgreen, "DarkStar Boot Loader (c) 2015 DarkStar Team");

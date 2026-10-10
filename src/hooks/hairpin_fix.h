@@ -26,8 +26,9 @@
 namespace xiloader
 {
 
-// Applies the hairpin fix modifications.
-// lpParam: The server address to route to, as inet_addr returns it.
-auto ApplyHairpinFixThread(LPVOID lpParam) -> DWORD;
+// Starts the thread that applies the hairpin fix modifications once the game is loaded.
+// serverAddress: The server address to route to, as inet_addr returns it.
+// Returns false when the thread can't be started.
+auto startHairpinFix(ULONG serverAddress) -> bool;
 
 } // namespace xiloader

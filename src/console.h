@@ -56,7 +56,7 @@ public:
     static auto getTimestamp() -> std::string
     {
         // Get the current timestamp
-        ::__time32_t rawtime;
+        ::__time32_t rawtime = 0;
         ::_time32(&rawtime);
 
         ::tm timeinfo;
@@ -79,10 +79,11 @@ public:
         // Output the message
         print(c, std::format(format, std::forward<Args>(args)...));
 
-        std::cout << std::endl;
+        std::cout << '\n'
+                  << std::flush;
     }
 
-    static void printMultiLine(std::string msg, const std::string delimiter, const xiloader::color color)
+    static void printMultiLine(std::string msg, const std::string& delimiter, const xiloader::color color)
     {
         auto pos = msg.find(delimiter);
 

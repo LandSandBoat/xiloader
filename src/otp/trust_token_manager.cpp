@@ -49,14 +49,12 @@ constexpr int64_t kSecondsPerDay = 24 * 60 * 60;
 
 auto getTrustTokenDir() -> std::string
 {
-    char*  appdata = nullptr;
-    size_t len     = 0;
-    _dupenv_s(&appdata, &len, "APPDATA");
+    char        appdata[MAX_PATH] = {};
+    const auto  length            = GetEnvironmentVariableA("APPDATA", appdata, sizeof(appdata));
     std::string dir;
-    if (appdata)
+    if (length > 0 && length < sizeof(appdata))
     {
         dir = std::string(appdata) + "\\xiloader\\";
-        free(appdata);
     }
     else
     {

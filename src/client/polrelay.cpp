@@ -444,7 +444,7 @@ void watch(const Connection& connection, fd_set& readable, fd_set& writable, fd_
     }
 }
 
-void run(const std::stop_token stop)
+void run(const std::stop_token& stop)
 {
     while (!stop.stop_requested())
     {

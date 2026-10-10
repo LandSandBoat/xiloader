@@ -57,9 +57,9 @@ struct Connection
 {
     SOCKET              local      = INVALID_SOCKET;
     uint16_t            serverPort = 0;
-    mbedtls_net_context server;
-    mbedtls_ssl_context ssl;
-    Phase               phase = Phase::Connecting;
+    mbedtls_net_context server     = {};
+    mbedtls_ssl_context ssl        = {};
+    Phase               phase      = Phase::Connecting;
 
     // Bytes read from one side and not yet written to the other
     std::vector<unsigned char> toServer;
@@ -80,6 +80,8 @@ struct Connection
 
     Connection(const Connection&)            = delete;
     Connection& operator=(const Connection&) = delete;
+    Connection(Connection&&)                 = delete;
+    Connection& operator=(Connection&&)      = delete;
 };
 
 // Starts the relay thread, listening on free local ports for the IRC port and the profile port polcore dials.

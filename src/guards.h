@@ -37,6 +37,12 @@ struct Winsock
     WSADATA   data  = {};
     const int error = WSAStartup(MAKEWORD(2, 2), &data);
 
+    Winsock()                          = default;
+    Winsock(const Winsock&)            = delete;
+    Winsock& operator=(const Winsock&) = delete;
+    Winsock(Winsock&&)                 = delete;
+    Winsock& operator=(Winsock&&)      = delete;
+
     ~Winsock()
     {
         if (error == 0)
@@ -48,7 +54,13 @@ struct Winsock
 
 struct Com
 {
-    const HRESULT result = CoInitialize(NULL);
+    const HRESULT result = CoInitialize(nullptr);
+
+    Com()                      = default;
+    Com(const Com&)            = delete;
+    Com& operator=(const Com&) = delete;
+    Com(Com&&)                 = delete;
+    Com& operator=(Com&&)      = delete;
 
     ~Com()
     {
@@ -61,6 +73,12 @@ struct Com
 
 struct RelayStop
 {
+    RelayStop()                            = default;
+    RelayStop(const RelayStop&)            = delete;
+    RelayStop& operator=(const RelayStop&) = delete;
+    RelayStop(RelayStop&&)                 = delete;
+    RelayStop& operator=(RelayStop&&)      = delete;
+
     ~RelayStop()
     {
         xiloader::polrelay::stop();

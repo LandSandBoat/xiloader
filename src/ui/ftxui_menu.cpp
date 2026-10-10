@@ -52,7 +52,7 @@ public:
 
         menu |= border; // Add border
 
-        menu |= CatchEvent([&](Event event)
+        menu |= CatchEvent([&](const Event& event)
                            {
                                if (event.is_character())
                                {
@@ -112,7 +112,7 @@ public:
         };
 
         // Enter moves to the next field that isn't skipped, and leaves the form from the last one
-        component |= CatchEvent([&](Event event)
+        component |= CatchEvent([&](const Event& event)
                                 {
                                     if (event != Event::Return)
                                     {

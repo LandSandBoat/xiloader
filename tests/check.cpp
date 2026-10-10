@@ -23,6 +23,7 @@
 #include <cassert>
 #include <chrono>
 
+#include "client/pattern_scan.h"
 #include "config.h"
 #include "lobby/data_connection.h"
 #include "ui/menu.h"
@@ -30,6 +31,7 @@
 #include <filesystem>
 #include <fstream>
 #include <iostream>
+#include <print>
 #include <sstream>
 #include <thread>
 
@@ -155,6 +157,11 @@ struct DataServer
     SOCKET   client   = INVALID_SOCKET;
     uint16_t port     = 0;
 
+    DataServer(const DataServer&)            = delete;
+    DataServer& operator=(const DataServer&) = delete;
+    DataServer(DataServer&&)                 = delete;
+    DataServer& operator=(DataServer&&)      = delete;
+
     DataServer()
     {
         sockaddr_in address = {};
@@ -259,6 +266,27 @@ void checkLobbyData()
     WSACleanup();
 }
 
+// Something for the scanner to find in this module
+uint8_t scanTarget[] = { 0xDE, 0xC0, 0xAD, 0x0B, 0x11, 0x22, 0x33, 0x44, 0xFE, 0xED, 0xFA, 0xCE };
+
+void checkPatternScan()
+{
+    const uint8_t exact[]    = { 0xDE, 0xC0, 0xAD, 0x0B, 0x11, 0x22, 0x33, 0x44, 0xFE, 0xED, 0xFA, 0xCE };
+    const uint8_t wildcard[] = { 0xDE, 0xC0, 0xAD, 0x0B, 0xFF, 0xFF, 0xFF, 0xFF, 0xFE, 0xED, 0xFA, 0xCE };
+    const uint8_t absent[]   = { 0xDE, 0xC0, 0xAD, 0x0B, 0x11, 0x22, 0x33, 0x44, 0xFE, 0xED, 0xFA, 0xCF };
+
+    assert(xiloader::memory::FindPattern(nullptr, exact, "xxxxxxxxxxxx") == scanTarget);
+    assert(xiloader::memory::FindPattern(nullptr, wildcard, "xxxx????xxxx") == scanTarget);
+
+    // Without the mask the wildcard bytes have to match too
+    assert(xiloader::memory::FindPattern(nullptr, wildcard, "xxxxxxxxxxxx") == nullptr);
+    assert(xiloader::memory::FindPattern(nullptr, absent, "xxxxxxxxxxxx") == nullptr);
+    assert(xiloader::memory::FindPattern("no_such_module.dll", exact, "xxxxxxxxxxxx") == nullptr);
+
+    // A mask longer than the pattern is refused instead of read past
+    assert(xiloader::memory::FindPattern(nullptr, exact, "xxxxxxxxxxxxxxxx") == nullptr);
+}
+
 } // namespace
 
 auto main() -> int
@@ -266,6 +294,7 @@ auto main() -> int
     checkPlainMenu();
     checkConfig();
     checkLobbyData();
-    std::cout << "ok" << std::endl;
+    checkPatternScan();
+    std::println("ok");
     return 0;
 }

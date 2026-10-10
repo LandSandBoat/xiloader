@@ -72,13 +72,13 @@ auto AuthConnection::connect(const std::string& address, const uint16_t port) ->
         return std::unexpected(std::format("mbedtls_ssl_setup failed, ({})", mbedtlsErrorText(ret)));
     }
 
-    mbedtls_ssl_set_bio(&ssl, &server, mbedtls_net_send, mbedtls_net_recv, NULL);
+    mbedtls_ssl_set_bio(&ssl, &server, mbedtls_net_send, mbedtls_net_recv, nullptr);
 
     while ((ret = mbedtls_ssl_handshake(&ssl)) != 0)
     {
         if (ret != MBEDTLS_ERR_SSL_WANT_READ && ret != MBEDTLS_ERR_SSL_WANT_WRITE)
         {
-            return std::unexpected(std::format("mbedtls_ssl_handshake returned -0x{:x}", (unsigned int)-ret));
+            return std::unexpected(std::format("mbedtls_ssl_handshake returned -0x{:x}", static_cast<unsigned int>(-ret)));
         }
     }
 

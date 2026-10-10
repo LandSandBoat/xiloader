@@ -42,6 +42,8 @@ public:
 
     AuthConnection(const AuthConnection&)            = delete;
     AuthConnection& operator=(const AuthConnection&) = delete;
+    AuthConnection(AuthConnection&&)                 = delete;
+    AuthConnection& operator=(AuthConnection&&)      = delete;
 
     // Connects and completes the handshake. The error says which step failed.
     auto connect(const std::string& server, uint16_t port) -> std::expected<void, std::string>;
@@ -51,8 +53,8 @@ public:
 
 private:
     TlsClientConfig     config;
-    mbedtls_net_context server;
-    mbedtls_ssl_context ssl;
+    mbedtls_net_context server = {};
+    mbedtls_ssl_context ssl    = {};
 };
 
 } // namespace xiloader
