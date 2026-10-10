@@ -63,6 +63,7 @@ add_executable(xiloader
     src/enums/relay_phase.h
     src/functions.cpp
     src/functions.h
+    src/guards.h
     src/login/auth_connection.cpp
     src/login/auth_connection.h
     src/login/login.cpp

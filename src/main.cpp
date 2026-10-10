@@ -32,9 +32,11 @@ This file is part of DarkStar-server source code.
 #include <filesystem>
 #include <fstream>
 #include <intrin.h>
+#include <wrl/client.h>
 
 #include "console.h"
 #include "functions.h"
+#include "guards.h"
 #include "helpers.h"
 #include "login/auth_connection.h"
 #include "login/login.h"
@@ -303,80 +305,63 @@ inline LPVOID FindCharacters(void** commFuncs)
     return lpCharTable;
 }
 
-/**
- * @brief Main program entrypoint.
- *
- * @param argc      The count of arguments being passed to this application on launch.
- * @param argv      Pointer to array of argument data.
- *
- * @return 1 on error, 0 on success.
- */
-int __cdecl main(int argc, char* argv[])
+xiloader::SocketHooks::SocketHooks()
 {
-    try
-    {
-        xiloader::config = xiloader::Config::load(argc, argv);
-    }
-    catch (const std::exception& err)
-    {
-        std::cerr << err.what() << std::endl;
-        return 1;
-    }
-
-    // Autologin when both were supplied
-    xiloader::state.firstLogin = !xiloader::config.username.empty() && !xiloader::config.password.empty();
-
-    std::array<uint8_t, 3> version = xiloader::Config::versionNumber;
-
-    /* Output the banner.. */
-    time_t currentTime = time(NULL);
-    int    currentYear = localtime(&currentTime)->tm_year + 1900; // Year is returned as the number of years since 1900.
-    xiloader::console::output(xiloader::color::lightred, "==========================================================");
-    xiloader::console::output(xiloader::color::lightgreen, "DarkStar Boot Loader (c) 2015 DarkStar Team");
-    xiloader::console::output(xiloader::color::lightgreen, "LandSandBoat Boot Loader (c) 2021-%d LandSandBoat Team (v%u.%u.%u)", currentYear, version[0], version[1], version[2]);
-    xiloader::console::output(xiloader::color::lightblue, "Using %s", MBEDTLS_VERSION_STRING_FULL); // this prints "Using Mbed TLS #.#.#"
-    xiloader::console::output(xiloader::color::lightpurple, "Git Repo   : https://github.com/LandSandBoat/xiloader");
-    xiloader::console::output(xiloader::color::lightpurple, "Bug Reports: https://github.com/LandSandBoat/xiloader/issues");
-    xiloader::console::output(xiloader::color::lightred, "==========================================================");
-
-    /* Initialize Winsock */
-    WSADATA wsaData = { 0 };
-    auto    ret     = WSAStartup(MAKEWORD(2, 2), &wsaData);
-    if (ret != 0)
-    {
-        xiloader::console::output(xiloader::color::error, "Failed to initialize winsock, error code: %d", ret);
-        return 1;
-    }
-
-    /* Initialize COM */
-    auto hResult = CoInitialize(NULL);
-    if (hResult != S_OK && hResult != S_FALSE)
-    {
-        /* Cleanup Winsock */
-        WSACleanup();
-
-        xiloader::console::output(xiloader::color::error, "Failed to initialize COM, error code: %d", hResult);
-        return 1;
-    }
-
-    /* Attach detour for gethostbyname.. */
     DetourTransactionBegin();
     DetourUpdateThread(GetCurrentThread());
     DetourAttach(&(PVOID&)Real_gethostbyname, Mine_gethostbyname);
     DetourAttach(&(PVOID&)Real_send, Mine_send);
     DetourAttach(&(PVOID&)Real_recv, Mine_recv);
     DetourAttach(&(PVOID&)Real_connect, Mine_connect);
-    if (DetourTransactionCommit() != NO_ERROR)
-    {
-        /* Cleanup COM and Winsock */
-        CoUninitialize();
-        WSACleanup();
+    attached = DetourTransactionCommit() == NO_ERROR;
+}
 
+xiloader::SocketHooks::~SocketHooks()
+{
+    if (!attached)
+    {
+        return;
+    }
+
+    DetourTransactionBegin();
+    DetourUpdateThread(GetCurrentThread());
+    DetourDetach(&(PVOID&)Real_gethostbyname, Mine_gethostbyname);
+    DetourDetach(&(PVOID&)Real_send, Mine_send);
+    DetourDetach(&(PVOID&)Real_recv, Mine_recv);
+    DetourDetach(&(PVOID&)Real_connect, Mine_connect);
+    DetourTransactionCommit();
+}
+
+// Everything between the banner and "Closing...": logs in, then hosts polcore and the game until it exits.
+// Whatever was set up is torn down in reverse order on every way out.
+int run()
+{
+    /* Initialize Winsock */
+    const xiloader::Winsock winsock;
+    if (winsock.error != 0)
+    {
+        xiloader::console::output(xiloader::color::error, "Failed to initialize winsock, error code: %d", winsock.error);
+        return 1;
+    }
+
+    /* Initialize COM */
+    const xiloader::Com com;
+    if (com.result != S_OK && com.result != S_FALSE)
+    {
+        xiloader::console::output(xiloader::color::error, "Failed to initialize COM, error code: %d", com.result);
+        return 1;
+    }
+
+    /* Attach detour for gethostbyname.. */
+    const xiloader::SocketHooks hooks;
+    if (!hooks.attached)
+    {
         xiloader::console::output(xiloader::color::error, "Failed to detour function 'gethostbyname'. Cannot continue!");
         return 1;
     }
 
-    xiloader::AuthConnection auth;
+    xiloader::AuthConnection  auth;
+    const xiloader::RelayStop relayStop;
 
     /* Attempt to resolve the server address.. */
     ULONG ulAddress = 0;
@@ -419,16 +404,16 @@ int __cdecl main(int argc, char* argv[])
 
                 // Create lobby data thread
                 xiloader::state.isRunning = true;
-                HANDLE hFFXiServer        = CreateThread(NULL, 0, xiloader::network::FFXiServer, &sock, 0, NULL);
-                if (hFFXiServer == NULL)
+                const xiloader::LobbyThread lobbyThread{ CreateThread(NULL, 0, xiloader::network::FFXiServer, &sock, 0, NULL) };
+                if (lobbyThread.handle == NULL)
                 {
                     xiloader::console::output(xiloader::color::error, "Failed to start the login data thread (error %lu).", GetLastError());
                 }
 
                 /* Attempt to create polcore instance..*/
-                const auto   languageId = static_cast<int>(xiloader::config.language);
-                IPOLCoreCom* polcore    = NULL;
-                if (CoCreateInstance(xiloader::CLSID_POLCoreCom[languageId], NULL, 0x17, xiloader::IID_IPOLCoreCom[languageId], (LPVOID*)&polcore) != S_OK)
+                const auto                          languageId = static_cast<int>(xiloader::config.language);
+                Microsoft::WRL::ComPtr<IPOLCoreCom> polcore;
+                if (CoCreateInstance(xiloader::CLSID_POLCoreCom[languageId], NULL, 0x17, xiloader::IID_IPOLCoreCom[languageId], (LPVOID*)polcore.GetAddressOf()) != S_OK)
                 {
                     xiloader::console::output(xiloader::color::error, "Failed to initialize instance of polcore!");
                 }
@@ -505,8 +490,8 @@ int __cdecl main(int argc, char* argv[])
                     xiloader::playonline::keepGameOnDisconnect(lpCommandTable);
 
                     /* Attempt to create FFXi instance..*/
-                    IFFXiEntry* ffxi = NULL;
-                    if (CoCreateInstance(xiloader::CLSID_FFXiEntry, NULL, 0x17, xiloader::IID_IFFXiEntry, (LPVOID*)&ffxi) != S_OK)
+                    Microsoft::WRL::ComPtr<IFFXiEntry> ffxi;
+                    if (CoCreateInstance(xiloader::CLSID_FFXiEntry, NULL, 0x17, xiloader::IID_IFFXiEntry, (LPVOID*)ffxi.GetAddressOf()) != S_OK)
                     {
                         xiloader::console::output(xiloader::color::error, "Failed to initialize instance of FFxi!");
                     }
@@ -515,21 +500,10 @@ int __cdecl main(int argc, char* argv[])
                         /* Attempt to start Final Fantasy.. */
                         IUnknown* message = NULL;
                         xiloader::console::hide();
-                        ffxi->GameStart(polcore, &message);
+                        ffxi->GameStart(polcore.Get(), &message);
                         xiloader::console::show();
-                        ffxi->Release();
                     }
-
-                    /* Cleanup polcore object.. */
-                    if (polcore != NULL)
-                        polcore->Release();
                 }
-
-                /* Cleanup threads.. */
-                xiloader::state.isRunning = false;
-                TerminateThread(hFFXiServer, 0);
-                WaitForSingleObject(hFFXiServer, 1000);
-                CloseHandle(hFFXiServer);
             }
         }
     }
@@ -538,23 +512,49 @@ int __cdecl main(int argc, char* argv[])
         xiloader::console::output(xiloader::color::error, "Failed to resolve server hostname.");
     }
 
-    xiloader::polrelay::stop();
+    return ERROR_SUCCESS;
+}
 
-    /* Detach detour for gethostbyname. */
-    DetourTransactionBegin();
-    DetourUpdateThread(GetCurrentThread());
-    DetourDetach(&(PVOID&)Real_gethostbyname, Mine_gethostbyname);
-    DetourDetach(&(PVOID&)Real_send, Mine_send);
-    DetourDetach(&(PVOID&)Real_recv, Mine_recv);
-    DetourDetach(&(PVOID&)Real_connect, Mine_connect);
-    DetourTransactionCommit();
+/**
+ * @brief Main program entrypoint.
+ *
+ * @param argc      The count of arguments being passed to this application on launch.
+ * @param argv      Pointer to array of argument data.
+ *
+ * @return 1 on error, 0 on success.
+ */
+int __cdecl main(int argc, char* argv[])
+{
+    try
+    {
+        xiloader::config = xiloader::Config::load(argc, argv);
+    }
+    catch (const std::exception& err)
+    {
+        std::cerr << err.what() << std::endl;
+        return 1;
+    }
 
-    /* Cleanup COM and Winsock */
-    CoUninitialize();
-    WSACleanup();
+    // Autologin when both were supplied
+    xiloader::state.firstLogin = !xiloader::config.username.empty() && !xiloader::config.password.empty();
+
+    std::array<uint8_t, 3> version = xiloader::Config::versionNumber;
+
+    /* Output the banner.. */
+    time_t currentTime = time(NULL);
+    int    currentYear = localtime(&currentTime)->tm_year + 1900; // Year is returned as the number of years since 1900.
+    xiloader::console::output(xiloader::color::lightred, "==========================================================");
+    xiloader::console::output(xiloader::color::lightgreen, "DarkStar Boot Loader (c) 2015 DarkStar Team");
+    xiloader::console::output(xiloader::color::lightgreen, "LandSandBoat Boot Loader (c) 2021-%d LandSandBoat Team (v%u.%u.%u)", currentYear, version[0], version[1], version[2]);
+    xiloader::console::output(xiloader::color::lightblue, "Using %s", MBEDTLS_VERSION_STRING_FULL); // this prints "Using Mbed TLS #.#.#"
+    xiloader::console::output(xiloader::color::lightpurple, "Git Repo   : https://github.com/LandSandBoat/xiloader");
+    xiloader::console::output(xiloader::color::lightpurple, "Bug Reports: https://github.com/LandSandBoat/xiloader/issues");
+    xiloader::console::output(xiloader::color::lightred, "==========================================================");
+
+    const int result = run();
 
     xiloader::console::output(xiloader::color::error, "Closing...");
     Sleep(2000);
 
-    return ERROR_SUCCESS;
+    return result;
 }
