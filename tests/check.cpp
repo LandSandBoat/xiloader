@@ -20,11 +20,13 @@
 */
 
 #undef NDEBUG
+#include <algorithm>
 #include <cassert>
 #include <chrono>
 
 #include "client/pattern_scan.h"
 #include "config.h"
+#include "diagnostics/checks.h"
 #include "lobby/data_connection.h"
 #include "ui/menu.h"
 
@@ -33,6 +35,7 @@
 #include <iostream>
 #include <print>
 #include <sstream>
+#include <string_view>
 #include <thread>
 
 #include <ws2tcpip.h>
@@ -287,6 +290,34 @@ void checkPatternScan()
     assert(xiloader::memory::FindPattern(nullptr, exact, "xxxxxxxxxxxxxxxx") == nullptr);
 }
 
+// What it finds depends on the machine, so this only pins down what must hold everywhere
+void checkInstallChecks()
+{
+    for (const auto language : { xiloader::Language::Japanese, xiloader::Language::English, xiloader::Language::European })
+    {
+        const auto checks    = xiloader::checkInstall(language);
+        const bool installed = std::ranges::contains(xiloader::installedLanguages(), language);
+
+        // One line each for the viewer folder, polcore and the game
+        assert(checks.size() == 3);
+
+        // A language polcore isn't registered for can't pass
+        const bool passed = std::ranges::none_of(checks, [](const xiloader::Check& check)
+                                                 {
+                                                     return check.status == xiloader::CheckStatus::Fail;
+                                                 });
+        assert(installed || !passed);
+
+        for (const auto& check : checks)
+        {
+            assert(!check.name.empty() && !check.detail.empty());
+            assert(check.status == xiloader::CheckStatus::Pass || !check.hint.empty());
+        }
+    }
+
+    assert(std::string_view(xiloader::languageName(xiloader::Language::European)) == "EU");
+}
+
 } // namespace
 
 auto main() -> int
@@ -295,6 +326,7 @@ auto main() -> int
     checkConfig();
     checkLobbyData();
     checkPatternScan();
+    checkInstallChecks();
     std::println("ok");
     return 0;
 }

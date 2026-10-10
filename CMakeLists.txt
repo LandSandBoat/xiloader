@@ -53,6 +53,10 @@ add_executable(xiloader
     src/config.h
     src/console.cpp
     src/console.h
+    src/diagnostics/checks.h
+    src/diagnostics/install_checks.cpp
+    src/diagnostics/runtime_checks.cpp
+    src/enums/check_status.h
     src/enums/console_color.h
     src/enums/exit_code.h
     src/enums/lobby_command.h
@@ -131,7 +135,9 @@ target_link_libraries(xiloader PUBLIC
 add_executable(xiloader_check
     src/client/pattern_scan.cpp
     src/config.cpp
+    src/client/registry.cpp
     src/console.cpp
+    src/diagnostics/install_checks.cpp
     src/lobby/data_connection.cpp
     src/ui/plain_menu.cpp
     tests/check.cpp

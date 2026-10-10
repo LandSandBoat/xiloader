@@ -64,6 +64,9 @@ struct Load
 // Returns false when that call isn't found.
 auto disableCipher(Language language) -> bool;
 
+// The cipher's call on the IRC send path, nullptr when polcore doesn't have it where expected
+auto findCipherCall(Language language) -> uint8_t*;
+
 // Sets the English friend, group and character-name message texts the viewer normally loads from its StringTable.bin
 void setEnglishMessageTexts(CommandTable table);
 

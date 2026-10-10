@@ -101,6 +101,15 @@ auto FindCharacters(xiloader::playonline::CommandFunc* const* const commFuncs) -
 namespace xiloader
 {
 
+auto probePolcore(const Language language) -> std::vector<std::pair<const char*, bool>>
+{
+    return {
+        { "INET mutex", FindINETMutex(language) != nullptr },
+        { "PlayOnline connection", FindPolConn(language) != nullptr },
+        { "IRC cipher", playonline::findCipherCall(language) != nullptr },
+    };
+}
+
 auto runGame(const Config& config, const Session& session, LobbyDataConnection& lobbyData) -> ExitCode
 {
     // Attempt to create polcore instance..

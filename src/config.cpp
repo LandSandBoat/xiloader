@@ -157,7 +157,8 @@ auto applyJsonFile(Config& config, const std::string& filename) -> std::expected
             return std::unexpected(parsed.error());
         }
 
-        config.language = *parsed;
+        config.language       = *parsed;
+        config.languageChosen = true;
     }
 
     return {};
@@ -234,6 +235,11 @@ auto Config::load(const int argc, const char* const argv[]) -> std::expected<Con
         .help("(optional) Use plain text menus. Always on under Wine.")
         .append();
 
+    args.add_argument("--diagnose")
+        .implicit_value(true)
+        .help("(optional) Check the PlayOnline install and the server, print a report and exit. Nothing is changed and the game is not started.")
+        .append();
+
     args.add_argument("--trust")
         .implicit_value(true)
         .help("(optional) Trust this computer for 30 days, skipping 2FA on subsequent logins.")
@@ -282,6 +288,7 @@ auto Config::load(const int argc, const char* const argv[]) -> std::expected<Con
     apply("--hide", config.hide);
     apply("--plain", config.plainMenus);
     apply("--trust", config.trustThisComputer);
+    apply("--diagnose", config.diagnose);
 
     if (const auto language = args.present<std::string>("--lang"))
     {
@@ -291,7 +298,8 @@ auto Config::load(const int argc, const char* const argv[]) -> std::expected<Con
             return std::unexpected(parsed.error());
         }
 
-        config.language = *parsed;
+        config.language       = *parsed;
+        config.languageChosen = true;
     }
 
     return config;

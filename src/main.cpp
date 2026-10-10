@@ -42,6 +42,7 @@ This file is part of DarkStar-server source code.
 #include "app_data.h"
 #include "client/game.h"
 #include "console.h"
+#include "diagnostics/checks.h"
 #include "guards.h"
 #include "hooks/hairpin_fix.h"
 #include "hooks/socket_hooks.h"
@@ -63,6 +64,12 @@ using xiloader::ExitCode;
 // Whatever was set up is torn down in reverse order on every way out.
 auto run(xiloader::Config& config) -> ExitCode
 {
+    // Before asking for a password, make sure there is a game to start
+    if (!xiloader::report(xiloader::checkInstall(config.language), true))
+    {
+        return ExitCode::PlayOnlineMissing;
+    }
+
     // Initialize Winsock
     const xiloader::Winsock winsock;
     if (winsock.error != 0)
@@ -179,15 +186,39 @@ auto __cdecl main(const int argc, char* argv[]) -> int
     xiloader::console::output(xiloader::color::lightpurple, "Bug Reports: https://github.com/LandSandBoat/xiloader/issues");
     xiloader::console::output(xiloader::color::lightred, "==========================================================");
 
-    const auto result = run(*config);
+    // With no language asked for, go with what is installed
+    if (!config->languageChosen)
+    {
+        const auto installed = xiloader::installedLanguages();
+        if (!installed.empty() && !std::ranges::contains(installed, config->language))
+        {
+            config->language = installed.front();
+            xiloader::console::output(xiloader::color::info, "PlayOnline is installed for {}; using that. Pass --lang to choose another.", xiloader::languageName(config->language));
+        }
+    }
 
-    if (result != ExitCode::Success && !xiloader::console::logFile().empty())
+    auto result = ExitCode::Success;
+    if (config->diagnose)
+    {
+        result = xiloader::runDiagnostics(*config);
+    }
+    else
+    {
+        result = run(*config);
+    }
+
+    if (result != ExitCode::Success && !config->diagnose)
+    {
+        xiloader::console::output(xiloader::color::info, "Run xiloader with --diagnose for a report on the install and the server.");
+    }
+
+    if ((result != ExitCode::Success || config->diagnose) && !xiloader::console::logFile().empty())
     {
         xiloader::console::output(xiloader::color::info, "This output is saved in {}", xiloader::console::logFile().string());
     }
 
     // A window made just for the loader would take the error with it
-    if (result != ExitCode::Success && xiloader::console::ownsWindow())
+    if ((result != ExitCode::Success || config->diagnose) && xiloader::console::ownsWindow())
     {
         xiloader::console::output(xiloader::color::error, "Press any key to close this window.");
         _getch();

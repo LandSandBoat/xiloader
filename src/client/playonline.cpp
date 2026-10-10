@@ -56,6 +56,9 @@ using Command = int(__cdecl*)(...);
 // Characters of the PlayOnline password
 constexpr char kPasswordCharacters[] = "ABCDEFGHIJKLMNOPQRSTUVWXYZ234567";
 
+// The IRC send path: push 1; push edx; lea eax,[ebx+8]; push edi; lea ecx,[esp+0x1c]; push eax; push ecx; call cipher
+constexpr uint8_t kCipherCallSite[] = { 0x6A, 0x01, 0x52, 0x8D, 0x43, 0x08, 0x57, 0x8D, 0x4C, 0x24, 0x1C, 0x50, 0x51, 0xE8 };
+
 // Timeout for the IRC session, and the wait between reconnect attempts
 // No list load timeout: polcore frees a slot only from its check, and fails the load itself after 100 seconds
 constexpr ULONGLONG kConnectDeadlineMs = 60000;
@@ -405,22 +408,29 @@ auto __cdecl pollIgnoringDisconnect() -> int
 namespace xiloader::playonline
 {
 
+auto findCipherCall(const Language language) -> uint8_t*
+{
+    const auto found = xiloader::memory::FindPattern(xiloader::registry::GetPolcoreModule(language), kCipherCallSite, "xxxxxxxxxxxxxx");
+    if (found == nullptr)
+    {
+        return nullptr;
+    }
+
+    return found + sizeof(kCipherCallSite) - 1;
+}
+
 auto disableCipher(const Language language) -> bool
 {
     const char* const module = xiloader::registry::GetPolcoreModule(language);
 
-    // The IRC send path: push 1; push edx; lea eax,[ebx+8]; push edi; lea ecx,[esp+0x1c]; push eax; push ecx; call cipher
-    const uint8_t site[] = { 0x6A, 0x01, 0x52, 0x8D, 0x43, 0x08, 0x57, 0x8D, 0x4C, 0x24, 0x1C, 0x50, 0x51, 0xE8 };
-
-    const auto found = xiloader::memory::FindPattern(module, site, "xxxxxxxxxxxxxx");
-    if (!found)
+    const auto callSite = findCipherCall(language);
+    if (callSite == nullptr)
     {
         xiloader::console::output(xiloader::color::error, "Failed to locate the IRC send path in {}. This PlayOnline version is not supported, or --lang doesn't match your install.", module);
         return false;
     }
 
-    const auto callSite = found + sizeof(site) - 1;
-    const auto cipher   = callSite + 5 + *reinterpret_cast<const int32_t*>(callSite + 1);
+    const auto cipher = callSite + 5 + *reinterpret_cast<const int32_t*>(callSite + 1);
 
     // jmp PlainCrypt over the cipher's first bytes; both take the same cdecl arguments
     DWORD protection = 0;

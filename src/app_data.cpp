@@ -35,7 +35,7 @@ auto appDataFolder() -> std::optional<std::filesystem::path>
         return std::nullopt;
     }
 
-    const auto      folder = std::filesystem::path(appdata) / "xiloader";
+    auto            folder = std::filesystem::path(appdata) / "xiloader";
     std::error_code error;
     std::filesystem::create_directories(folder, error);
     if (error)
@@ -54,7 +54,7 @@ auto appDataFolder(const char* const name) -> std::optional<std::filesystem::pat
         return std::nullopt;
     }
 
-    const auto      folder = *parent / name;
+    auto            folder = *parent / name;
     std::error_code error;
     std::filesystem::create_directories(folder, error);
     if (error)

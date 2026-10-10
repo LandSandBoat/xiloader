@@ -22,6 +22,10 @@
 #pragma once
 
 #include "enums/exit_code.h"
+#include "enums/pol_language.h"
+
+#include <utility>
+#include <vector>
 
 namespace xiloader
 {
@@ -32,5 +36,8 @@ struct Session;
 
 // Sets up polcore in this process the way the PlayOnline viewer would, then runs FFXI until it exits.
 auto runGame(const Config& config, const Session& session, LobbyDataConnection& lobbyData) -> ExitCode;
+
+// Whether each piece of polcore code the loader calls or patches is where it expects it. polcore has to be loaded.
+auto probePolcore(Language language) -> std::vector<std::pair<const char*, bool>>;
 
 } // namespace xiloader

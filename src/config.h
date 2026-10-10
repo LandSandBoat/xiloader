@@ -50,6 +50,8 @@ struct Config
     bool        hairpin           = false;
     bool        plainMenus        = false; // Line-based menus instead of FTXUI; always on under Wine
     bool        hide              = false; // Determines whether or not to hide the console window after FFXI starts.
+    bool        languageChosen    = false; // --lang or the json file named a language
+    bool        diagnose          = false; // Report on the install and the server instead of starting the game
 
     // Defaults, then the --json file, then the command line. The error says what is wrong with the input.
     static auto load(int argc, const char* const argv[]) -> std::expected<Config, std::string>;
