@@ -41,6 +41,8 @@ configure_file(
 
 # xiloader
 add_executable(xiloader
+    src/app_data.cpp
+    src/app_data.h
     src/client/game.cpp
     src/client/game.h
     src/client/registry.cpp
@@ -52,6 +54,7 @@ add_executable(xiloader
     src/console.cpp
     src/console.h
     src/enums/console_color.h
+    src/enums/exit_code.h
     src/enums/lobby_command.h
     src/enums/lobby_data.h
     src/enums/login_command.h

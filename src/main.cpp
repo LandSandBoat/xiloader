@@ -32,11 +32,14 @@ This file is part of DarkStar-server source code.
 
 #include <algorithm>
 #include <chrono>
+#include <conio.h>
 #include <ctime>
 #include <filesystem>
 #include <fstream>
 #include <print>
+#include <utility>
 
+#include "app_data.h"
 #include "client/game.h"
 #include "console.h"
 #include "guards.h"
@@ -52,18 +55,20 @@ namespace
 
 constexpr DWORD kCloseDelayMs = 2000;
 
+using xiloader::ExitCode;
+
 } // namespace
 
 // Everything between the banner and "Closing...": logs in, then hosts polcore and the game until it exits.
 // Whatever was set up is torn down in reverse order on every way out.
-auto run(xiloader::Config& config) -> int
+auto run(xiloader::Config& config) -> ExitCode
 {
     // Initialize Winsock
     const xiloader::Winsock winsock;
     if (winsock.error != 0)
     {
         xiloader::console::output(xiloader::color::error, "Failed to initialize winsock, error code: {}", winsock.error);
-        return 1;
+        return ExitCode::StartupFailed;
     }
 
     // Initialize COM
@@ -71,7 +76,7 @@ auto run(xiloader::Config& config) -> int
     if (com.result != S_OK && com.result != S_FALSE)
     {
         xiloader::console::output(xiloader::color::error, "Failed to initialize COM, error code: {}", com.result);
-        return 1;
+        return ExitCode::StartupFailed;
     }
 
     // Attach detour for gethostbyname..
@@ -79,7 +84,7 @@ auto run(xiloader::Config& config) -> int
     if (!hooks.attached)
     {
         xiloader::console::output(xiloader::color::error, "Failed to detour function 'gethostbyname'. Cannot continue!");
-        return 1;
+        return ExitCode::StartupFailed;
     }
 
     xiloader::AuthConnection  auth;
@@ -93,7 +98,7 @@ auto run(xiloader::Config& config) -> int
     if (!xiloader::resolveHostname(config.serverAddress.c_str(), &ulAddress))
     {
         xiloader::console::output(xiloader::color::error, "Failed to resolve server hostname.");
-        return ERROR_SUCCESS;
+        return ExitCode::ServerUnreachable;
     }
 
     config.serverAddress = inet_ntoa(*(reinterpret_cast<struct in_addr*>(&ulAddress)));
@@ -104,13 +109,18 @@ auto run(xiloader::Config& config) -> int
     if (const auto connected = auth.connect(config.serverAddress, config.loginAuthPort); !connected)
     {
         xiloader::console::output(xiloader::color::error, "{}", connected.error());
-        return ERROR_SUCCESS;
+        return ExitCode::ServerUnreachable;
     }
 
     const auto session = xiloader::login::run(auth, config);
     if (!session)
     {
-        return ERROR_SUCCESS;
+        if (session.error() == xiloader::LoginOutcome::Quit)
+        {
+            return ExitCode::Success;
+        }
+
+        return ExitCode::ConnectionLost;
     }
 
     hooks.useSession(*session);
@@ -122,7 +132,7 @@ auto run(xiloader::Config& config) -> int
         const int err = WSAGetLastError();
         xiloader::console::output(xiloader::color::error, "{}", connected.error());
         xiloader::console::output(xiloader::color::error, "Failed to initialize connection to server on port {}, winsock error: {}", config.loginDataPort, err);
-        return ERROR_SUCCESS;
+        return ExitCode::ServerUnreachable;
     }
 
     // Start hairpin hack thread if required..
@@ -141,14 +151,19 @@ auto run(xiloader::Config& config) -> int
 }
 
 // Main program entrypoint.
-// Returns 1 on error, 0 on success.
+// Returns an ExitCode.
 auto __cdecl main(const int argc, char* argv[]) -> int
 {
     auto config = xiloader::Config::load(argc, argv);
     if (!config)
     {
         std::println(std::cerr, "{}", config.error());
-        return 1;
+        return std::to_underlying(ExitCode::BadArguments);
+    }
+
+    if (const auto folder = xiloader::appDataFolder("logs"))
+    {
+        xiloader::console::startLog(*folder);
     }
 
     const std::array<uint8_t, 3> version = xiloader::Config::versionNumber;
@@ -164,10 +179,24 @@ auto __cdecl main(const int argc, char* argv[]) -> int
     xiloader::console::output(xiloader::color::lightpurple, "Bug Reports: https://github.com/LandSandBoat/xiloader/issues");
     xiloader::console::output(xiloader::color::lightred, "==========================================================");
 
-    const int result = run(*config);
+    const auto result = run(*config);
 
-    xiloader::console::output(xiloader::color::error, "Closing...");
-    Sleep(kCloseDelayMs);
+    if (result != ExitCode::Success && !xiloader::console::logFile().empty())
+    {
+        xiloader::console::output(xiloader::color::info, "This output is saved in {}", xiloader::console::logFile().string());
+    }
 
-    return result;
+    // A window made just for the loader would take the error with it
+    if (result != ExitCode::Success && xiloader::console::ownsWindow())
+    {
+        xiloader::console::output(xiloader::color::error, "Press any key to close this window.");
+        _getch();
+    }
+    else
+    {
+        xiloader::console::output(xiloader::color::error, "Closing...");
+        Sleep(kCloseDelayMs);
+    }
+
+    return std::to_underlying(result);
 }

@@ -25,8 +25,80 @@ This file is part of DarkStar-server source code.
 
 #include <shobjidl.h>
 
+#include <algorithm>
+#include <fstream>
+#include <string_view>
+#include <vector>
+
+namespace
+{
+
+constexpr std::size_t      kLogsKept  = 10;
+constexpr std::string_view kLogPrefix = "xiloader-";
+constexpr std::string_view kLogSuffix = ".log";
+
+std::filesystem::path logPath;
+std::ofstream         logStream;
+
+} // namespace
+
 namespace xiloader
 {
+
+void console::startLog(const std::filesystem::path& folder)
+{
+    // The names sort by start time
+    std::vector<std::filesystem::path> logs;
+    std::error_code                    error;
+    for (const auto& entry : std::filesystem::directory_iterator(folder, error))
+    {
+        const auto name = entry.path().filename().string();
+        if (name.starts_with(kLogPrefix) && name.ends_with(kLogSuffix))
+        {
+            logs.push_back(entry.path());
+        }
+    }
+
+    std::ranges::sort(logs);
+    while (logs.size() >= kLogsKept)
+    {
+        std::filesystem::remove(logs.front(), error);
+        logs.erase(logs.begin());
+    }
+
+    SYSTEMTIME now = {};
+    ::GetLocalTime(&now);
+
+    const auto file = folder / std::format("{}{:04}{:02}{:02}-{:02}{:02}{:02}-{}{}", kLogPrefix, now.wYear, now.wMonth, now.wDay, now.wHour, now.wMinute, now.wSecond, ::GetCurrentProcessId(), kLogSuffix);
+
+    logStream.open(file, std::ios::trunc);
+    if (logStream)
+    {
+        logPath = file;
+    }
+}
+
+auto console::logFile() -> const std::filesystem::path&
+{
+    return logPath;
+}
+
+void console::log(const std::string& line)
+{
+    if (logStream)
+    {
+        logStream << line << '\n'
+                  << std::flush;
+    }
+}
+
+auto console::ownsWindow() -> bool
+{
+    DWORD processes[2] = {};
+    DWORD mode         = 0;
+
+    return ::GetConsoleProcessList(processes, 2) == 1 && ::GetConsoleMode(::GetStdHandle(STD_INPUT_HANDLE), &mode) != 0;
+}
 
 void console::print(const xiloader::color c, const std::string& message)
 {

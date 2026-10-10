@@ -30,8 +30,9 @@ namespace xiloader
 enum class LoginOutcome : uint8_t
 {
     LoggedIn,
-    Retry, // Back to the menu
-    Abort, // The user quit or the connection is gone
+    Retry,          // Back to the menu
+    Quit,           // The user chose Exit
+    ConnectionLost, // The login server stopped answering
 };
 
 } // namespace xiloader

@@ -38,6 +38,7 @@ along with this program.  If not, see http://www.gnu.org/licenses/
 
 #include <nlohmann/json.hpp>
 
+#include "app_data.h"
 #include "console.h"
 
 using json = nlohmann::json;
@@ -49,21 +50,14 @@ constexpr int64_t kSecondsPerDay = 24 * 60 * 60;
 
 auto getTrustTokenDir() -> std::string
 {
-    char        appdata[MAX_PATH] = {};
-    const auto  length            = GetEnvironmentVariableA("APPDATA", appdata, sizeof(appdata));
-    std::string dir;
-    if (length > 0 && length < sizeof(appdata))
+    if (const auto folder = xiloader::appDataFolder())
     {
-        dir = std::string(appdata) + "\\xiloader\\";
+        return folder->string() + "\\";
     }
-    else
-    {
-        xiloader::console::output(xiloader::color::warning,
-                                  "APPDATA not set; trust tokens will be stored in the current directory.");
-        dir = ".\\";
-    }
-    std::filesystem::create_directories(dir);
-    return dir;
+
+    xiloader::console::output(xiloader::color::warning,
+                              "APPDATA not set; trust tokens will be stored in the current directory.");
+    return ".\\";
 }
 
 auto readTokenStore(const std::string& filepath) -> json

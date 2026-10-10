@@ -23,7 +23,9 @@
 
 #include "session.h"
 
-#include <optional>
+#include "enums/login_outcome.h"
+
+#include <expected>
 
 namespace xiloader
 {
@@ -39,7 +41,7 @@ namespace xiloader::login
 // Runs the login menu against xi_connect until an account is logged in.
 // Also handles creating accounts, changing passwords and the 2FA options.
 // The menus overwrite the credentials in config.
-// Returns nothing when the user quits or the connection is lost.
-auto run(AuthConnection& connection, Config& config) -> std::optional<Session>;
+// The error is Quit or ConnectionLost.
+auto run(AuthConnection& connection, Config& config) -> std::expected<Session, LoginOutcome>;
 
 } // namespace xiloader::login

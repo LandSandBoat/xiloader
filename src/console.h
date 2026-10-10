@@ -24,6 +24,7 @@ This file is part of DarkStar-server source code.
 #pragma once
 
 #include <ctime>
+#include <filesystem>
 #include <format>
 #include <iostream>
 #include <string>
@@ -42,9 +43,21 @@ private:
     // Shows or hides the console based on the provided argument.
     static void visible(bool visible);
 
+    static void log(const std::string& line);
+
 public:
     // Prints a text fragment with the specified color to the console.
     static void print(xiloader::color c, const std::string& message);
+
+    // Copies everything output prints into a new file in the folder from here on.
+    // Each run gets its own file, so several clients can run at once; only the newest few are kept.
+    static void startLog(const std::filesystem::path& folder);
+
+    // Empty until startLog succeeds
+    static auto logFile() -> const std::filesystem::path&;
+
+    // The console window was made for this process and closes with it, as when the loader is double-clicked
+    static auto ownsWindow() -> bool;
 
     // Prints the given message to the console.
     template <typename... Args>
@@ -73,14 +86,19 @@ public:
     template <typename... Args>
     static void output(const xiloader::color c, const std::format_string<Args...> format, Args&&... args)
     {
+        const std::string timestamp = getTimestamp();
+        const std::string message   = std::format(format, std::forward<Args>(args)...);
+
         // Output the timestamp
-        print(xiloader::color::lightyelllow, getTimestamp());
+        print(xiloader::color::lightyelllow, timestamp);
 
         // Output the message
-        print(c, std::format(format, std::forward<Args>(args)...));
+        print(c, message);
 
         std::cout << '\n'
                   << std::flush;
+
+        log(timestamp + message);
     }
 
     static void printMultiLine(std::string msg, const std::string& delimiter, const xiloader::color color)

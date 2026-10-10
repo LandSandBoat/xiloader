@@ -101,7 +101,7 @@ auto FindCharacters(xiloader::playonline::CommandFunc* const* const commFuncs) -
 namespace xiloader
 {
 
-auto runGame(const Config& config, const Session& session, LobbyDataConnection& lobbyData) -> int
+auto runGame(const Config& config, const Session& session, LobbyDataConnection& lobbyData) -> ExitCode
 {
     // Attempt to create polcore instance..
     const int                           languageId = std::to_underlying(config.language);
@@ -109,7 +109,7 @@ auto runGame(const Config& config, const Session& session, LobbyDataConnection& 
     if (CoCreateInstance(xiloader::CLSID_POLCoreCom[languageId], nullptr, 0x17, xiloader::IID_IPOLCoreCom[languageId], reinterpret_cast<LPVOID*>(polcore.GetAddressOf())) != S_OK)
     {
         xiloader::console::output(xiloader::color::error, "Failed to initialize instance of polcore!");
-        return ERROR_SUCCESS;
+        return ExitCode::PlayOnlineMissing;
     }
 
     // Invoke the setup functions for polcore..
@@ -127,14 +127,14 @@ auto runGame(const Config& config, const Session& session, LobbyDataConnection& 
     if (const auto hr = polcore->GetCommonFunctionTable(reinterpret_cast<unsigned long**>(&lpCommandTable)); FAILED(hr) || lpCommandTable == nullptr)
     {
         xiloader::console::output(xiloader::color::error, "Failed to get polcore's function table (0x{:08X}).", static_cast<unsigned long>(hr));
-        return 1;
+        return ExitCode::PlayOnlineUnsupported;
     }
 
     // Invoke the inet mutex function..
     const auto findMutex = FindINETMutex(config.language);
     if (findMutex == nullptr)
     {
-        return 1;
+        return ExitCode::PlayOnlineUnsupported;
     }
     findMutex();
 
@@ -142,7 +142,7 @@ auto runGame(const Config& config, const Session& session, LobbyDataConnection& 
     const auto polConnection = FindPolConn(config.language);
     if (polConnection == nullptr)
     {
-        return 1;
+        return ExitCode::PlayOnlineUnsupported;
     }
     memset(polConnection, 0x00, 0x68);
     static char       encBuffer[kEncBufferSize] = {};
@@ -167,13 +167,13 @@ auto runGame(const Config& config, const Session& session, LobbyDataConnection& 
     if (!xiloader::playonline::disableCipher(config.language))
     {
         xiloader::console::output(xiloader::color::error, "Unsupported polcore version.");
-        return 1;
+        return ExitCode::PlayOnlineUnsupported;
     }
 
     if (const auto started = xiloader::polrelay::start(config.serverAddress, config.profilePort, session); !started)
     {
         xiloader::console::output(xiloader::color::error, "{}", started.error());
-        return 1;
+        return ExitCode::ProfileServerFailed;
     }
 
     // Without the viewer, polcore keeps its built-in Japanese message texts
@@ -186,7 +186,7 @@ auto runGame(const Config& config, const Session& session, LobbyDataConnection& 
 
     if (!xiloader::playonline::logIn(lpCommandTable, session.accountId, config.language))
     {
-        return 1;
+        return ExitCode::ProfileServerFailed;
     }
 
     xiloader::playonline::keepGameOnDisconnect(lpCommandTable);
@@ -196,7 +196,7 @@ auto runGame(const Config& config, const Session& session, LobbyDataConnection& 
     if (CoCreateInstance(xiloader::CLSID_FFXiEntry, nullptr, 0x17, xiloader::IID_IFFXiEntry, reinterpret_cast<LPVOID*>(ffxi.GetAddressOf())) != S_OK)
     {
         xiloader::console::output(xiloader::color::error, "Failed to initialize instance of FFxi!");
-        return ERROR_SUCCESS;
+        return ExitCode::GameFailed;
     }
 
     // Attempt to start Final Fantasy..
@@ -213,7 +213,7 @@ auto runGame(const Config& config, const Session& session, LobbyDataConnection& 
         xiloader::console::show();
     }
 
-    return ERROR_SUCCESS;
+    return ExitCode::Success;
 }
 
 } // namespace xiloader

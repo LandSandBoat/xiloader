@@ -367,7 +367,7 @@ auto attempt(AuthConnection& connection, Session& session, Config& config, bool&
         const auto selected = selectAction(menu);
         if (selected == MenuSelection::Exit)
         {
-            return LoginOutcome::Abort;
+            return LoginOutcome::Quit;
         }
 
         request = promptRequest(selected, config, menu, trustTokens);
@@ -383,7 +383,7 @@ auto attempt(AuthConnection& connection, Session& session, Config& config, bool&
     if (!reply)
     {
         xiloader::console::output(xiloader::color::error, "{}", reply.error());
-        return LoginOutcome::Abort;
+        return LoginOutcome::ConnectionLost;
     }
 
     return handleReply(*reply, session, config, trustTokens, menu);
@@ -394,7 +394,7 @@ auto attempt(AuthConnection& connection, Session& session, Config& config, bool&
 namespace xiloader::login
 {
 
-auto run(AuthConnection& connection, Config& config) -> std::optional<Session>
+auto run(AuthConnection& connection, Config& config) -> std::expected<Session, LoginOutcome>
 {
     const TrustTokenManager trustTokens(config.serverAddress);
     const auto              menu = xiloader::ui::makeMenu(config.plainMenus);
@@ -411,7 +411,7 @@ auto run(AuthConnection& connection, Config& config) -> std::optional<Session>
 
     if (outcome != LoginOutcome::LoggedIn)
     {
-        return std::nullopt;
+        return std::unexpected(outcome);
     }
 
     return session;

@@ -21,6 +21,8 @@
 
 #pragma once
 
+#include "enums/exit_code.h"
+
 namespace xiloader
 {
 
@@ -29,7 +31,6 @@ struct Config;
 struct Session;
 
 // Sets up polcore in this process the way the PlayOnline viewer would, then runs FFXI until it exits.
-// Returns the loader's exit code.
-auto runGame(const Config& config, const Session& session, LobbyDataConnection& lobbyData) -> int;
+auto runGame(const Config& config, const Session& session, LobbyDataConnection& lobbyData) -> ExitCode;
 
 } // namespace xiloader
