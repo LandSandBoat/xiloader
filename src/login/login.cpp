@@ -382,6 +382,7 @@ auto attempt(AuthConnection& connection, Session& session, Config& config, bool&
     const auto reply = connection.exchange(toJson(*request, config, trustTokens).dump());
     if (!reply)
     {
+        xiloader::console::output(xiloader::color::error, "{}", reply.error());
         return LoginOutcome::Abort;
     }
 

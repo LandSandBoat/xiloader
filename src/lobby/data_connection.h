@@ -26,6 +26,7 @@
 #include "login/session.h"
 
 #include <cstdint>
+#include <expected>
 #include <mutex>
 #include <stop_token>
 #include <string>
@@ -46,8 +47,8 @@ public:
     LobbyDataConnection(const LobbyDataConnection&)            = delete;
     LobbyDataConnection& operator=(const LobbyDataConnection&) = delete;
 
-    // Returns false when the server can't be reached
-    auto connect(const std::string& server, uint16_t port) -> bool;
+    // The error says why the server can't be reached
+    auto connect(const std::string& server, uint16_t port) -> std::expected<void, std::string>;
 
     // Sends the session hash and starts answering the server
     void start(const Session& session);

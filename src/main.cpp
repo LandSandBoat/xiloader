@@ -101,8 +101,9 @@ auto run(xiloader::Config& config) -> int
     xiloader::console::output(xiloader::color::info, "Resolved server address to '{}:{}'", config.serverAddress, config.loginAuthPort);
 
     // Attempt to verify the users account info..
-    if (!auth.connect(config.serverAddress, config.loginAuthPort))
+    if (const auto connected = auth.connect(config.serverAddress, config.loginAuthPort); !connected)
     {
+        xiloader::console::output(xiloader::color::error, "{}", connected.error());
         return ERROR_SUCCESS;
     }
 
@@ -116,9 +117,10 @@ auto run(xiloader::Config& config) -> int
 
     // Attempt to create connection to the login server..
     xiloader::LobbyDataConnection lobbyData;
-    if (!lobbyData.connect(config.serverAddress, config.loginDataPort))
+    if (const auto connected = lobbyData.connect(config.serverAddress, config.loginDataPort); !connected)
     {
         const int err = WSAGetLastError();
+        xiloader::console::output(xiloader::color::error, "{}", connected.error());
         xiloader::console::output(xiloader::color::error, "Failed to initialize connection to server on port {}, winsock error: {}", config.loginDataPort, err);
         return ERROR_SUCCESS;
     }
@@ -143,15 +145,10 @@ auto run(xiloader::Config& config) -> int
 // Returns 1 on error, 0 on success.
 auto __cdecl main(const int argc, char* argv[]) -> int
 {
-    xiloader::Config config;
-
-    try
+    auto config = xiloader::Config::load(argc, argv);
+    if (!config)
     {
-        config = xiloader::Config::load(argc, argv);
-    }
-    catch (const std::exception& err)
-    {
-        std::println(std::cerr, "{}", err.what());
+        std::println(std::cerr, "{}", config.error());
         return 1;
     }
 
@@ -168,7 +165,7 @@ auto __cdecl main(const int argc, char* argv[]) -> int
     xiloader::console::output(xiloader::color::lightpurple, "Bug Reports: https://github.com/LandSandBoat/xiloader/issues");
     xiloader::console::output(xiloader::color::lightred, "==========================================================");
 
-    const int result = run(config);
+    const int result = run(*config);
 
     xiloader::console::output(xiloader::color::error, "Closing...");
     Sleep(kCloseDelayMs);

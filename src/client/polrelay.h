@@ -25,6 +25,7 @@
 #include <mbedtls/ssl.h>
 
 #include <cstdint>
+#include <expected>
 #include <string>
 #include <vector>
 
@@ -83,8 +84,8 @@ struct Connection
 
 // Starts the relay thread, listening on free local ports for the IRC port and the profile port polcore dials.
 // Every connection to the server opens with the account id and session hash, which is how the server knows who it is.
-// Returns true once both listeners are up.
-auto start(const std::string& server, uint16_t profilePort, const Session& session) -> bool;
+// Succeeds once both listeners are up; the error says what kept the relay from starting.
+auto start(const std::string& server, uint16_t profilePort, const Session& session) -> std::expected<void, std::string>;
 
 // Closes every relay connection and joins the relay thread; call before removing the socket hooks
 void stop();

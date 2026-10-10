@@ -29,6 +29,7 @@
 
 #include <algorithm>
 #include <cstring>
+#include <format>
 #include <memory>
 #include <optional>
 #include <system_error>
@@ -553,7 +554,7 @@ Connection::~Connection()
     closesocket(local);
 }
 
-auto start(const std::string& server, const uint16_t profilePort, const Session& session) -> bool
+auto start(const std::string& server, const uint16_t profilePort, const Session& session) -> std::expected<void, std::string>
 {
     hello.resize(sizeof(session.accountId) + sizeof(session.hash));
     std::memcpy(hello.data(), &session.accountId, sizeof(session.accountId));
@@ -561,16 +562,14 @@ auto start(const std::string& server, const uint16_t profilePort, const Session&
 
     if (inet_pton(AF_INET, server.c_str(), &serverAddress) != 1)
     {
-        xiloader::console::output(xiloader::color::error, "The profile server relay needs a resolved server address ({}).", server);
-        return false;
+        return std::unexpected(std::format("The profile server relay needs a resolved server address ({}).", server));
     }
 
-    const auto abort = [](const std::string& reason)
+    const auto abort = [](const std::string& reason) -> std::expected<void, std::string>
     {
-        xiloader::console::output(xiloader::color::error, "Failed to start the profile server relay ({}).", reason);
         closeListeners();
         freeTls();
-        return false;
+        return std::unexpected(std::format("Failed to start the profile server relay ({}).", reason));
     };
 
     if (const auto ret = setUpTls(); ret != 0)
@@ -592,7 +591,7 @@ auto start(const std::string& server, const uint16_t profilePort, const Session&
         return abort(error.what());
     }
 
-    return true;
+    return {};
 }
 
 void stop()

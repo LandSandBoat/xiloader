@@ -27,7 +27,7 @@
 #include <mbedtls/ssl.h>
 
 #include <cstdint>
-#include <optional>
+#include <expected>
 #include <string>
 
 namespace xiloader
@@ -43,11 +43,11 @@ public:
     AuthConnection(const AuthConnection&)            = delete;
     AuthConnection& operator=(const AuthConnection&) = delete;
 
-    // Connects and completes the handshake. Returns false on failure.
-    auto connect(const std::string& server, uint16_t port) -> bool;
+    // Connects and completes the handshake. The error says which step failed.
+    auto connect(const std::string& server, uint16_t port) -> std::expected<void, std::string>;
 
-    // Sends one request and waits for the reply. Returns nothing when the connection failed.
-    auto exchange(const std::string& request) -> std::optional<std::string>;
+    // Sends one request and waits for the reply. The error says why the connection failed.
+    auto exchange(const std::string& request) -> std::expected<std::string, std::string>;
 
 private:
     TlsClientConfig     config;

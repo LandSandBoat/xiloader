@@ -31,7 +31,6 @@
 #include <fstream>
 #include <iostream>
 #include <sstream>
-#include <stdexcept>
 #include <thread>
 
 #include <ws2tcpip.h>
@@ -91,24 +90,20 @@ void checkPlainMenu()
     assert(output.str().contains("noted"));
 }
 
-auto loadConfig(std::vector<const char*> argv) -> xiloader::Config
+auto tryLoadConfig(std::vector<const char*> argv) -> std::expected<xiloader::Config, std::string>
 {
     argv.insert(argv.begin(), "xiloader");
     return xiloader::Config::load(static_cast<int>(argv.size()), argv.data());
 }
 
+auto loadConfig(std::vector<const char*> argv) -> xiloader::Config
+{
+    return tryLoadConfig(std::move(argv)).value();
+}
+
 auto rejects(std::vector<const char*> argv) -> bool
 {
-    try
-    {
-        loadConfig(std::move(argv));
-    }
-    catch (const std::runtime_error&)
-    {
-        return true;
-    }
-
-    return false;
+    return !tryLoadConfig(std::move(argv)).has_value();
 }
 
 auto writeJson(const char* name, const char* text) -> std::string
@@ -208,7 +203,7 @@ void checkLobbyData()
     {
         DataServer                    server;
         xiloader::LobbyDataConnection connection;
-        assert(connection.connect("127.0.0.1", server.port));
+        assert(connection.connect("127.0.0.1", server.port).has_value());
         server.client = accept(server.listener, nullptr, nullptr);
         assert(server.client != INVALID_SOCKET);
 

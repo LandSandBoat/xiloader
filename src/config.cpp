@@ -27,7 +27,6 @@
 #include <cstring>
 #include <format>
 #include <fstream>
-#include <stdexcept>
 
 namespace
 {
@@ -36,7 +35,7 @@ using json = nlohmann::json;
 using xiloader::Config;
 using xiloader::Language;
 
-auto parseLanguage(const std::string& language) -> Language
+auto parseLanguage(const std::string& language) -> std::expected<Language, std::string>
 {
     if (!_strnicmp(language.c_str(), "JP", 2) || !_strnicmp(language.c_str(), "0", 1))
     {
@@ -53,17 +52,17 @@ auto parseLanguage(const std::string& language) -> Language
         return Language::European;
     }
 
-    throw std::runtime_error(std::format("Unknown language '{}'. Use JP, US or EU (0, 1 or 2).", language));
+    return std::unexpected(std::format("Unknown language '{}'. Use JP, US or EU (0, 1 or 2).", language));
 }
 
 // Leaves out untouched when the key is absent; a value of the wrong type is an error
 template <typename T>
-void read(const json& data, const char* key, T& out)
+auto read(const json& data, const char* const key, T& out) -> std::expected<void, std::string>
 {
     const auto value = data.find(key);
     if (value == data.end())
     {
-        return;
+        return {};
     }
 
     try
@@ -72,52 +71,66 @@ void read(const json& data, const char* key, T& out)
     }
     catch (const json::exception&)
     {
-        throw std::runtime_error(std::format("--json: \"{}\" has the wrong type.", key));
+        return std::unexpected(std::format("--json: \"{}\" has the wrong type.", key));
     }
+
+    return {};
 }
 
-void readPort(const json& data, const char* key, uint16_t& out)
+auto readPort(const json& data, const char* const key, uint16_t& out) -> std::expected<void, std::string>
 {
     const auto value = data.find(key);
     if (value == data.end())
     {
-        return;
+        return {};
     }
 
     if (!value->is_number_unsigned() || value->get<uint64_t>() > UINT16_MAX)
     {
-        throw std::runtime_error(std::format("--json: \"{}\" must be a port number.", key));
+        return std::unexpected(std::format("--json: \"{}\" must be a port number.", key));
     }
 
     out = value->get<uint16_t>();
+
+    return {};
 }
 
-void applyJsonFile(Config& config, const std::string& filename)
+auto applyJsonFile(Config& config, const std::string& filename) -> std::expected<void, std::string>
 {
     std::ifstream file(filename);
     if (!file)
     {
-        throw std::runtime_error("--json was specified but the file at the input arg does not exist.");
+        return std::unexpected("--json was specified but the file at the input arg does not exist.");
     }
 
     const auto data = json::parse(file, nullptr, false);
     if (!data.is_object())
     {
-        throw std::runtime_error("--json was specified but the file at the input arg is not valid json");
+        return std::unexpected("--json was specified but the file at the input arg is not valid json");
     }
 
-    read(data, "server", config.serverAddress);
-    read(data, "username", config.username);
-    read(data, "password", config.password);
-    read(data, "hairpin", config.hairpin);
-    read(data, "hide", config.hide);
-    read(data, "plain", config.plainMenus);
-    read(data, "trust_this_computer", config.trustThisComputer);
+    // The first error is the one reported
+    std::expected<void, std::string> status;
+    const auto                       check = [&](std::expected<void, std::string> result)
+    {
+        if (status && !result)
+        {
+            status = std::move(result);
+        }
+    };
 
-    readPort(data, "dataport", config.loginDataPort);
-    readPort(data, "viewport", config.loginViewPort);
-    readPort(data, "authport", config.loginAuthPort);
-    readPort(data, "profileport", config.profilePort);
+    check(read(data, "server", config.serverAddress));
+    check(read(data, "username", config.username));
+    check(read(data, "password", config.password));
+    check(read(data, "hairpin", config.hairpin));
+    check(read(data, "hide", config.hide));
+    check(read(data, "plain", config.plainMenus));
+    check(read(data, "trust_this_computer", config.trustThisComputer));
+
+    check(readPort(data, "dataport", config.loginDataPort));
+    check(readPort(data, "viewport", config.loginViewPort));
+    check(readPort(data, "authport", config.loginAuthPort));
+    check(readPort(data, "profileport", config.profilePort));
 
     // try string and int
     if (const auto otp = data.find("otp"); otp != data.end() && otp->is_number_unsigned())
@@ -126,15 +139,28 @@ void applyJsonFile(Config& config, const std::string& filename)
     }
     else
     {
-        read(data, "otp", config.otpCode);
+        check(read(data, "otp", config.otpCode));
     }
 
     std::string language;
-    read(data, "language", language);
+    check(read(data, "language", language));
+    if (!status)
+    {
+        return status;
+    }
+
     if (!language.empty())
     {
-        config.language = parseLanguage(language);
+        const auto parsed = parseLanguage(language);
+        if (!parsed)
+        {
+            return std::unexpected(parsed.error());
+        }
+
+        config.language = *parsed;
     }
+
+    return {};
 }
 
 } // namespace
@@ -142,7 +168,7 @@ void applyJsonFile(Config& config, const std::string& filename)
 namespace xiloader
 {
 
-auto Config::load(const int argc, const char* const argv[]) -> Config
+auto Config::load(const int argc, const char* const argv[]) -> std::expected<Config, std::string>
 {
     argparse::ArgumentParser args("xiloader", std::format("{}.{}.{}", versionNumber[0], versionNumber[1], versionNumber[2]));
 
@@ -223,14 +249,17 @@ auto Config::load(const int argc, const char* const argv[]) -> Config
     }
     catch (const std::exception& err)
     {
-        throw std::runtime_error(std::format("{}\n{}", err.what(), args.help().str()));
+        return std::unexpected(std::format("{}\n{}", err.what(), args.help().str()));
     }
 
     Config config;
 
     if (const auto filename = args.present<std::string>("--json"))
     {
-        applyJsonFile(config, *filename);
+        if (const auto applied = applyJsonFile(config, *filename); !applied)
+        {
+            return std::unexpected(applied.error());
+        }
     }
 
     const auto apply = [&]<typename T>(const char* name, T& out)
@@ -256,7 +285,13 @@ auto Config::load(const int argc, const char* const argv[]) -> Config
 
     if (const auto language = args.present<std::string>("--lang"))
     {
-        config.language = parseLanguage(*language);
+        const auto parsed = parseLanguage(*language);
+        if (!parsed)
+        {
+            return std::unexpected(parsed.error());
+        }
+
+        config.language = *parsed;
     }
 
     return config;

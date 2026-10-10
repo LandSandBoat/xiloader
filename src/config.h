@@ -23,6 +23,7 @@
 
 #include <array>
 #include <cstdint>
+#include <expected>
 #include <string>
 
 #include "enums/pol_language.h"
@@ -50,8 +51,8 @@ struct Config
     bool        plainMenus        = false; // Line-based menus instead of FTXUI; always on under Wine
     bool        hide              = false; // Determines whether or not to hide the console window after FFXI starts.
 
-    // Defaults, then the --json file, then the command line. Throws std::runtime_error on bad input.
-    static auto load(int argc, const char* const argv[]) -> Config;
+    // Defaults, then the --json file, then the command line. The error says what is wrong with the input.
+    static auto load(int argc, const char* const argv[]) -> std::expected<Config, std::string>;
 };
 
 } // namespace xiloader

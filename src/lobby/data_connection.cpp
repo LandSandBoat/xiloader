@@ -100,7 +100,7 @@ LobbyDataConnection::~LobbyDataConnection()
     }
 }
 
-auto LobbyDataConnection::connect(const std::string& server, const uint16_t port) -> bool
+auto LobbyDataConnection::connect(const std::string& server, const uint16_t port) -> std::expected<void, std::string>
 {
     struct addrinfo hints;
     memset(&hints, 0x00, sizeof(hints));
@@ -113,8 +113,7 @@ auto LobbyDataConnection::connect(const std::string& server, const uint16_t port
     struct addrinfo* addr = NULL;
     if (getaddrinfo(server.c_str(), std::to_string(port).c_str(), &hints, &addr))
     {
-        xiloader::console::output(xiloader::color::error, "Failed to obtain remote server information.");
-        return false;
+        return std::unexpected("Failed to obtain remote server information.");
     }
 
     // Determine which address is valid to connect..
@@ -139,15 +138,14 @@ auto LobbyDataConnection::connect(const std::string& server, const uint16_t port
 
     if (socket == INVALID_SOCKET)
     {
-        xiloader::console::output(xiloader::color::error, "Failed to connect to server!");
-        return false;
+        return std::unexpected("Failed to connect to server!");
     }
 
     xiloader::console::output(xiloader::color::info, "Connected to server!");
 
     serverAddress = inet_addr(server.c_str());
 
-    return true;
+    return {};
 }
 
 void LobbyDataConnection::start(const Session& session)

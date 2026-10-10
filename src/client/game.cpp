@@ -155,8 +155,9 @@ auto runGame(const Config& config, const Session& session, LobbyDataConnection& 
         return 1;
     }
 
-    if (!xiloader::polrelay::start(config.serverAddress, config.profilePort, session))
+    if (const auto started = xiloader::polrelay::start(config.serverAddress, config.profilePort, session); !started)
     {
+        xiloader::console::output(xiloader::color::error, "{}", started.error());
         return 1;
     }
 

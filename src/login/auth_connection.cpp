@@ -23,6 +23,8 @@
 
 #include "console.h"
 
+#include <format>
+
 namespace
 {
 
@@ -46,21 +48,19 @@ AuthConnection::~AuthConnection()
     mbedtls_ssl_free(&ssl);
 }
 
-auto AuthConnection::connect(const std::string& address, const uint16_t port) -> bool
+auto AuthConnection::connect(const std::string& address, const uint16_t port) -> std::expected<void, std::string>
 {
     int ret = 0;
 
     if ((ret = config.setUp()) != 0)
     {
-        xiloader::console::output(xiloader::color::error, "Failed to set up TLS ({}).", mbedtlsErrorText(ret));
-        return false;
+        return std::unexpected(std::format("Failed to set up TLS ({}).", mbedtlsErrorText(ret)));
     }
 
     ret = mbedtls_net_connect(&server, address.c_str(), std::to_string(port).c_str(), MBEDTLS_NET_PROTO_TCP);
     if (ret != 0)
     {
-        xiloader::console::output(xiloader::color::error, "mbedtls_net_connect failed, ({})", mbedtlsErrorText(ret));
-        return false;
+        return std::unexpected(std::format("mbedtls_net_connect failed, ({})", mbedtlsErrorText(ret)));
     }
 
     // MBEDTLS_SSL_VERIFY_OPTIONAL provides warnings, but doesn't stop connections.
@@ -69,8 +69,7 @@ auto AuthConnection::connect(const std::string& address, const uint16_t port) ->
 
     if ((ret = mbedtls_ssl_setup(&ssl, config.get())) != 0)
     {
-        xiloader::console::output(xiloader::color::error, "mbedtls_ssl_setup failed, ({})", mbedtlsErrorText(ret));
-        return false;
+        return std::unexpected(std::format("mbedtls_ssl_setup failed, ({})", mbedtlsErrorText(ret)));
     }
 
     mbedtls_ssl_set_bio(&ssl, &server, mbedtls_net_send, mbedtls_net_recv, NULL);
@@ -79,8 +78,7 @@ auto AuthConnection::connect(const std::string& address, const uint16_t port) ->
     {
         if (ret != MBEDTLS_ERR_SSL_WANT_READ && ret != MBEDTLS_ERR_SSL_WANT_WRITE)
         {
-            xiloader::console::output(xiloader::color::error, "mbedtls_ssl_handshake returned -0x{:x}", (unsigned int)-ret);
-            return false;
+            return std::unexpected(std::format("mbedtls_ssl_handshake returned -0x{:x}", (unsigned int)-ret));
         }
     }
 
@@ -110,15 +108,14 @@ auto AuthConnection::connect(const std::string& address, const uint16_t port) ->
 
     mbedtls_ssl_conf_read_timeout(config.get(), kReadTimeoutMs);
 
-    return true;
+    return {};
 }
 
-auto AuthConnection::exchange(const std::string& request) -> std::optional<std::string>
+auto AuthConnection::exchange(const std::string& request) -> std::expected<std::string, std::string>
 {
     if (const auto written = mbedtls_ssl_write(&ssl, reinterpret_cast<const unsigned char*>(request.data()), request.size()); written < 0)
     {
-        xiloader::console::output(xiloader::color::error, "Failed to send the login request ({}). The login server may have closed the connection.", xiloader::mbedtlsErrorText(written));
-        return std::nullopt;
+        return std::unexpected(std::format("Failed to send the login request ({}). The login server may have closed the connection.", xiloader::mbedtlsErrorText(written)));
     }
 
     unsigned char recvBuffer[kRecvBufferSize] = { 0 };
@@ -126,14 +123,12 @@ auto AuthConnection::exchange(const std::string& request) -> std::optional<std::
     const auto received = mbedtls_ssl_read(&ssl, recvBuffer, sizeof(recvBuffer));
     if (received == MBEDTLS_ERR_SSL_TIMEOUT)
     {
-        xiloader::console::output(xiloader::color::error, "Remote failed to reply within the timeout, exiting...");
-        return std::nullopt;
+        return std::unexpected(std::format("Remote failed to reply within the timeout, exiting..."));
     }
 
     if (received <= 0)
     {
-        xiloader::console::output(xiloader::color::error, "Failed to read the login reply ({}). The login server may have closed the connection.", xiloader::mbedtlsErrorText(received));
-        return std::nullopt;
+        return std::unexpected(std::format("Failed to read the login reply ({}). The login server may have closed the connection.", xiloader::mbedtlsErrorText(received)));
     }
 
     return std::string(reinterpret_cast<const char*>(recvBuffer), received);
