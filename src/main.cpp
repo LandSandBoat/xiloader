@@ -44,11 +44,6 @@ This file is part of DarkStar-server source code.
 
 #include "enums/lobby_command.h"
 
-#include "argparse/argparse.hpp"
-#include <nlohmann/json.hpp>
-
-using json = nlohmann::json;
-
 namespace xiloader
 {
 
@@ -318,219 +313,18 @@ inline LPVOID FindCharacters(void** commFuncs)
  */
 int __cdecl main(int argc, char* argv[])
 {
-    argparse::ArgumentParser args("xiloader", "0.0");
-
-    // NOTE: .append() is used to allow multiple arguments to be passed to the same option.
-    //     : Otherwise it will throw on repeated arguments (normally accidental).
-
-    args.add_argument("--server")
-        .help("The server address to connect to.")
-        .append();
-
-    args.add_argument("--user", "--username")
-        .help("The username being logged in with.")
-        .append();
-
-    args.add_argument("--pass", "--password")
-        .help("The password being logged in with.")
-        .append();
-
-    args.add_argument("--otp", "--otp-code")
-        .help("The otp code being logged in with.")
-        .append();
-
-    args.add_argument("--email", "--email")
-        .help("Ignored; accepted so existing shortcuts keep working.")
-        .append();
-
-    args.add_argument("--dataport")
-        .scan<'i', uint16_t>()
-        .help("(optional) The login server data port to connect to.")
-        .append();
-
-    args.add_argument("--viewport")
-        .scan<'i', uint16_t>()
-        .help("(optional) The login view port to connect to.")
-        .append();
-
-    args.add_argument("--authport")
-        .scan<'i', uint16_t>()
-        .help("(optional) The login auth port to connect to.")
-        .append();
-
-    args.add_argument("--profileport")
-        .scan<'i', uint16_t>()
-        .help("(optional) The PlayOnline profile server port to connect to.")
-        .append();
-
-    args.add_argument("--lang")
-        .help("(optional) The language of your FFXI install: JP/US/EU (0/1/2).")
-        .append();
-
-    args.add_argument("--hairpin")
-        .implicit_value(true)
-        .help("(optional) Use this if connecting to a local server which you have exposed publicly. This should not have to be used if you are connecting to a remote server.")
-        .append();
-
-    args.add_argument("--hide")
-        .implicit_value(true)
-        .help("(optional) Determines whether or not to hide the console window after FFXI starts.")
-        .append();
-
-    args.add_argument("--plain")
-        .implicit_value(true)
-        .help("(optional) Use plain text menus. Always on under Wine.")
-        .append();
-
-    args.add_argument("--trust")
-        .implicit_value(true)
-        .help("(optional) Trust this computer for 30 days, skipping 2FA on subsequent logins.")
-        .append();
-
-    args.add_argument("--json", "--json-file")
-        .help("(optional) The json file to load arguments in from")
-        .append();
-
     try
     {
-        args.parse_args(argc, argv);
+        xiloader::config = xiloader::Config::load(argc, argv);
     }
-    catch (const std::runtime_error& err)
+    catch (const std::exception& err)
     {
         std::cerr << err.what() << std::endl;
-        std::cerr << args;
-        std::exit(1);
+        return 1;
     }
 
-    xiloader::config.serverAddress = args.is_used("--server") ? args.get<std::string>("--server") : xiloader::config.serverAddress;
-
-    xiloader::config.loginDataPort = args.is_used("--dataport") ? args.get<uint16_t>("--dataport") : xiloader::config.loginDataPort;
-    xiloader::config.loginViewPort = args.is_used("--viewport") ? args.get<uint16_t>("--viewport") : xiloader::config.loginViewPort;
-    xiloader::config.loginAuthPort = args.is_used("--authport") ? args.get<uint16_t>("--authport") : xiloader::config.loginAuthPort;
-    xiloader::config.profilePort   = args.is_used("--profileport") ? args.get<uint16_t>("--profileport") : xiloader::config.profilePort;
-
-    xiloader::config.username = args.is_used("--user") ? args.get<std::string>("--user") : xiloader::config.username;
-    xiloader::config.password = args.is_used("--pass") ? args.get<std::string>("--pass") : xiloader::config.password;
-    xiloader::config.otpCode  = args.is_used("--otp") ? args.get<std::string>("--otp") : xiloader::config.otpCode;
-
-    std::string jsonFilename = args.is_used("--json") ? args.get<std::string>("--json") : std::string{};
-
-    if (args.is_used("--user") && args.is_used("--pass"))
-    {
-        xiloader::state.firstLogin = true;
-    }
-
-    auto setLanguage = [&](std::string language)
-    {
-        if (!language.empty())
-        {
-            if (!_strnicmp(language.c_str(), "JP", 2) || !_strnicmp(language.c_str(), "0", 1))
-            {
-                xiloader::config.language = xiloader::Language::Japanese;
-            }
-            else if (!_strnicmp(language.c_str(), "US", 2) || !_strnicmp(language.c_str(), "1", 1))
-            {
-                xiloader::config.language = xiloader::Language::English;
-            }
-            else if (!_strnicmp(language.c_str(), "EU", 2) || !_strnicmp(language.c_str(), "2", 1))
-            {
-                xiloader::config.language = xiloader::Language::European;
-            }
-            else
-            {
-                xiloader::console::output(xiloader::color::warning, "Unknown language '%s'. Use JP, US or EU (0, 1 or 2). Keeping the current language.", language.c_str());
-            }
-        }
-    };
-
-    if (args.is_used("--lang"))
-    {
-        std::string language = args.get<std::string>("--lang");
-
-        setLanguage(language);
-    }
-
-    xiloader::config.hairpin = args.is_used("--hairpin") ? args.get<bool>("--hairpin") : xiloader::config.hairpin;
-
-    xiloader::config.hide = args.is_used("--hide") ? args.get<bool>("--hide") : xiloader::config.hide;
-
-    xiloader::config.plainMenus = args.is_used("--plain") ? args.get<bool>("--plain") : xiloader::config.plainMenus;
-
-    xiloader::config.trustThisComputer = args.is_used("--trust") ? args.get<bool>("--trust") : xiloader::config.trustThisComputer;
-
-    bool readInJsonArgs = false;
-    if (!jsonFilename.empty())
-    {
-        std::string extension = ".json";
-
-        bool endsInJsonExtension = std::equal(extension.rbegin(), extension.rend(), jsonFilename.rbegin());
-
-        if (endsInJsonExtension && std::filesystem::exists(jsonFilename))
-        {
-            std::ifstream jsonFile(jsonFilename);
-            json          jsonData = json::parse(jsonFile, nullptr, false);
-
-            jsonFile.close();
-
-            if (jsonData.is_discarded()) // not valid json
-            {
-                xiloader::console::output(xiloader::color::error, "--json was specified but the file at the input arg is not valid json");
-                return 1;
-            }
-            else
-            {
-                readInJsonArgs = true;
-
-                auto maybeUsername = jsonGet<std::string>(jsonData, "username");
-                auto maybePassword = jsonGet<std::string>(jsonData, "password");
-
-                xiloader::config.username = maybeUsername.value_or(xiloader::config.username);
-                xiloader::config.password = maybePassword.value_or(xiloader::config.password);
-
-                // Set autologin if it isn't set already
-                if (maybeUsername.has_value() && maybePassword.has_value())
-                {
-                    xiloader::state.firstLogin = true;
-                }
-
-                xiloader::config.serverAddress = jsonGet<std::string>(jsonData, "server").value_or(xiloader::config.serverAddress);
-
-                xiloader::config.loginDataPort = jsonGet<uint16_t>(jsonData, "dataport").value_or(xiloader::config.loginDataPort);
-                xiloader::config.loginViewPort = jsonGet<uint16_t>(jsonData, "viewport").value_or(xiloader::config.loginViewPort);
-                xiloader::config.loginAuthPort = jsonGet<uint16_t>(jsonData, "authport").value_or(xiloader::config.loginAuthPort);
-                xiloader::config.profilePort   = jsonGet<uint16_t>(jsonData, "profileport").value_or(xiloader::config.profilePort);
-
-                // try string and int
-                auto maybeOtpString = jsonGet<std::string>(jsonData, "otp");
-                auto maybeOtpInt    = jsonGet<uint32_t>(jsonData, "otp");
-
-                if (maybeOtpString.has_value())
-                {
-                    xiloader::config.otpCode = maybeOtpString.value();
-                }
-                else if (maybeOtpInt.has_value())
-                {
-                    xiloader::config.otpCode = std::to_string(maybeOtpInt.value());
-                }
-
-                xiloader::config.otpCode = jsonGet<std::string>(jsonData, "otp").value_or(xiloader::config.otpCode);
-
-                xiloader::config.hairpin           = jsonGet<bool>(jsonData, "hairpin").value_or(xiloader::config.hairpin);
-                xiloader::config.hide              = jsonGet<bool>(jsonData, "hide").value_or(xiloader::config.hide);
-                xiloader::config.plainMenus        = jsonGet<bool>(jsonData, "plain").value_or(xiloader::config.plainMenus);
-                xiloader::config.trustThisComputer = jsonGet<bool>(jsonData, "trust_this_computer").value_or(xiloader::config.trustThisComputer);
-
-                std::string language = jsonGet<std::string>(jsonData, "language").value_or({});
-
-                setLanguage(language);
-            }
-        }
-        else
-        {
-            xiloader::console::output(xiloader::color::error, "--json was specified but the file at the input arg does not exist.");
-            return 1;
-        }
-    }
+    // Autologin when both were supplied
+    xiloader::state.firstLogin = !xiloader::config.username.empty() && !xiloader::config.password.empty();
 
     std::array<uint8_t, 3> version = xiloader::Config::versionNumber;
 
@@ -544,11 +338,6 @@ int __cdecl main(int argc, char* argv[])
     xiloader::console::output(xiloader::color::lightpurple, "Git Repo   : https://github.com/LandSandBoat/xiloader");
     xiloader::console::output(xiloader::color::lightpurple, "Bug Reports: https://github.com/LandSandBoat/xiloader/issues");
     xiloader::console::output(xiloader::color::lightred, "==========================================================");
-
-    if (readInJsonArgs)
-    {
-        xiloader::console::output(xiloader::color::info, "Read in arguments from json file.");
-    }
 
     /* Initialize Winsock */
     WSADATA wsaData = { 0 };

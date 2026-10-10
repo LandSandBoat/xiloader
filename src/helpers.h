@@ -78,14 +78,25 @@ inline std::optional<T> jsonGet(const json& jsonInput, std::string key)
     }
     else if constexpr (std::is_signed<T>::value)
     {
-        if (!jsonInput[key].is_number_unsigned())
+        if (!jsonInput[key].is_number_integer())
+        {
+            return std::nullopt;
+        }
+
+        const bool negative = !jsonInput[key].is_number_unsigned();
+        if (negative && jsonInput[key].get<int64_t>() < static_cast<int64_t>(std::numeric_limits<T>::min()))
+        {
+            return std::nullopt;
+        }
+
+        if (!negative && jsonInput[key].get<uint64_t>() > static_cast<uint64_t>(std::numeric_limits<T>::max()))
         {
             return std::nullopt;
         }
     }
     else if constexpr (std::is_unsigned<T>::value)
     {
-        if (!jsonInput[key].is_number_unsigned())
+        if (!jsonInput[key].is_number_unsigned() || jsonInput[key].get<uint64_t>() > std::numeric_limits<T>::max())
         {
             return std::nullopt;
         }

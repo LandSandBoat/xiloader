@@ -44,6 +44,8 @@ add_executable(xiloader
     src/app.h
     src/client/sdk/ffxi.h
     src/client/sdk/polcore.h
+    src/config.cpp
+    src/config.h
     src/console.cpp
     src/console.h
     src/defines.h
@@ -113,12 +115,14 @@ target_link_libraries(xiloader PUBLIC
 
 # Assert-based checks for the parts that run without the game
 add_executable(xiloader_check
+    src/config.cpp
     src/ui/plain_menu.cpp
     tests/check.cpp
 )
 
 target_include_directories(xiloader_check PRIVATE ${PROJECT_SOURCE_DIR}/src)
 target_compile_definitions(xiloader_check PRIVATE NOMINMAX WIN32_LEAN_AND_MEAN)
+target_link_libraries(xiloader_check PRIVATE argparse nlohmann_json::nlohmann_json)
 
 message(STATUS "CMAKE_VERSION: ${CMAKE_VERSION}")
 message(STATUS "CMAKE_BUILD_TYPE: ${CMAKE_BUILD_TYPE}")
