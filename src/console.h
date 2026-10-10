@@ -53,6 +53,9 @@ public:
     // Each run gets its own file, so several clients can run at once; only the newest few are kept.
     static void startLog(const std::filesystem::path& folder);
 
+    // Prints like output but keeps the message out of the log file, for things only the user should see
+    static void outputUnlogged(xiloader::color c, const std::string& message);
+
     // Empty until startLog succeeds
     static auto logFile() -> const std::filesystem::path&;
 

@@ -22,8 +22,6 @@ This file is part of DarkStar-server source code.
 ===========================================================================
 */
 
-#define NOMINMAX 1 // Interferes with std::numeric_limits
-
 #include <winsock2.h>
 
 #include <windows.h>
@@ -31,12 +29,8 @@ This file is part of DarkStar-server source code.
 #include "config.h"
 
 #include <algorithm>
-#include <chrono>
 #include <conio.h>
 #include <ctime>
-#include <filesystem>
-#include <fstream>
-#include <print>
 #include <utility>
 
 #include "app_data.h"
@@ -168,16 +162,22 @@ auto run(xiloader::Config& config) -> ExitCode
 // Returns an ExitCode.
 auto __cdecl main(const int argc, char* argv[]) -> int
 {
-    auto config = xiloader::Config::load(argc, argv);
-    if (!config)
-    {
-        std::println(std::cerr, "{}", config.error());
-        return std::to_underlying(ExitCode::BadArguments);
-    }
-
     if (const auto folder = xiloader::appDataFolder("logs"))
     {
         xiloader::console::startLog(*folder);
+    }
+
+    auto config = xiloader::Config::load(argc, argv);
+    if (!config)
+    {
+        xiloader::console::output(xiloader::color::error, "{}", config.error());
+        if (xiloader::console::ownsWindow())
+        {
+            xiloader::console::output(xiloader::color::error, "Press any key to close this window.");
+            _getch();
+        }
+
+        return std::to_underlying(ExitCode::BadArguments);
     }
 
     const std::array<uint8_t, 3> version = xiloader::Config::versionNumber;

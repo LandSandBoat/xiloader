@@ -75,13 +75,16 @@ auto KnownServers::find(const std::string& server) const -> std::optional<std::s
     return entry->get<std::string>();
 }
 
-void KnownServers::remember(const std::string& server, const std::string& fingerprint) const
+auto KnownServers::remember(const std::string& server, const std::string& fingerprint) const -> bool
 {
     auto data    = readStore(file);
     data[server] = fingerprint;
 
     std::ofstream stream(file, std::ios::trunc);
     stream << data.dump(4) << '\n';
+    stream.flush();
+
+    return stream.good();
 }
 
 auto serverKey(const std::string& name, const uint16_t port) -> std::string

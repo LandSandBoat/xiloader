@@ -564,7 +564,9 @@ auto logIn(const CommandTable table, const uint32_t accountId, const Language la
 
     // Step 7: Apply the user slot and turn on message notices like the viewer does
     configureSession();
-    if (!std::filesystem::exists(slot / "option.bin"))
+    std::error_code error;
+    const auto      optionSize = std::filesystem::file_size(slot / "option.bin", error);
+    if (error || optionSize == 0)
     {
         seedOptionFile(slot);
     }

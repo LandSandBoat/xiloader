@@ -43,7 +43,8 @@ public:
 
     // server is a name and port as from serverKey
     auto find(const std::string& server) const -> std::optional<std::string>;
-    void remember(const std::string& server, const std::string& fingerprint) const;
+    // Returns false when the file can't be written
+    auto remember(const std::string& server, const std::string& fingerprint) const -> bool;
 
 private:
     std::filesystem::path file;
@@ -56,7 +57,7 @@ auto serverKey(const std::string& name, uint16_t port) -> std::string;
 auto normalizeFingerprint(const std::string& fingerprint) -> std::string;
 
 // known is the fingerprint on record, pinned the one from --fingerprint (empty when not given).
-// A loopback server is never asked about or refused, so local development isn't in the way.
+// Without a pin a loopback server is never asked about or refused, so local development isn't in the way.
 auto judgeServer(const std::optional<std::string>& known, const std::string& presented, const std::string& pinned, bool loopback) -> ServerTrust;
 
 // Holds the connected server to its key on record before anything is sent to it, asking the user about a new one.

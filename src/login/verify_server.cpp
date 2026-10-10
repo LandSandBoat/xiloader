@@ -32,6 +32,14 @@ namespace
 
 constexpr const char* kStoreName = "known_servers.json";
 
+void save(const xiloader::KnownServers& servers, const std::string& server, const std::string& fingerprint)
+{
+    if (!servers.remember(server, fingerprint))
+    {
+        xiloader::console::output(xiloader::color::warning, "The server's key couldn't be saved, so it will be asked about again.");
+    }
+}
+
 } // namespace
 
 namespace xiloader
@@ -46,15 +54,14 @@ auto verifyServer(const AuthConnection& connection, const std::string& name, con
         return false;
     }
 
-    const auto folder = appDataFolder();
-    if (!folder)
+    // With nowhere to keep a record every connection is a first one
+    std::filesystem::path store;
+    if (const auto folder = appDataFolder())
     {
-        // With nowhere to keep a record every connection would be a first one
-        console::output(color::warning, "APPDATA not set; the server's key ({}) can't be checked against earlier connections.", *presented);
-        return config.fingerprint.empty() || normalizeFingerprint(config.fingerprint) == *presented;
+        store = *folder / kStoreName;
     }
 
-    const KnownServers servers(*folder / kStoreName);
+    const KnownServers servers(store);
     const auto         server   = serverKey(name, config.loginAuthPort);
     const auto         known    = servers.find(server);
     const bool         loopback = connection.isLoopback();
@@ -72,7 +79,11 @@ auto verifyServer(const AuthConnection& connection, const std::string& name, con
                 console::output(color::warning, "The key of server '{}' has changed to {}.", server, *presented);
             }
 
-            servers.remember(server, *presented);
+            if (known != *presented)
+            {
+                save(servers, server, *presented);
+            }
+
             return true;
         }
         case ServerTrust::Ask:
@@ -88,7 +99,7 @@ auto verifyServer(const AuthConnection& connection, const std::string& name, con
                 return false;
             }
 
-            servers.remember(server, *presented);
+            save(servers, server, *presented);
             return true;
         }
         case ServerTrust::Changed:

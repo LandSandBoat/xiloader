@@ -238,7 +238,7 @@ void onVerifyTotpSuccess(const json& reply)
     const auto maybeRecoveryCode = jsonGet<std::string>(reply, "recovery_code");
     if (maybeRecoveryCode.has_value())
     {
-        xiloader::console::output(xiloader::color::info, "Your recovery code is '{}'. Please write this down!", maybeRecoveryCode.value());
+        xiloader::console::outputUnlogged(xiloader::color::info, std::format("Your recovery code is '{}'. Please write this down!", maybeRecoveryCode.value()));
         xiloader::console::output(xiloader::color::info, "Tip: Try using shift + leftclick to select the text if it doesn't work.");
         xiloader::console::output(xiloader::color::info, "You may remove your TOTP with this recovery code.");
     }

@@ -27,6 +27,7 @@ This file is part of DarkStar-server source code.
 
 #include <algorithm>
 #include <fstream>
+#include <mutex>
 #include <string_view>
 #include <vector>
 
@@ -39,6 +40,7 @@ constexpr std::string_view kLogSuffix = ".log";
 
 std::filesystem::path logPath;
 std::ofstream         logStream;
+std::mutex            logMutex; // output is called from the lobby, relay and game threads
 
 } // namespace
 
@@ -85,11 +87,21 @@ auto console::logFile() -> const std::filesystem::path&
 
 void console::log(const std::string& line)
 {
+    const std::scoped_lock lock(logMutex);
     if (logStream)
     {
         logStream << line << '\n'
                   << std::flush;
     }
+}
+
+void console::outputUnlogged(const xiloader::color c, const std::string& message)
+{
+    print(xiloader::color::lightyelllow, getTimestamp());
+    print(c, message);
+
+    std::cout << '\n'
+              << std::flush;
 }
 
 auto console::ownsWindow() -> bool

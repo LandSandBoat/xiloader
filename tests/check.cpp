@@ -354,7 +354,7 @@ void checkKnownServers()
 
     const xiloader::KnownServers servers(file);
     assert(!servers.find("a:1"));
-    servers.remember("a:1", key);
+    assert(servers.remember("a:1", key));
     servers.remember("b:2", other);
     servers.remember("a:1", other);
     assert(servers.find("a:1") == other && servers.find("b:2") == other && !servers.find("c:3"));
@@ -363,6 +363,10 @@ void checkKnownServers()
     std::ofstream(file) << "not json";
     assert(!servers.find("a:1"));
     std::filesystem::remove(file);
+
+    // No store: nothing is known and nothing can be saved
+    const xiloader::KnownServers nowhere{ std::filesystem::path() };
+    assert(!nowhere.find("a:1") && !nowhere.remember("a:1", key));
 }
 
 void checkTrustTokens()

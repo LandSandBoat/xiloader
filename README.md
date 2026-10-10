@@ -81,7 +81,7 @@ The exit code says what went wrong:
 cmake --build build --target xiloader_check
 ```
 
-`xiloader_check` exercises the parts that run without the game: the plain menus, option loading and the lobby data connection. It exits non-zero on the first failed assertion.
+`xiloader_check` exercises the parts that run without the game: the plain menus, option loading, the lobby data connection, the pattern scan, the install checks, the known servers record and trust tokens. It exits non-zero on the first failed assertion.
 
 ## Release notes
 
