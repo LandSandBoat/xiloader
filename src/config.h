@@ -35,7 +35,7 @@ namespace xiloader
 struct Config
 {
     // xiloader version number sent to auth server. Must be x.x.x with single characters for 'x'. Remember to also change in xiloader.rc.in
-    static constexpr std::array<uint8_t, 3> versionNumber{ 2, 2, 0 };
+    static constexpr std::array<uint8_t, 3> versionNumber{ 3, 0, 0 };
 
     Language    language      = Language::English; // The language of the loader to be used for polcore.
     std::string serverAddress = "127.0.0.1";       // The server address to connect to.
