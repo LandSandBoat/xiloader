@@ -25,26 +25,29 @@
 
 namespace xiloader
 {
-    // POLCON_STEP's states (polcore 0x10044a50, state at 0x10099408); negative values are errors
-    enum class PolconState : int32_t
-    {
-        Init                = 0x00,
-        Start               = 0x11, // goes to Connected or ResolvePolcom depending on the open mode
-        ResolvePolcom       = 0x12,
-        BuildPolcomHost     = 0x13,
-        StartPolcomResolve  = 0x14,
-        CheckPolcomResolve  = 0x15,
-        OpenIrc             = 0x16, // IRC session on 51240
-        CheckIrcOpen        = 0x17,
-        IrcReady            = 0x18,
-        FormatProfileHost   = 0x19, // pp%03d.pol.com
-        ResolveProfileHost  = 0x1A,
-        SecurityToken       = 0x1B, // profile request 4/7
-        CheckSecurityToken  = 0x1C,
-        Connected           = 0x1E,
-        CloseIrc            = 0x1F, // teardown on the failure path, then 0x20 and Failed
-        Failed              = 0x21, // stays here after a failed open
-        ChangeMyStatus      = 0x28, // profile request 4/5, open mode 3 only
-        CheckChangeMyStatus = 0x29,
-    };
+
+// POLCON_STEP's states (polcore 0x10044a50, state at 0x10099408); negative values are errors
+// NOLINTNEXTLINE(performance-enum-size): what polcore returns is an int, and a negative one is an error
+enum class PolconState : int32_t
+{
+    Init                = 0x00,
+    Start               = 0x11, // goes to Connected or ResolvePolcom depending on the open mode
+    ResolvePolcom       = 0x12,
+    BuildPolcomHost     = 0x13,
+    StartPolcomResolve  = 0x14,
+    CheckPolcomResolve  = 0x15,
+    OpenIrc             = 0x16, // IRC session on 51240
+    CheckIrcOpen        = 0x17,
+    IrcReady            = 0x18,
+    FormatProfileHost   = 0x19, // pp%03d.pol.com
+    ResolveProfileHost  = 0x1A,
+    SecurityToken       = 0x1B, // profile request 4/7
+    CheckSecurityToken  = 0x1C,
+    Connected           = 0x1E,
+    CloseIrc            = 0x1F, // teardown on the failure path, then 0x20 and Failed
+    Failed              = 0x21, // stays here after a failed open
+    ChangeMyStatus      = 0x28, // profile request 4/5, open mode 3 only
+    CheckChangeMyStatus = 0x29,
+};
+
 } // namespace xiloader

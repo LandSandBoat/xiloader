@@ -9,3 +9,4 @@ xiloader.exe
 xiloader.pdb
 *.ilk
 *.exe.manifest
+.idea/

@@ -23,154 +23,107 @@ This file is part of DarkStar-server source code.
 
 #pragma once
 
-#include <windows.h>
+#include <ctime>
+#include <filesystem>
+#include <format>
 #include <iostream>
 #include <string>
-#include <ctime>
+#include <utility>
+#include <windows.h>
+
+#include "enums/console_color.h"
 
 namespace xiloader
 {
-    /**
-    * @brief Console color enumeration.
-    */
-    enum class color
+
+// Console class containing helper functions for console output.
+class console
+{
+private:
+    // Shows or hides the console based on the provided argument.
+    static void visible(bool visible);
+
+    static void log(const std::string& line);
+
+public:
+    // Prints a text fragment with the specified color to the console.
+    static void print(xiloader::color c, const std::string& message);
+
+    // Copies everything output prints into a new file in the folder from here on.
+    // Each run gets its own file, so several clients can run at once; only the newest few are kept.
+    static void startLog(const std::filesystem::path& folder);
+
+    // Prints like output but keeps the message out of the log file, for things only the user should see
+    static void outputUnlogged(xiloader::color c, const std::string& message);
+
+    // Empty until startLog succeeds
+    static auto logFile() -> const std::filesystem::path&;
+
+    // The console window was made for this process and closes with it, as when the loader is double-clicked
+    static auto ownsWindow() -> bool;
+
+    // Prints the given message to the console.
+    template <typename... Args>
+    static void output(const std::format_string<Args...> format, Args&&... args)
     {
-        /* Red color codes. */
-        red = FOREGROUND_RED,
-        lightred = FOREGROUND_RED | FOREGROUND_INTENSITY,
+        output(xiloader::color::white, format, std::forward<Args>(args)...);
+    }
 
-        /* Green color codes. */
-        green = FOREGROUND_GREEN,
-        lightgreen = FOREGROUND_GREEN | FOREGROUND_INTENSITY,
-
-        /* Blue color codes. */
-        blue = FOREGROUND_BLUE,
-        lightblue = FOREGROUND_BLUE | FOREGROUND_INTENSITY,
-
-        /* Cyan color codes. */
-        cyan = FOREGROUND_BLUE | FOREGROUND_GREEN,
-        lightcyan = FOREGROUND_BLUE | FOREGROUND_GREEN | FOREGROUND_INTENSITY,
-
-        /* Yellow color codes. */
-        yellow = FOREGROUND_GREEN | FOREGROUND_RED,
-        lightyelllow = FOREGROUND_GREEN | FOREGROUND_RED | FOREGROUND_INTENSITY,
-
-        /* Purple color codes. */
-        purple = FOREGROUND_BLUE | FOREGROUND_RED,
-        lightpurple = FOREGROUND_BLUE | FOREGROUND_RED | FOREGROUND_INTENSITY,
-
-        /* White color codes. */
-        grey = FOREGROUND_RED | FOREGROUND_GREEN | FOREGROUND_BLUE,
-        white = FOREGROUND_RED | FOREGROUND_GREEN | FOREGROUND_BLUE | FOREGROUND_INTENSITY,
-
-        /* Common color codes. */
-        debug = lightcyan,
-        error = lightred,
-        info = white,
-        success = lightgreen,
-        warning = lightyelllow
-    };
-
-    /**
-     * @brief Console class containing helper functions for console output.
-     */
-    class console
+    static auto getTimestamp() -> std::string
     {
-    private:
+        // Get the current timestamp
+        ::__time32_t rawtime = 0;
+        ::_time32(&rawtime);
 
-        /**
-         * @brief Shows or hides the console based on the provided argument.
-         *
-         * @param visible   "true" to show the console, "false" to hide it.
-         */
-        static void visible(bool visible);
+        ::tm timeinfo;
+        ::_localtime32_s(&timeinfo, &rawtime);
 
-    public:
+        // Format the timestamp
+        char timestamp[256];
+        ::strftime(timestamp, sizeof timestamp, "[%m/%d/%y %H:%M:%S] ", &timeinfo);
 
-        /**
-         * @brief Prints a text fragment with the specified color to the console.
-         *
-         * @param c         The color to print the fragment with.
-         * @param message   The fragment to print.
-         */
-        static void print(xiloader::color c, std::string const& message);
+        return timestamp;
+    }
 
-        /**
-         * @brief Prints the given message to the console.
-         *
-         * @param format    The format of the message to print.
-         * @param args      The arguments to fill the format.
-         */
-        template<typename... Args>
-        static void output(char const* format, Args... args)
+    // Prints the given message to the console with the specific color.
+    template <typename... Args>
+    static void output(const xiloader::color c, const std::format_string<Args...> format, Args&&... args)
+    {
+        const std::string timestamp = getTimestamp();
+        const std::string message   = std::format(format, std::forward<Args>(args)...);
+
+        // Output the timestamp
+        print(xiloader::color::lightyelllow, timestamp);
+
+        // Output the message
+        print(c, message);
+
+        std::cout << '\n'
+                  << std::flush;
+
+        log(timestamp + message);
+    }
+
+    static void printMultiLine(std::string msg, const std::string& delimiter, const xiloader::color color)
+    {
+        auto pos = msg.find(delimiter);
+
+        while (pos != -1)
         {
-            output(xiloader::color::white, format, args...);
+            xiloader::console::output(color, "{}", msg.substr(0, pos));
+            msg.erase(0, pos + delimiter.length());
+
+            pos = msg.find(delimiter);
         }
 
-        static std::string getTimestamp()
-        {
-            /* Get the current timestamp */
-            ::__time32_t rawtime;
-            ::_time32(&rawtime);
+        xiloader::console::output(color, "{}", msg);
+    }
 
-            ::tm timeinfo;
-            ::_localtime32_s(&timeinfo, &rawtime);
+    // Hides the console window.
+    static void hide();
 
-            /* Format the timestamp */
-            char timestamp[256];
-            ::strftime(timestamp, sizeof timestamp, "[%m/%d/%y %H:%M:%S] ", &timeinfo);
-
-            return timestamp;
-        }
-        /**
-         * @brief Prints the given message to the console with the specific color.
-         *
-         * @param c         The color to print the message with.
-         * @param format    The format of the message to print.
-         * @param args      The arguments to fill the format.
-         */
-        template<typename... Args>
-        static void output(xiloader::color c, char const* format, Args... args)
-        {
-            std::string timestamp = getTimestamp();
-
-            /* Output the timestamp */
-            print(xiloader::color::lightyelllow, timestamp.c_str());
-
-            /* Parse the incoming message */
-            char buffer[1024];
-            ::snprintf(buffer, sizeof buffer, format, args...);
-            /* Output the message */
-
-            print(c, buffer);
-
-            std::cout << std::endl;
-        }
-
-        static void printMultiLine(std::string msg, const std::string delimiter, const xiloader::color color)
-        {
-            auto pos = msg.find(delimiter);
-
-            while (pos != -1)
-            {
-                xiloader::console::output(color, "%s", msg.substr(0, pos).c_str());
-                msg.erase(0, pos + delimiter.length());
-
-                pos = msg.find(delimiter);
-            }
-
-            xiloader::console::output(color, "%s", msg.c_str());
-        }
-
-        /**
-         * @brief Hides the console window.
-         */
-        static void hide();
-
-        /**
-         * @brief Shows the console window.
-         */
-        static void show();
-    };
+    // Shows the console window.
+    static void show();
+};
 
 }; // namespace xiloader

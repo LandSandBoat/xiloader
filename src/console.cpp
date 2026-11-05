@@ -25,82 +25,147 @@ This file is part of DarkStar-server source code.
 
 #include <shobjidl.h>
 
-/* Global Externs */
-namespace globals
+#include <algorithm>
+#include <fstream>
+#include <mutex>
+#include <string_view>
+#include <vector>
+
+namespace
 {
-    extern bool g_Hide;
-};
+
+constexpr std::size_t      kLogsKept  = 10;
+constexpr std::string_view kLogPrefix = "xiloader-";
+constexpr std::string_view kLogSuffix = ".log";
+
+std::filesystem::path logPath;
+std::ofstream         logStream;
+std::mutex            logMutex; // output is called from the lobby, relay and game threads
+
+} // namespace
 
 namespace xiloader
 {
-    /**
-     * @brief Prints a text fragment with the specified color to the console.
-     * 
-     * @param c         The color to print the fragment with.
-     * @param message   The fragment to print.
-     */
-    void console::print(xiloader::color c, std::string const& message)
+
+void console::startLog(const std::filesystem::path& folder)
+{
+    // The names sort by start time
+    std::vector<std::filesystem::path> logs;
+    std::error_code                    error;
+    for (const auto& entry : std::filesystem::directory_iterator(folder, error))
     {
-        auto stdout_handle = ::GetStdHandle(STD_OUTPUT_HANDLE);
-        ::CONSOLE_SCREEN_BUFFER_INFO info;
-        ::GetConsoleScreenBufferInfo(stdout_handle, &info);
-        auto attributes = info.wAttributes & 0xFFF0 | static_cast<::WORD>(c);
-        ::SetConsoleTextAttribute(stdout_handle, static_cast<::WORD>(attributes));
-        std::cout << message;
-        ::SetConsoleTextAttribute(stdout_handle, info.wAttributes);
-    }
-
-    /**
-     * @brief Shows or hides the console based on the provided argument.
-     *
-     * @param visible   "true" to show the console, "false" to hide it.
-     */
-    void console::visible(bool visible)
-    {
-        if (!globals::g_Hide)
-            return;
-
-        auto console = ::GetConsoleWindow();
-
-        // Adjust the task bar
-        ::ITaskbarList* taskbar = nullptr;
-        auto hr = ::CoCreateInstance(
-            CLSID_TaskbarList,
-            nullptr,
-            ::CLSCTX_INPROC_SERVER,
-            IID_ITaskbarList,
-            reinterpret_cast<void**>(&taskbar));
-        if (SUCCEEDED(hr))
+        const auto name = entry.path().filename().string();
+        if (name.starts_with(kLogPrefix) && name.ends_with(kLogSuffix))
         {
-            if (visible)
-            {
-                taskbar->AddTab(console);
-            }
-            else
-            {
-                taskbar->DeleteTab(console);
-            }
-            taskbar->Release();
+            logs.push_back(entry.path());
         }
-
-        // Adjust the window's visibility
-        ::ShowWindow(console, visible ? SW_SHOW : SW_HIDE);
     }
 
-    /**
-     * @brief Hides the console window.
-     */
-    void console::hide()
+    std::ranges::sort(logs);
+    while (logs.size() >= kLogsKept)
     {
-        visible(false);
+        std::filesystem::remove(logs.front(), error);
+        logs.erase(logs.begin());
     }
 
-    /**
-     * @brief Shows the console window.
-     */
-    void console::show()
+    SYSTEMTIME now = {};
+    ::GetLocalTime(&now);
+
+    const auto file = folder / std::format("{}{:04}{:02}{:02}-{:02}{:02}{:02}-{}{}", kLogPrefix, now.wYear, now.wMonth, now.wDay, now.wHour, now.wMinute, now.wSecond, ::GetCurrentProcessId(), kLogSuffix);
+
+    logStream.open(file, std::ios::trunc);
+    if (logStream)
     {
-        visible(true);
+        logPath = file;
     }
+}
+
+auto console::logFile() -> const std::filesystem::path&
+{
+    return logPath;
+}
+
+void console::log(const std::string& line)
+{
+    const std::scoped_lock lock(logMutex);
+    if (logStream)
+    {
+        logStream << line << '\n'
+                  << std::flush;
+    }
+}
+
+void console::outputUnlogged(const xiloader::color c, const std::string& message)
+{
+    print(xiloader::color::lightyelllow, getTimestamp());
+    print(c, message);
+
+    std::cout << '\n'
+              << std::flush;
+}
+
+auto console::ownsWindow() -> bool
+{
+    DWORD processes[2] = {};
+    DWORD mode         = 0;
+
+    return ::GetConsoleProcessList(processes, 2) == 1 && ::GetConsoleMode(::GetStdHandle(STD_INPUT_HANDLE), &mode) != 0;
+}
+
+void console::print(const xiloader::color c, const std::string& message)
+{
+    const auto                   stdout_handle = ::GetStdHandle(STD_OUTPUT_HANDLE);
+    ::CONSOLE_SCREEN_BUFFER_INFO info;
+    ::GetConsoleScreenBufferInfo(stdout_handle, &info);
+    const auto attributes = info.wAttributes & 0xFFF0 | static_cast<::WORD>(c);
+    ::SetConsoleTextAttribute(stdout_handle, static_cast<::WORD>(attributes));
+    std::cout << message;
+    ::SetConsoleTextAttribute(stdout_handle, info.wAttributes);
+}
+
+void console::visible(const bool visible)
+{
+    const auto console = ::GetConsoleWindow();
+
+    // Adjust the task bar
+    ::ITaskbarList* taskbar = nullptr;
+    const auto      hr      = ::CoCreateInstance(
+        CLSID_TaskbarList,
+        nullptr,
+        ::CLSCTX_INPROC_SERVER,
+        IID_ITaskbarList,
+        reinterpret_cast<void**>(&taskbar));
+    if (SUCCEEDED(hr))
+    {
+        if (visible)
+        {
+            taskbar->AddTab(console);
+        }
+        else
+        {
+            taskbar->DeleteTab(console);
+        }
+        taskbar->Release();
+    }
+
+    // Adjust the window's visibility
+    int command = SW_HIDE;
+    if (visible)
+    {
+        command = SW_SHOW;
+    }
+
+    ::ShowWindow(console, command);
+}
+
+void console::hide()
+{
+    visible(false);
+}
+
+void console::show()
+{
+    visible(true);
+}
 
 }; // namespace xiloader
