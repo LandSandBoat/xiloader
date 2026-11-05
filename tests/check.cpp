@@ -34,6 +34,7 @@
 #include "ui/menu.h"
 
 #include <filesystem>
+#include <format>
 #include <fstream>
 #include <iostream>
 #include <print>
@@ -71,7 +72,8 @@ void checkPlainMenu()
     assert(menu->pick({ "1) a", "2) b", "3) c" }) == 1);
     assert(menu->pick({ "1) a", "2) exit" }) == 1);
 
-    std::istringstream form("user\nsecret\ny\n");
+    std::istringstream form("user\nsecret\ny\n"
+                            "\n"); // second form: Enter keeps the preset answer
     std::cin.clear();
     std::cin.rdbuf(form.rdbuf());
 
@@ -103,6 +105,18 @@ void checkPlainMenu()
     assert(username == "user" && password == "secret");
     assert(otp == "untouched");
     assert(trust && trusted);
+
+    // --trust given, then Enter at the question
+    bool preset = true;
+    std::cin.rdbuf(form.rdbuf());
+    std::cout.rdbuf(output.rdbuf());
+    menu->form({ { .label = "Trust", .checked = &preset } }, []
+               {
+                   return std::string();
+               });
+    std::cin.rdbuf(oldInput);
+    std::cout.rdbuf(oldOutput);
+    assert(preset);
     assert(!output.str().contains("OTP"));
     assert(output.str().contains("noted"));
 }
@@ -311,9 +325,26 @@ void checkLobbyData()
         handshake.join();
     }
 
+    // A server that accepts and never answers fails the handshake instead of hanging
+    {
+        const auto  listener = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
+        sockaddr_in address  = {};
+        address.sin_family   = AF_INET;
+        inet_pton(AF_INET, "127.0.0.1", &address.sin_addr);
+        assert(bind(listener, reinterpret_cast<sockaddr*>(&address), sizeof(address)) == 0);
+        assert(listen(listener, 1) == 0);
+        int length = sizeof(address);
+        getsockname(listener, reinterpret_cast<sockaddr*>(&address), &length);
+
+        xiloader::LobbyDataConnection connection;
+        assert(!connection.connect("127.0.0.1", ntohs(address.sin_port), kTestKeyFingerprint).has_value());
+        closesocket(listener);
+    }
+
     // Room for the 20 characters the connection may write, then a canary
-    constexpr int     kEntry = 0x68;
-    std::vector<char> list(kEntry * 20 + 64, 0x77);
+    std::chrono::steady_clock::time_point stopping;
+    constexpr int                         kEntry = 0x68;
+    std::vector<char>                     list(kEntry * 20 + 64, 0x77);
 
     {
         TlsServer                     server;
@@ -367,7 +398,13 @@ void checkLobbyData()
 
         // The reply to the request proves the list before it was handled
         server.read(28);
+
+        // The thread is now blocked reading an idle connection, which the destructor has to interrupt
+        std::this_thread::sleep_for(std::chrono::milliseconds(300));
+        stopping = std::chrono::steady_clock::now();
     }
+
+    assert(std::chrono::steady_clock::now() - stopping < std::chrono::seconds(2));
 
     assert(list[0] == 1 && list[kEntry * 19] == 1 && list[kEntry * 19 + 0x10] == 19);
     assert(std::memcmp(list.data() + kEntry + 0x04, "\x01\x00\xBB\xBB", 4) == 0);
@@ -534,9 +571,28 @@ void checkKnownServers()
     servers.remember("a:1", other);
     assert(servers.find("a:1") == other && servers.find("b:2") == other && !servers.find("c:3"));
 
-    // A damaged file reads as empty instead of failing
+    // A damaged file reads as empty instead of failing, and isn't overwritten
     std::ofstream(file) << "not json";
     assert(!servers.find("a:1"));
+    assert(!servers.remember("a:1", key));
+    std::filesystem::remove(file);
+
+    // Clients saving at the same time keep each other's keys
+    {
+        std::vector<std::jthread> clients;
+        clients.reserve(16);
+        for (auto i = 0; i < 16; ++i)
+        {
+            clients.emplace_back([&, i]
+                                 {
+                                     assert(servers.remember(std::format("s{}:1", i), key));
+                                 });
+        }
+    }
+    for (auto i = 0; i < 16; ++i)
+    {
+        assert(servers.find(std::format("s{}:1", i)) == key);
+    }
     std::filesystem::remove(file);
 
     // No store: nothing is known and nothing can be saved

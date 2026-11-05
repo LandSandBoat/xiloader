@@ -28,6 +28,7 @@
 #include <ws2tcpip.h>
 
 #include <algorithm>
+#include <atomic>
 #include <cstring>
 #include <format>
 #include <memory>
@@ -82,6 +83,9 @@ std::vector<std::unique_ptr<Connection>> connections;
 std::optional<mbedtls_ssl_session> ticket;
 
 std::jthread relayThread;
+
+// Set by the relay thread itself, so redirect can tell its connections apart from the start
+std::atomic<std::thread::id> relayThreadId;
 
 auto setUpTls() -> int
 {
@@ -438,7 +442,8 @@ void watch(const Connection& connection, fd_set& readable, fd_set& writable, fd_
 {
     const auto server = static_cast<SOCKET>(connection.server.fd);
 
-    if (connection.toServer.empty())
+    // After the server closes, step() stops reading the local side
+    if (connection.toServer.empty() && !connection.serverClosed)
     {
         FD_SET(connection.local, &readable);
     }
@@ -468,6 +473,8 @@ void watch(const Connection& connection, fd_set& readable, fd_set& writable, fd_
 
 void run(const std::stop_token& stop)
 {
+    relayThreadId = std::this_thread::get_id();
+
     while (!stop.stop_requested())
     {
         fd_set readable;
@@ -521,6 +528,7 @@ void run(const std::stop_token& stop)
     connections.clear();
     closeListeners();
     freeTls();
+    relayThreadId = std::thread::id();
 }
 
 // OS-picked port so multiple clients don't collide
@@ -646,7 +654,7 @@ auto address() -> const std::string&
 auto redirect(sockaddr_in& destination) -> bool
 {
     // The relay dials the server's view port itself
-    if (destination.sin_family != AF_INET || std::this_thread::get_id() == relayThread.get_id())
+    if (destination.sin_family != AF_INET || std::this_thread::get_id() == relayThreadId.load())
     {
         return false;
     }

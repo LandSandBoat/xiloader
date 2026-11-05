@@ -48,6 +48,9 @@ constexpr std::size_t kBufferSize     = 4096;
 constexpr int         kReplySize      = 28;
 constexpr DWORD       kSendIntervalMs = 100;
 
+// How long the handshake waits for the server, and how often the thread looks up from an idle connection
+constexpr uint32_t kReadTimeoutMs = 10000;
+
 auto packetSize(const xiloader::LobbyDataRequest type) -> std::size_t
 {
     switch (type)
@@ -95,11 +98,14 @@ LobbyDataConnection::LobbyDataConnection()
 
 LobbyDataConnection::~LobbyDataConnection()
 {
-    // Shutting the socket down wakes the thread out of recv; the session is only freed once the thread is done with it
+    // Closing the socket wakes the thread out of recv; shutdown alone doesn't on Windows.
+    // The session is only freed once the thread is done with it.
     if (thread.joinable())
     {
         thread.request_stop();
         shutdown(static_cast<SOCKET>(server.fd), SD_BOTH);
+        closesocket(static_cast<SOCKET>(server.fd));
+        server.fd = -1;
         thread.join();
     }
 
@@ -116,6 +122,7 @@ auto LobbyDataConnection::connect(const std::string& address, const uint16_t por
 
     // The key is held to the login server's below rather than to a CA
     mbedtls_ssl_conf_authmode(tls.get(), MBEDTLS_SSL_VERIFY_NONE);
+    mbedtls_ssl_conf_read_timeout(tls.get(), kReadTimeoutMs);
 
     if (const auto ret = mbedtls_net_connect(&server, address.c_str(), std::to_string(port).c_str(), MBEDTLS_NET_PROTO_TCP); ret != 0)
     {
@@ -127,7 +134,7 @@ auto LobbyDataConnection::connect(const std::string& address, const uint16_t por
         return std::unexpected(std::format("Failed to set up TLS ({}).", xiloader::mbedtlsErrorText(ret)));
     }
 
-    mbedtls_ssl_set_bio(&ssl, &server, mbedtls_net_send, mbedtls_net_recv, nullptr);
+    mbedtls_ssl_set_bio(&ssl, &server, mbedtls_net_send, nullptr, mbedtls_net_recv_timeout);
 
     for (auto ret = mbedtls_ssl_handshake(&ssl); ret != 0; ret = mbedtls_ssl_handshake(&ssl))
     {
@@ -215,7 +222,8 @@ void LobbyDataConnection::run(const std::stop_token& stop, const Session& sessio
     {
         // Attempt to receive the incoming data..
         const auto received = mbedtls_ssl_read(&ssl, reinterpret_cast<unsigned char*>(recvBuffer), sizeof(recvBuffer));
-        if (received == MBEDTLS_ERR_SSL_WANT_READ || received == MBEDTLS_ERR_SSL_RECEIVED_NEW_SESSION_TICKET)
+        // A quiet server is normal; the timeout only lets the loop see a stop request
+        if (received == MBEDTLS_ERR_SSL_TIMEOUT || received == MBEDTLS_ERR_SSL_WANT_READ || received == MBEDTLS_ERR_SSL_RECEIVED_NEW_SESSION_TICKET)
         {
             continue;
         }

@@ -90,8 +90,18 @@ public:
 
             if (field.checked)
             {
-                const auto answer = promptLine("  " + field.label + "? (y/N): ");
-                *field.checked    = answer == "y" || answer == "Y";
+                // Enter keeps the current answer, as the checkbox does
+                std::string choices = " (y/N): ";
+                if (*field.checked)
+                {
+                    choices = " (Y/n): ";
+                }
+
+                const auto answer = promptLine("  " + field.label + "?" + choices);
+                if (!answer.empty())
+                {
+                    *field.checked = answer == "y" || answer == "Y";
+                }
             }
             else
             {

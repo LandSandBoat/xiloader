@@ -21,6 +21,8 @@
 
 #include "known_servers.h"
 
+#include <windows.h>
+
 #include <nlohmann/json.hpp>
 
 #include <algorithm>
@@ -35,6 +37,40 @@ namespace
 using json = nlohmann::json;
 
 constexpr std::string_view kFingerprintPrefix = "SHA256:";
+
+// Every client on the machine shares the record
+constexpr const wchar_t* kStoreMutex = L"Local\\xiloader-known-servers";
+
+// Held while the record is read or rewritten. Without the mutex the record is used unlocked.
+class StoreLock
+{
+public:
+    StoreLock()
+    : mutex(CreateMutexW(nullptr, FALSE, kStoreMutex))
+    {
+        if (mutex != nullptr)
+        {
+            WaitForSingleObject(mutex, INFINITE);
+        }
+    }
+
+    ~StoreLock()
+    {
+        if (mutex != nullptr)
+        {
+            ReleaseMutex(mutex);
+            CloseHandle(mutex);
+        }
+    }
+
+    StoreLock(const StoreLock&)            = delete;
+    StoreLock& operator=(const StoreLock&) = delete;
+    StoreLock(StoreLock&&)                 = delete;
+    StoreLock& operator=(StoreLock&&)      = delete;
+
+private:
+    HANDLE mutex;
+};
 
 auto readStore(const std::filesystem::path& file) -> json
 {
@@ -65,8 +101,9 @@ KnownServers::KnownServers(std::filesystem::path file)
 
 auto KnownServers::find(const std::string& server) const -> std::optional<std::string>
 {
-    const auto data  = readStore(file);
-    const auto entry = data.find(server);
+    const StoreLock lock;
+    const auto      data  = readStore(file);
+    const auto      entry = data.find(server);
     if (entry == data.end() || !entry->is_string())
     {
         return std::nullopt;
@@ -77,14 +114,43 @@ auto KnownServers::find(const std::string& server) const -> std::optional<std::s
 
 auto KnownServers::remember(const std::string& server, const std::string& fingerprint) const -> bool
 {
-    auto data    = readStore(file);
+    if (file.empty())
+    {
+        return false;
+    }
+
+    const StoreLock lock;
+
+    auto            data = json::object();
+    std::error_code error;
+    if (std::filesystem::exists(file, error))
+    {
+        std::ifstream stream(file);
+        data = json::parse(stream, nullptr, false);
+
+        // Rewriting a record that can't be read would drop every other key in it
+        if (!data.is_object())
+        {
+            return false;
+        }
+    }
+
     data[server] = fingerprint;
 
-    std::ofstream stream(file, std::ios::trunc);
-    stream << data.dump(4) << '\n';
-    stream.flush();
+    auto temporary = file;
+    temporary += ".tmp";
+    {
+        std::ofstream stream(temporary, std::ios::trunc);
+        stream << data.dump(4) << '\n';
+        stream.flush();
+        if (!stream.good())
+        {
+            return false;
+        }
+    }
 
-    return stream.good();
+    // Readers see the old record or the new one, never a partly written one
+    return MoveFileExW(temporary.c_str(), file.c_str(), MOVEFILE_REPLACE_EXISTING) != 0;
 }
 
 auto serverKey(const std::string& name, const uint16_t port) -> std::string
