@@ -120,6 +120,9 @@ auto run(xiloader::Config& config) -> ExitCode
         return ExitCode::ServerUntrusted;
     }
 
+    // Every later connection to the server has to present the key just trusted
+    const auto trustedKey = auth.fingerprint().value_or("");
+
     const auto session = xiloader::login::run(auth, config);
     if (!session)
     {
@@ -135,7 +138,7 @@ auto run(xiloader::Config& config) -> ExitCode
 
     // Attempt to create connection to the login server..
     xiloader::LobbyDataConnection lobbyData;
-    if (const auto connected = lobbyData.connect(config.serverAddress, config.loginDataPort); !connected)
+    if (const auto connected = lobbyData.connect(config.serverAddress, config.loginDataPort, trustedKey); !connected)
     {
         const int err = WSAGetLastError();
         xiloader::console::output(xiloader::color::error, "{}", connected.error());
@@ -155,7 +158,7 @@ auto run(xiloader::Config& config) -> ExitCode
     // Create lobby data thread
     lobbyData.start(*session);
 
-    return xiloader::runGame(config, *session, lobbyData);
+    return xiloader::runGame(config, *session, lobbyData, trustedKey);
 }
 
 // Main program entrypoint.

@@ -110,7 +110,7 @@ auto probePolcore(const Language language) -> std::vector<std::pair<const char*,
     };
 }
 
-auto runGame(const Config& config, const Session& session, LobbyDataConnection& lobbyData) -> ExitCode
+auto runGame(const Config& config, const Session& session, LobbyDataConnection& lobbyData, const std::string& trustedKey) -> ExitCode
 {
     // Attempt to create polcore instance..
     const int                           languageId = std::to_underlying(config.language);
@@ -179,7 +179,7 @@ auto runGame(const Config& config, const Session& session, LobbyDataConnection& 
         return ExitCode::PlayOnlineUnsupported;
     }
 
-    if (const auto started = xiloader::polrelay::start(config.serverAddress, config.profilePort, session); !started)
+    if (const auto started = xiloader::polrelay::start(config.serverAddress, config.profilePort, config.loginViewPort, session, trustedKey); !started)
     {
         xiloader::console::output(xiloader::color::error, "{}", started.error());
         return ExitCode::ProfileServerFailed;

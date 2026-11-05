@@ -21,14 +21,13 @@
 
 #include "data_connection.h"
 
-#include <ws2tcpip.h>
-
 #include "console.h"
 
 #include "enums/lobby_data.h"
 
 #include <algorithm>
 #include <cstring>
+#include <format>
 #include <vector>
 
 namespace
@@ -88,63 +87,88 @@ void applyList(char* const list, const char* const packet)
 namespace xiloader
 {
 
-LobbyDataConnection::~LobbyDataConnection()
+LobbyDataConnection::LobbyDataConnection()
 {
-    thread.request_stop();
-
-    // Closing the socket wakes the thread out of recv
-    if (socket != INVALID_SOCKET)
-    {
-        shutdown(socket, SD_BOTH);
-        closesocket(socket);
-    }
+    mbedtls_net_init(&server);
+    mbedtls_ssl_init(&ssl);
 }
 
-auto LobbyDataConnection::connect(const std::string& server, const uint16_t port) -> std::expected<void, std::string>
+LobbyDataConnection::~LobbyDataConnection()
 {
-    struct addrinfo hints = {};
-
-    hints.ai_family   = AF_UNSPEC;
-    hints.ai_socktype = SOCK_STREAM;
-    hints.ai_protocol = IPPROTO_TCP;
-
-    // Attempt to get the server information.
-    struct addrinfo* addr = nullptr;
-    if (getaddrinfo(server.c_str(), std::to_string(port).c_str(), &hints, &addr))
+    // Shutting the socket down wakes the thread out of recv; the session is only freed once the thread is done with it
+    if (thread.joinable())
     {
-        return std::unexpected("Failed to obtain remote server information.");
+        thread.request_stop();
+        shutdown(static_cast<SOCKET>(server.fd), SD_BOTH);
+        thread.join();
     }
 
-    // Determine which address is valid to connect..
-    for (auto ptr = addr; ptr != nullptr && socket == INVALID_SOCKET; ptr = ptr->ai_next)
+    mbedtls_ssl_free(&ssl);
+    mbedtls_net_free(&server);
+}
+
+auto LobbyDataConnection::connect(const std::string& address, const uint16_t port, const std::string& trustedKey) -> std::expected<void, std::string>
+{
+    if (const auto ret = tls.setUp(); ret != 0)
     {
-        const auto candidate = ::socket(ptr->ai_family, ptr->ai_socktype, ptr->ai_protocol);
-        if (candidate == INVALID_SOCKET)
-        {
-            continue;
-        }
-
-        if (::connect(candidate, ptr->ai_addr, static_cast<int>(ptr->ai_addrlen)) == SOCKET_ERROR)
-        {
-            closesocket(candidate);
-            continue;
-        }
-
-        socket = candidate;
+        return std::unexpected(std::format("Failed to set up TLS ({}).", xiloader::mbedtlsErrorText(ret)));
     }
 
-    freeaddrinfo(addr);
+    // The key is held to the login server's below rather than to a CA
+    mbedtls_ssl_conf_authmode(tls.get(), MBEDTLS_SSL_VERIFY_NONE);
 
-    if (socket == INVALID_SOCKET)
+    if (const auto ret = mbedtls_net_connect(&server, address.c_str(), std::to_string(port).c_str(), MBEDTLS_NET_PROTO_TCP); ret != 0)
     {
-        return std::unexpected("Failed to connect to server!");
+        return std::unexpected(std::format("Failed to connect to the data port ({}).", xiloader::mbedtlsErrorText(ret)));
+    }
+
+    if (const auto ret = mbedtls_ssl_setup(&ssl, tls.get()); ret != 0)
+    {
+        return std::unexpected(std::format("Failed to set up TLS ({}).", xiloader::mbedtlsErrorText(ret)));
+    }
+
+    mbedtls_ssl_set_bio(&ssl, &server, mbedtls_net_send, mbedtls_net_recv, nullptr);
+
+    for (auto ret = mbedtls_ssl_handshake(&ssl); ret != 0; ret = mbedtls_ssl_handshake(&ssl))
+    {
+        if (ret != MBEDTLS_ERR_SSL_WANT_READ && ret != MBEDTLS_ERR_SSL_WANT_WRITE)
+        {
+            return std::unexpected(std::format("TLS handshake with the data port failed ({}).", xiloader::mbedtlsErrorText(ret)));
+        }
+    }
+
+    if (const auto matched = xiloader::checkPeerKey(ssl, trustedKey); !matched)
+    {
+        return std::unexpected(std::format("The data port is not the trusted server: {}.", matched.error()));
     }
 
     xiloader::console::output(xiloader::color::info, "Connected to server!");
 
-    serverAddress = inet_addr(server.c_str());
+    serverAddress = inet_addr(address.c_str());
 
     return {};
+}
+
+auto LobbyDataConnection::write(const char* const data, const std::size_t size) -> bool
+{
+    std::size_t sent = 0;
+    while (sent < size)
+    {
+        const auto ret = mbedtls_ssl_write(&ssl, reinterpret_cast<const unsigned char*>(data) + sent, size - sent);
+        if (ret == MBEDTLS_ERR_SSL_WANT_READ || ret == MBEDTLS_ERR_SSL_WANT_WRITE || ret == MBEDTLS_ERR_SSL_RECEIVED_NEW_SESSION_TICKET)
+        {
+            continue;
+        }
+
+        if (ret < 0)
+        {
+            return false;
+        }
+
+        sent += static_cast<std::size_t>(ret);
+    }
+
+    return true;
 }
 
 void LobbyDataConnection::start(const Session& session)
@@ -177,7 +201,7 @@ void LobbyDataConnection::run(const std::stop_token& stop, const Session& sessio
     sendBuffer[0] = static_cast<char>(xiloader::LobbyDataReply::SessionHash);
     memcpy(sendBuffer + 12, session.hash, 16);
 
-    if (send(socket, sendBuffer, kReplySize, 0) == SOCKET_ERROR)
+    if (!write(sendBuffer, kReplySize))
     {
         xiloader::console::output("Failed to send session hash for data to server; disconnecting!");
         return;
@@ -190,7 +214,12 @@ void LobbyDataConnection::run(const std::stop_token& stop, const Session& sessio
     while (!stop.stop_requested())
     {
         // Attempt to receive the incoming data..
-        const auto received = recv(socket, recvBuffer, sizeof(recvBuffer), 0);
+        const auto received = mbedtls_ssl_read(&ssl, reinterpret_cast<unsigned char*>(recvBuffer), sizeof(recvBuffer));
+        if (received == MBEDTLS_ERR_SSL_WANT_READ || received == MBEDTLS_ERR_SSL_RECEIVED_NEW_SESSION_TICKET)
+        {
+            continue;
+        }
+
         if (received <= 0)
         {
             // The server closed the connection, or the destructor closed the socket
@@ -264,7 +293,7 @@ void LobbyDataConnection::run(const std::stop_token& stop, const Session& sessio
                 continue;
 
             // Send the response buffer to the server..
-            if (send(socket, sendBuffer, sendSize, 0) == SOCKET_ERROR)
+            if (!write(sendBuffer, sendSize))
             {
                 xiloader::console::output("Server connection done; disconnecting!");
                 return;

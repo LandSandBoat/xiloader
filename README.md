@@ -46,6 +46,8 @@ xiloader --server example.com --fingerprint SHA256:SsZ/oJuyOzk59TZicWuiA/F8xIW8l
 
 `--fingerprint` (or `fingerprint` in the json file) skips the prompt: the server is accepted if its key matches and refused otherwise. `--diagnose` prints a server's fingerprint.
 
+The lobby and PlayOnline connections also go over TLS and must present the same key.
+
 "Trust this computer" tokens are tied to the server key and dropped if it changes.
 
 ## Troubleshooting

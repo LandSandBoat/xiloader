@@ -25,6 +25,7 @@
 #include <chrono>
 
 #include "client/pattern_scan.h"
+#include "client/polrelay.h"
 #include "config.h"
 #include "diagnostics/checks.h"
 #include "lobby/data_connection.h"
@@ -42,7 +43,14 @@
 
 #include <ws2tcpip.h>
 
+#include <mbedtls/ctr_drbg.h>
+#include <mbedtls/entropy.h>
+#include <mbedtls/net_sockets.h>
+#include <mbedtls/pk.h>
+#include <mbedtls/ssl.h>
+#include <mbedtls/x509_crt.h>
 #include <nlohmann/json.hpp>
+#include <psa/crypto.h>
 
 namespace
 {
@@ -157,19 +165,41 @@ void checkConfig()
     assert(rejects({ "--json", writeJson("xiloader_check_bad4.json", "not json").c_str() }));
 }
 
-// Stands in for the login server's data port: one listener on a free loopback port
-struct DataServer
+// Self-signed, valid until 2125. The connections under test are held to its key.
+constexpr char kTestCert[]           = "-----BEGIN CERTIFICATE-----\n"
+                                       "MIIBDDCBs6ADAgECAgEBMAoGCCqGSM49BAMCMA8xDTALBgNVBAMMBHRlc3QwIBcN\n"
+                                       "MjYwMTAxMDAwMDAwWhgPMjEyNTEyMDgwMDAwMDBaMA8xDTALBgNVBAMMBHRlc3Qw\n"
+                                       "WTATBgcqhkjOPQIBBggqhkjOPQMBBwNCAASwbGIkyhvRgigpcqra5z8ED4Ucmozy\n"
+                                       "8n/VJHznJKuw15E9YLhvZoXaxV21BJ2L/pv5VdpzOiOMxY8Udht/7v0lMAoGCCqG\n"
+                                       "SM49BAMCA0gAMEUCIBX/KS5+0nCJtKuhjmXQu3T7VhYJIFSZlyc0aIddco+YAiEA\n"
+                                       "jfgkHciDspy3cTuUvUgkBwkANFNN+XIUHX2cyxg+BNQ=\n"
+                                       "-----END CERTIFICATE-----\n";
+constexpr char kTestKey[]            = "-----BEGIN PRIVATE KEY-----\n"
+                                       "MIGHAgEAMBMGByqGSM49AgEGCCqGSM49AwEHBG0wawIBAQQgcEXG1+yuSyxrxrj9\n"
+                                       "cCXcpfFr1pMCuzvwT5QPHUX/VFehRANCAASwbGIkyhvRgigpcqra5z8ED4Ucmozy\n"
+                                       "8n/VJHznJKuw15E9YLhvZoXaxV21BJ2L/pv5VdpzOiOMxY8Udht/7v0l\n"
+                                       "-----END PRIVATE KEY-----\n";
+constexpr char kTestKeyFingerprint[] = "SHA256:IkhRxEk3oYnYqqIL4KWZ/JZBriCuL529sTOX0yN2sGM";
+
+// Stands in for one of the login server's TLS ports: one listener on a free loopback port
+struct TlsServer
 {
-    SOCKET   listener = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
-    SOCKET   client   = INVALID_SOCKET;
-    uint16_t port     = 0;
+    SOCKET                   listener = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
+    uint16_t                 port     = 0;
+    mbedtls_net_context      client   = {};
+    mbedtls_entropy_context  entropy  = {};
+    mbedtls_ctr_drbg_context random   = {};
+    mbedtls_x509_crt         cert     = {};
+    mbedtls_pk_context       key      = {};
+    mbedtls_ssl_config       config   = {};
+    mbedtls_ssl_context      ssl      = {};
 
-    DataServer(const DataServer&)            = delete;
-    DataServer& operator=(const DataServer&) = delete;
-    DataServer(DataServer&&)                 = delete;
-    DataServer& operator=(DataServer&&)      = delete;
+    TlsServer(const TlsServer&)            = delete;
+    TlsServer& operator=(const TlsServer&) = delete;
+    TlsServer(TlsServer&&)                 = delete;
+    TlsServer& operator=(TlsServer&&)      = delete;
 
-    DataServer()
+    TlsServer()
     {
         sockaddr_in address = {};
         address.sin_family  = AF_INET;
@@ -180,27 +210,86 @@ struct DataServer
         int length = sizeof(address);
         getsockname(listener, reinterpret_cast<sockaddr*>(&address), &length);
         port = ntohs(address.sin_port);
+
+        mbedtls_net_init(&client);
+        mbedtls_entropy_init(&entropy);
+        mbedtls_ctr_drbg_init(&random);
+        mbedtls_x509_crt_init(&cert);
+        mbedtls_pk_init(&key);
+        mbedtls_ssl_config_init(&config);
+        mbedtls_ssl_init(&ssl);
+
+        assert(mbedtls_ctr_drbg_seed(&random, mbedtls_entropy_func, &entropy, nullptr, 0) == 0);
+        assert(mbedtls_x509_crt_parse(&cert, reinterpret_cast<const unsigned char*>(kTestCert), sizeof(kTestCert)) == 0);
+        assert(mbedtls_pk_parse_key(&key, reinterpret_cast<const unsigned char*>(kTestKey), sizeof(kTestKey), nullptr, 0, mbedtls_ctr_drbg_random, &random) == 0);
+        assert(mbedtls_ssl_config_defaults(&config, MBEDTLS_SSL_IS_SERVER, MBEDTLS_SSL_TRANSPORT_STREAM, MBEDTLS_SSL_PRESET_DEFAULT) == 0);
+        mbedtls_ssl_conf_rng(&config, mbedtls_ctr_drbg_random, &random);
+        assert(mbedtls_ssl_conf_own_cert(&config, &cert, &key) == 0);
+        assert(mbedtls_ssl_setup(&ssl, &config) == 0);
     }
 
-    ~DataServer()
+    ~TlsServer()
     {
-        closesocket(client);
+        mbedtls_ssl_free(&ssl);
+        mbedtls_ssl_config_free(&config);
+        mbedtls_pk_free(&key);
+        mbedtls_x509_crt_free(&cert);
+        mbedtls_ctr_drbg_free(&random);
+        mbedtls_entropy_free(&entropy);
+        mbedtls_net_free(&client);
         closesocket(listener);
     }
 
-    auto read(const int size) const -> std::string
+    // Takes one connection and completes the handshake
+    void accept()
+    {
+        const auto socket = ::accept(listener, nullptr, nullptr);
+        assert(socket != INVALID_SOCKET);
+        client.fd = static_cast<int>(socket);
+
+        mbedtls_ssl_set_bio(&ssl, &client, mbedtls_net_send, mbedtls_net_recv, nullptr);
+        for (auto ret = mbedtls_ssl_handshake(&ssl); ret != 0; ret = mbedtls_ssl_handshake(&ssl))
+        {
+            assert(ret == MBEDTLS_ERR_SSL_WANT_READ || ret == MBEDTLS_ERR_SSL_WANT_WRITE);
+        }
+    }
+
+    auto read(const int size) -> std::string
     {
         std::string data(size, '\0');
         int         total = 0;
         while (total < size)
         {
-            const auto got = recv(client, data.data() + total, size - total, 0);
+            const auto got = mbedtls_ssl_read(&ssl, reinterpret_cast<unsigned char*>(data.data()) + total, size - total);
             assert(got > 0);
             total += got;
         }
         return data;
     }
+
+    void write(const char* const data, const int size)
+    {
+        assert(mbedtls_ssl_write(&ssl, reinterpret_cast<const unsigned char*>(data), size) == size);
+    }
+
+    // Closes the way the server ends a view connection: no close_notify
+    void drop()
+    {
+        mbedtls_net_free(&client);
+    }
 };
+
+// Reads from a plain socket until it closes
+auto readUntilClosed(const SOCKET socket) -> std::string
+{
+    std::string data;
+    char        buffer[64];
+    for (auto got = recv(socket, buffer, sizeof(buffer), 0); got > 0; got = recv(socket, buffer, sizeof(buffer), 0))
+    {
+        data.append(buffer, got);
+    }
+    return data;
+}
 
 void checkLobbyData()
 {
@@ -210,16 +299,31 @@ void checkLobbyData()
     xiloader::Session session{ .accountId = 0x11223344 };
     std::memset(session.hash, 0x5A, sizeof(session.hash));
 
+    // A data port with another key is refused
+    {
+        TlsServer                     server;
+        xiloader::LobbyDataConnection connection;
+        std::thread                   handshake([&]
+                                                {
+                                  server.accept();
+                                                });
+        assert(!connection.connect("127.0.0.1", server.port, "SHA256:other").has_value());
+        handshake.join();
+    }
+
     // Room for the 20 characters the connection may write, then a canary
     constexpr int     kEntry = 0x68;
     std::vector<char> list(kEntry * 20 + 64, 0x77);
 
     {
-        DataServer                    server;
+        TlsServer                     server;
         xiloader::LobbyDataConnection connection;
-        assert(connection.connect("127.0.0.1", server.port).has_value());
-        server.client = accept(server.listener, nullptr, nullptr);
-        assert(server.client != INVALID_SOCKET);
+        std::thread                   handshake([&]
+                                                {
+                                  server.accept();
+                                                });
+        assert(connection.connect("127.0.0.1", server.port, kTestKeyFingerprint).has_value());
+        handshake.join();
 
         connection.start(session);
 
@@ -228,11 +332,11 @@ void checkLobbyData()
 
         // A list that arrives before polcore's buffer is known is kept for later
         const char early[0x148] = { 0x03, 2 };
-        send(server.client, early, sizeof(early), 0);
+        server.write(early, sizeof(early));
 
-        // Two requests in one segment are answered one after the other
+        // Two requests in one record are answered one after the other
         const char requests[10] = { 0x01, 0, 0, 0, 0, 0x02 };
-        send(server.client, requests, sizeof(requests), 0);
+        server.write(requests, sizeof(requests));
 
         const auto account = server.read(28);
         assert(static_cast<uint8_t>(account[0]) == 0xA1);
@@ -256,10 +360,10 @@ void checkLobbyData()
         }
 
         // Delivered in two pieces, with a request right behind it
-        send(server.client, packet, 0x100, 0);
+        server.write(packet, 0x100);
         std::this_thread::sleep_for(std::chrono::milliseconds(100));
-        send(server.client, packet + 0x100, sizeof(packet) - 0x100, 0);
-        send(server.client, requests + 5, 5, 0);
+        server.write(packet + 0x100, sizeof(packet) - 0x100);
+        server.write(requests + 5, 5);
 
         // The reply to the request proves the list before it was handled
         server.read(28);
@@ -269,6 +373,77 @@ void checkLobbyData()
     assert(std::memcmp(list.data() + kEntry + 0x04, "\x01\x00\xBB\xBB", 4) == 0);
     assert(std::memcmp(list.data() + kEntry * 19 + 0x08, "\x13\x00\xAA\xAA", 4) == 0);
     assert(list[kEntry * 20] == 0x77);
+
+    WSACleanup();
+}
+
+// The game's view connection, through the relay: what the game sends arrives as is, what the server sends before closing reaches the game
+void checkViewRelay()
+{
+    WSADATA wsa = {};
+    assert(WSAStartup(MAKEWORD(2, 2), &wsa) == 0);
+
+    const xiloader::Session session{ .accountId = 1 };
+
+    // Connects the way the game does: to the server address and view port, redirected by Mine_connect
+    const auto connectGame = [](const uint16_t viewPort)
+    {
+        sockaddr_in destination = {};
+        destination.sin_family  = AF_INET;
+        destination.sin_port    = htons(viewPort);
+        inet_pton(AF_INET, "127.0.0.1", &destination.sin_addr);
+
+        assert(xiloader::polrelay::redirect(destination));
+        assert(xiloader::polrelay::isViewConnection(destination));
+        assert(ntohs(destination.sin_port) != viewPort);
+
+        const auto game = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
+        assert(connect(game, reinterpret_cast<const sockaddr*>(&destination), sizeof(destination)) == 0);
+        return game;
+    };
+
+    {
+        TlsServer server;
+        assert(xiloader::polrelay::start("127.0.0.1", 51220, server.port, session, kTestKeyFingerprint).has_value());
+
+        // Other ports on the server address aren't touched
+        sockaddr_in data = {};
+        data.sin_family  = AF_INET;
+        data.sin_port    = htons(54230);
+        inet_pton(AF_INET, "127.0.0.1", &data.sin_addr);
+        assert(!xiloader::polrelay::redirect(data));
+
+        const auto game = connectGame(server.port);
+        server.accept();
+
+        // No account id and hash in front, unlike the PlayOnline connections
+        send(game, "XIFF", 4, 0);
+        assert(server.read(4) == "XIFF");
+
+        server.write("done", 4);
+        server.drop();
+        assert(readUntilClosed(game) == "done");
+
+        closesocket(game);
+        xiloader::polrelay::stop();
+    }
+
+    // A view port with another key gets nothing, and the game's connection is closed
+    {
+        TlsServer server;
+        assert(xiloader::polrelay::start("127.0.0.1", 51220, server.port, session, "SHA256:other").has_value());
+
+        const auto game = connectGame(server.port);
+        send(game, "XIFF", 4, 0);
+        server.accept();
+        assert(readUntilClosed(game).empty());
+
+        unsigned char byte = 0;
+        assert(mbedtls_ssl_read(&server.ssl, &byte, 1) <= 0);
+
+        closesocket(game);
+        xiloader::polrelay::stop();
+    }
 
     WSACleanup();
 }
@@ -402,9 +577,13 @@ void checkTrustTokens()
 
 auto main() -> int
 {
+    // TLS 1.3 runs on PSA
+    assert(psa_crypto_init() == PSA_SUCCESS);
+
     checkPlainMenu();
     checkConfig();
     checkLobbyData();
+    checkViewRelay();
     checkPatternScan();
     checkInstallChecks();
     checkKnownServers();

@@ -49,7 +49,7 @@ constexpr uint16_t kProfilePort = 51220;
 // PlayOnline hosts resolve to this address; Mine_connect redirects it to our listeners
 const std::string kPlaceholderAddress = "127.64.0.1";
 
-// polcore holds at most 5 connections at once: IRC and its 4 profile slots
+// polcore holds at most 5 connections at once: IRC and its 4 profile slots. The game holds one view connection.
 constexpr std::size_t kMaxConnections = 8;
 
 constexpr ULONGLONG kHandshakeDeadlineMs = 10000;
@@ -61,7 +61,12 @@ constexpr long kTickMs = 100;
 // Bytes per read, and the most held for polcore before reading more from the server
 constexpr std::size_t kChunkSize = 16384;
 
-Listener listeners[2] = {};
+// IRC, profile, view
+Listener              listeners[3] = {};
+constexpr std::size_t kView        = 2;
+
+// What every server connection has to present
+std::string trustedKey;
 
 // Shared by all relay connections
 std::optional<xiloader::TlsClientConfig> tls;
@@ -114,11 +119,17 @@ void closeListeners()
     }
 }
 
-void keepTicket(mbedtls_ssl_context* const ssl)
+// Only PlayOnline tickets: they come from the profile server, and the view port is another process
+void keepTicket(Connection& connection)
 {
+    if (!connection.playOnline)
+    {
+        return;
+    }
+
     mbedtls_ssl_session session;
     mbedtls_ssl_session_init(&session);
-    if (mbedtls_ssl_get_session(ssl, &session) != 0)
+    if (mbedtls_ssl_get_session(&connection.ssl, &session) != 0)
     {
         mbedtls_ssl_session_free(&session);
         return;
@@ -145,7 +156,7 @@ auto wouldBlock(const int ret) -> bool
 
 void fail(const Connection& connection, const std::string& reason)
 {
-    xiloader::console::output(xiloader::color::error, "Failed to reach the profile server on port {} ({}).", connection.serverPort, reason);
+    xiloader::console::output(xiloader::color::error, "Failed to reach the server on port {} ({}).", connection.serverPort, reason);
 }
 
 // Non-blocking connect; select reports the result as writable or failed
@@ -180,7 +191,7 @@ auto open(Connection& connection) -> bool
         return false;
     }
 
-    if (ticket)
+    if (connection.playOnline && ticket)
     {
         mbedtls_ssl_set_session(&connection.ssl, &*ticket);
     }
@@ -217,7 +228,7 @@ auto writeServer(Connection& connection) -> bool
         const auto written = mbedtls_ssl_write(&connection.ssl, connection.toServer.data(), connection.toServer.size());
         if (written == MBEDTLS_ERR_SSL_RECEIVED_NEW_SESSION_TICKET)
         {
-            keepTicket(&connection.ssl);
+            keepTicket(connection);
             continue;
         }
 
@@ -247,7 +258,7 @@ void readServer(Connection& connection)
         const auto read = mbedtls_ssl_read(&connection.ssl, buffer, kChunkSize - connection.toLocal.size());
         if (read == MBEDTLS_ERR_SSL_RECEIVED_NEW_SESSION_TICKET)
         {
-            keepTicket(&connection.ssl);
+            keepTicket(connection);
             continue;
         }
 
@@ -327,9 +338,20 @@ auto step(Connection& connection, const fd_set& writable, const fd_set& failed, 
             return false;
         }
 
+        // A resumed session carries the certificate of the session it was resumed from
+        if (const auto matched = xiloader::checkPeerKey(connection.ssl, trustedKey); !matched)
+        {
+            fail(connection, matched.error());
+            return false;
+        }
+
         connection.phase     = Phase::Relaying;
         connection.stalledAt = now + kStallDeadlineMs;
-        connection.toServer.insert(connection.toServer.begin(), hello.begin(), hello.end());
+
+        if (connection.playOnline)
+        {
+            connection.toServer.insert(connection.toServer.begin(), hello.begin(), hello.end());
+        }
     }
 
     const auto queuedForServer = connection.toServer.size();
@@ -366,7 +388,7 @@ auto expired(const Connection& connection, const ULONGLONG now) -> bool
         const auto stalled = now >= connection.stalledAt;
         if (stalled)
         {
-            xiloader::console::output(xiloader::color::warning, "Closed a stalled profile server connection on port {}.", connection.serverPort);
+            xiloader::console::output(xiloader::color::warning, "Closed a stalled server connection on port {}.", connection.serverPort);
         }
 
         return stalled;
@@ -392,19 +414,19 @@ void accept(const Listener& listener)
     // Refuse anything past what polcore needs
     if (connections.size() >= kMaxConnections)
     {
-        xiloader::console::output(xiloader::color::warning, "Refused a PlayOnline connection, {} are already open.", connections.size());
+        xiloader::console::output(xiloader::color::warning, "Refused a relay connection, {} are already open.", connections.size());
         closesocket(local);
         return;
     }
 
     if (!setNonBlocking(local))
     {
-        xiloader::console::output(xiloader::color::warning, "Refused a PlayOnline connection (winsock error {}).", WSAGetLastError());
+        xiloader::console::output(xiloader::color::warning, "Refused a relay connection (winsock error {}).", WSAGetLastError());
         closesocket(local);
         return;
     }
 
-    auto connection = std::make_unique<Connection>(local, listener.serverPort);
+    auto connection = std::make_unique<Connection>(local, listener.serverPort, listener.playOnline);
     if (open(*connection))
     {
         connections.push_back(std::move(connection));
@@ -477,7 +499,7 @@ void run(const std::stop_token& stop)
         const timeval timeout = { .tv_sec = 0, .tv_usec = wait };
         if (select(0, &readable, &writable, &failed, &timeout) == SOCKET_ERROR)
         {
-            xiloader::console::output(xiloader::color::error, "The profile server relay stopped ({}).", WSAGetLastError());
+            xiloader::console::output(xiloader::color::error, "The relay stopped ({}).", WSAGetLastError());
             break;
         }
 
@@ -502,7 +524,7 @@ void run(const std::stop_token& stop)
 }
 
 // OS-picked port so multiple clients don't collide
-auto listen(Listener& entry, const uint16_t dialedPort, const uint16_t serverPort) -> bool
+auto listen(Listener& entry, const ULONG dialedAddress, const uint16_t dialedPort, const uint16_t serverPort, const bool playOnline) -> bool
 {
     const auto listener = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
     if (listener == INVALID_SOCKET)
@@ -525,7 +547,14 @@ auto listen(Listener& entry, const uint16_t dialedPort, const uint16_t serverPor
         return false;
     }
 
-    entry = { .socket = listener, .dialedPort = dialedPort, .serverPort = serverPort, .localPort = ntohs(address.sin_port) };
+    entry = {
+        .socket        = listener,
+        .dialedAddress = dialedAddress,
+        .dialedPort    = dialedPort,
+        .serverPort    = serverPort,
+        .localPort     = ntohs(address.sin_port),
+        .playOnline    = playOnline,
+    };
     return true;
 }
 
@@ -534,9 +563,10 @@ auto listen(Listener& entry, const uint16_t dialedPort, const uint16_t serverPor
 namespace xiloader::polrelay
 {
 
-Connection::Connection(const SOCKET local, const uint16_t serverPort)
+Connection::Connection(const SOCKET local, const uint16_t serverPort, const bool playOnline)
 : local(local)
 , serverPort(serverPort)
+, playOnline(playOnline)
 {
     mbedtls_net_init(&server);
     mbedtls_ssl_init(&ssl);
@@ -554,22 +584,24 @@ Connection::~Connection()
     closesocket(local);
 }
 
-auto start(const std::string& server, const uint16_t profilePort, const Session& session) -> std::expected<void, std::string>
+auto start(const std::string& server, const uint16_t profilePort, const uint16_t viewPort, const Session& session, const std::string& trustedKey) -> std::expected<void, std::string>
 {
+    ::trustedKey = trustedKey;
+
     hello.resize(sizeof(session.accountId) + sizeof(session.hash));
     std::memcpy(hello.data(), &session.accountId, sizeof(session.accountId));
     std::memcpy(hello.data() + sizeof(session.accountId), session.hash, sizeof(session.hash));
 
     if (inet_pton(AF_INET, server.c_str(), &serverAddress) != 1)
     {
-        return std::unexpected(std::format("The profile server relay needs a resolved server address ({}).", server));
+        return std::unexpected(std::format("The relay needs a resolved server address ({}).", server));
     }
 
     const auto abort = [](const std::string& reason) -> std::expected<void, std::string>
     {
         closeListeners();
         freeTls();
-        return std::unexpected(std::format("Failed to start the profile server relay ({}).", reason));
+        return std::unexpected(std::format("Failed to start the relay ({}).", reason));
     };
 
     if (const auto ret = setUpTls(); ret != 0)
@@ -577,7 +609,10 @@ auto start(const std::string& server, const uint16_t profilePort, const Session&
         return abort(xiloader::mbedtlsErrorText(ret));
     }
 
-    if (!listen(listeners[0], kIrcPort, kIrcPort) || !listen(listeners[1], kProfilePort, profilePort))
+    const auto placeholder = inet_addr(kPlaceholderAddress.c_str());
+    if (!listen(listeners[0], placeholder, kIrcPort, kIrcPort, true) ||
+        !listen(listeners[1], placeholder, kProfilePort, profilePort, true) ||
+        !listen(listeners[kView], serverAddress.s_addr, viewPort, viewPort, false))
     {
         return abort(std::to_string(WSAGetLastError()));
     }
@@ -610,13 +645,17 @@ auto address() -> const std::string&
 
 auto redirect(sockaddr_in& destination) -> bool
 {
-    if (destination.sin_family != AF_INET || destination.sin_addr.s_addr != inet_addr(kPlaceholderAddress.c_str()))
+    // The relay dials the server's view port itself
+    if (destination.sin_family != AF_INET || std::this_thread::get_id() == relayThread.get_id())
     {
         return false;
     }
 
     const auto port  = ntohs(destination.sin_port);
-    const auto entry = std::ranges::find(listeners, port, &Listener::dialedPort);
+    const auto entry = std::ranges::find_if(listeners, [&](const Listener& listener)
+                                            {
+                                                return listener.dialedPort == port && listener.dialedAddress == destination.sin_addr.s_addr;
+                                            });
     if (entry == std::end(listeners))
     {
         return false;
@@ -625,6 +664,12 @@ auto redirect(sockaddr_in& destination) -> bool
     destination.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
     destination.sin_port        = htons(entry->localPort);
     return true;
+}
+
+auto isViewConnection(const sockaddr_in& peer) -> bool
+{
+    const auto& view = listeners[kView];
+    return view.localPort != 0 && peer.sin_family == AF_INET && peer.sin_addr.s_addr == htonl(INADDR_LOOPBACK) && ntohs(peer.sin_port) == view.localPort;
 }
 
 } // namespace xiloader::polrelay

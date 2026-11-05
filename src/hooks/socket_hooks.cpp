@@ -92,9 +92,8 @@ static auto isLobbyCommand(const char* const buffer, const SOCKET socket) -> boo
 
     getpeername(socket, reinterpret_cast<struct sockaddr*>(&sin), &addrlen);
 
-    const auto port = ntohs(sin.sin_port);
-
-    if (port != config->loginDataPort && port != config->loginViewPort)
+    // The game's view connection goes through the relay; everything else, TLS records included, is left alone
+    if (!xiloader::polrelay::isViewConnection(sin))
     {
         return false;
     }

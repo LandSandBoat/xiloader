@@ -25,6 +25,7 @@
 #include <mbedtls/entropy.h>
 #include <mbedtls/ssl.h>
 
+#include <expected>
 #include <string>
 
 namespace xiloader
@@ -32,6 +33,12 @@ namespace xiloader
 
 // mbedTLS error code as readable text, e.g. "SSL - The connection indicated an EOF"
 auto mbedtlsErrorText(int ret) -> std::string;
+
+// "SHA256:" and the unpadded base64 hash of the peer's public key, as ssh prints them. Needs a completed handshake.
+auto peerFingerprint(const mbedtls_ssl_context& ssl) -> std::expected<std::string, std::string>;
+
+// Fails unless the peer holds the key the login server was trusted with
+auto checkPeerKey(const mbedtls_ssl_context& ssl, const std::string& trustedKey) -> std::expected<void, std::string>;
 
 // What every TLS connection to the server starts from: a seeded random generator and a TLS 1.3 client config.
 // mbedTLS isn't built thread-safe, so each thread needs its own.

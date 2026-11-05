@@ -25,9 +25,6 @@
 
 #include "console.h"
 
-#include <mbedtls/base64.h>
-#include <mbedtls/sha256.h>
-
 #include <format>
 
 namespace
@@ -35,10 +32,6 @@ namespace
 
 constexpr uint32_t    kReadTimeoutMs  = 1000;
 constexpr std::size_t kRecvBufferSize = 8192;
-
-// A SHA-256 hash, and room for it in base64 with its terminator
-constexpr std::size_t kHashSize     = 32;
-constexpr std::size_t kHashTextSize = 64;
 
 } // namespace
 
@@ -122,33 +115,7 @@ auto AuthConnection::connect(const std::string& address, const uint16_t port) ->
 
 auto AuthConnection::fingerprint() const -> std::expected<std::string, std::string>
 {
-    const auto certificate = mbedtls_ssl_get_peer_cert(&ssl);
-    if (certificate == nullptr)
-    {
-        return std::unexpected("The server presented no certificate.");
-    }
-
-    // The key rather than the whole certificate, so renewing a certificate for the same key changes nothing
-    unsigned char hash[kHashSize] = {};
-    if (const auto ret = mbedtls_sha256(certificate->pk_raw.p, certificate->pk_raw.len, hash, 0); ret != 0)
-    {
-        return std::unexpected(std::format("Failed to hash the server's key ({}).", mbedtlsErrorText(ret)));
-    }
-
-    unsigned char text[kHashTextSize] = {};
-    std::size_t   length              = 0;
-    if (const auto ret = mbedtls_base64_encode(text, sizeof(text), &length, hash, sizeof(hash)); ret != 0)
-    {
-        return std::unexpected(std::format("Failed to encode the server's key ({}).", mbedtlsErrorText(ret)));
-    }
-
-    std::string encoded(reinterpret_cast<const char*>(text), length);
-    while (!encoded.empty() && encoded.back() == '=')
-    {
-        encoded.pop_back();
-    }
-
-    return "SHA256:" + encoded;
+    return peerFingerprint(ssl);
 }
 
 auto AuthConnection::isLoopback() const -> bool

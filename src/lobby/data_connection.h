@@ -24,6 +24,10 @@
 #include <winsock2.h>
 
 #include "login/session.h"
+#include "net/tls_client_config.h"
+
+#include <mbedtls/net_sockets.h>
+#include <mbedtls/ssl.h>
 
 #include <cstdint>
 #include <expected>
@@ -36,12 +40,13 @@
 namespace xiloader
 {
 
-// The connection to the login server's data port.
+// The connection to the login server's data port, over TLS.
 // A thread answers the server's requests on it and copies the character list into polcore.
+// connect handshakes on the caller's thread; after start only the thread touches the TLS session.
 class LobbyDataConnection
 {
 public:
-    LobbyDataConnection() = default;
+    LobbyDataConnection();
     ~LobbyDataConnection();
 
     LobbyDataConnection(const LobbyDataConnection&)            = delete;
@@ -49,8 +54,9 @@ public:
     LobbyDataConnection(LobbyDataConnection&&)                 = delete;
     LobbyDataConnection& operator=(LobbyDataConnection&&)      = delete;
 
-    // The error says why the server can't be reached
-    auto connect(const std::string& server, uint16_t port) -> std::expected<void, std::string>;
+    // trustedKey is the login server's key fingerprint; the data port has to present the same key.
+    // The error says why the server can't be reached.
+    auto connect(const std::string& address, uint16_t port, const std::string& trustedKey) -> std::expected<void, std::string>;
 
     // Sends the session hash and starts answering the server
     void start(const Session& session);
@@ -60,9 +66,12 @@ public:
 
 private:
     void run(const std::stop_token& stop, const Session& session);
+    auto write(const char* data, std::size_t size) -> bool;
 
-    SOCKET socket        = INVALID_SOCKET;
-    ULONG  serverAddress = INADDR_NONE;
+    TlsClientConfig     tls;
+    mbedtls_net_context server        = {};
+    mbedtls_ssl_context ssl           = {};
+    ULONG               serverAddress = INADDR_NONE;
 
     // The list is written from the thread, or from setCharacterList when it arrived first
     std::mutex        listMutex;

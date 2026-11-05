@@ -24,6 +24,7 @@
 #include "enums/exit_code.h"
 #include "enums/pol_language.h"
 
+#include <string>
 #include <utility>
 #include <vector>
 
@@ -35,7 +36,8 @@ struct Config;
 struct Session;
 
 // Sets up polcore in this process the way the PlayOnline viewer would, then runs FFXI until it exits.
-auto runGame(const Config& config, const Session& session, LobbyDataConnection& lobbyData) -> ExitCode;
+// trustedKey is the login server's key fingerprint, which the relayed connections have to present too.
+auto runGame(const Config& config, const Session& session, LobbyDataConnection& lobbyData, const std::string& trustedKey) -> ExitCode;
 
 // Whether each piece of polcore code the loader calls or patches is where it expects it. polcore has to be loaded.
 auto probePolcore(Language language) -> std::vector<std::pair<const char*, bool>>;

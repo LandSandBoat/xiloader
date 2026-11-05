@@ -37,19 +37,23 @@
 namespace xiloader
 {
 
-// Relays polcore's PlayOnline connections (IRC and profile server) to the server over TLS.
-// PlayOnline hosts resolve to a placeholder address that Mine_connect redirects to the relay's local ports.
+// Relays polcore's PlayOnline connections (IRC and profile server) and the game's lobby view connection to the server over TLS.
+// PlayOnline hosts resolve to a placeholder address that Mine_connect redirects to the relay's local ports;
+// the view connection is redirected by the server address and view port it dials.
+// Every server connection has to present the key the login server was trusted with.
 // A single thread runs every connection, since mbedTLS isn't built thread-safe.
 namespace polrelay
 {
 
-// A local listener, the port polcore dials for it, and the server port it forwards to
+// A local listener, the address and port dialed for it, and the server port it forwards to
 struct Listener
 {
-    SOCKET   socket     = INVALID_SOCKET;
-    uint16_t dialedPort = 0;
-    uint16_t serverPort = 0;
-    uint16_t localPort  = 0;
+    SOCKET   socket        = INVALID_SOCKET;
+    ULONG    dialedAddress = 0;
+    uint16_t dialedPort    = 0;
+    uint16_t serverPort    = 0;
+    uint16_t localPort     = 0;
+    bool     playOnline    = false; // Opens with the account id and session hash, and resumes TLS sessions
 };
 
 // One polcore connection: plain on the loopback side, TLS to the server
@@ -57,6 +61,7 @@ struct Connection
 {
     SOCKET              local      = INVALID_SOCKET;
     uint16_t            serverPort = 0;
+    bool                playOnline = false;
     mbedtls_net_context server     = {};
     mbedtls_ssl_context ssl        = {};
     Phase               phase      = Phase::Connecting;
@@ -75,7 +80,7 @@ struct Connection
     ULONGLONG deadline  = 0;
     ULONGLONG stalledAt = 0;
 
-    Connection(SOCKET local, uint16_t serverPort);
+    Connection(SOCKET local, uint16_t serverPort, bool playOnline);
     ~Connection();
 
     Connection(const Connection&)            = delete;
@@ -84,10 +89,11 @@ struct Connection
     Connection& operator=(Connection&&)      = delete;
 };
 
-// Starts the relay thread, listening on free local ports for the IRC port and the profile port polcore dials.
-// Every connection to the server opens with the account id and session hash, which is how the server knows who it is.
-// Succeeds once both listeners are up; the error says what kept the relay from starting.
-auto start(const std::string& server, uint16_t profilePort, const Session& session) -> std::expected<void, std::string>;
+// Starts the relay thread, listening on free local ports for the IRC and profile ports polcore dials and the view port the game dials.
+// PlayOnline connections open with the account id and session hash, which is how the server knows who it is.
+// trustedKey is the login server's key fingerprint.
+// Succeeds once the listeners are up; the error says what kept the relay from starting.
+auto start(const std::string& server, uint16_t profilePort, uint16_t viewPort, const Session& session, const std::string& trustedKey) -> std::expected<void, std::string>;
 
 // Closes every relay connection and joins the relay thread; call before removing the socket hooks
 void stop();
@@ -95,9 +101,12 @@ void stop();
 // The placeholder address the PlayOnline host names should resolve to
 auto address() -> const std::string&;
 
-// Points a connection to the placeholder address at the matching relay listener, rewriting destination in place.
-// Returns true when it was a PlayOnline connection.
+// Points a connection dialed for a relay listener at that listener, rewriting destination in place.
+// Returns true when it was redirected. The relay's own connections are left alone.
 auto redirect(sockaddr_in& destination) -> bool;
+
+// The peer is the view listener, so the socket is the game's view connection
+auto isViewConnection(const sockaddr_in& peer) -> bool;
 
 } // namespace polrelay
 } // namespace xiloader
